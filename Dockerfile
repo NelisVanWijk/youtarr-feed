@@ -17,9 +17,11 @@ RUN pnpm run build
 FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV YOUTARR_FEED_DATA_DIR=/data
 COPY --from=builder /app/package.json /app/pnpm-lock.yaml /app/pnpm-workspace.yaml ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/.openai ./.openai
+VOLUME ["/data"]
 EXPOSE 3000
 CMD ["pnpm", "run", "start", "--", "--hostname", "0.0.0.0", "--port", "3000"]

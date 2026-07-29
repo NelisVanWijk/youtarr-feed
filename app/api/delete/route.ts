@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { deleteDownload, isYoutarrConfigured } from "../../../lib/youtarr";
+import { clearWatchProgress } from "../../../lib/watch-progress";
 
 export const dynamic = "force-dynamic";
 
@@ -10,11 +11,13 @@ export async function POST(request: Request) {
   }
 
   if (!isYoutarrConfigured()) {
+    await clearWatchProgress(body.id);
     return NextResponse.json({ success: true, demo: true });
   }
 
   try {
     const result = await deleteDownload(body.id);
+    await clearWatchProgress(body.id);
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return NextResponse.json(

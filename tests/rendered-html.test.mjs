@@ -127,3 +127,28 @@ test("requires a live Youtarr connection before adding channels", async () => {
   assert.equal(response.status, 400);
   assert.match((await response.json()).error, /Youtarr gekoppeld/);
 });
+
+test("stores watch progress server-side", async () => {
+  const worker = await createWorker();
+  const videoId = "dmo00000003";
+
+  const saved = await fetchFrom(worker, "/api/watch-progress", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ videoId, currentTime: 42, duration: 600 }),
+  });
+  assert.equal(saved.status, 200);
+  assert.equal((await saved.json()).progress[videoId].currentTime, 42);
+
+  const loaded = await fetchFrom(worker, "/api/watch-progress");
+  assert.equal(loaded.status, 200);
+  assert.equal((await loaded.json()).progress[videoId].duration, 600);
+
+  const cleared = await fetchFrom(worker, "/api/watch-progress", {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ videoId }),
+  });
+  assert.equal(cleared.status, 200);
+  assert.equal((await cleared.json()).progress[videoId], undefined);
+});

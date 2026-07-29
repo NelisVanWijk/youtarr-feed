@@ -9,3 +9,5 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "3090:3000"
+    volumes:
+      - ./data:/data

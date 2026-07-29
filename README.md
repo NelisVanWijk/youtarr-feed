@@ -27,6 +27,7 @@ Zonder `.env` start de interface veilig in voorbeeldmodus.
 - filters voor alles, nog ophalen en al gedownload;
 - direct downloaden zodra je een ontbrekende video opent;
 - lokaal afspelen zodra Youtarr klaar is;
+- server-side kijkvoortgang en een Verder kijken-overzicht;
 - een indeling die zich als iPhone-app laat installeren.
 
 ## Unraid

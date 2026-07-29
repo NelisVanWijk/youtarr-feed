@@ -9,27 +9,14 @@ import type {
   FeedResponse,
   FeedStatus,
   FeedVideo,
+  WatchProgressEntry,
+  WatchProgressMap,
 } from "../lib/types";
 
-type View = "feed" | "channels";
+type View = "feed" | "continue" | "channels";
 type Filter = "all" | "new" | "downloaded";
-type WatchProgress = Record<
-  string,
-  { currentTime: number; duration: number; updatedAt: number }
->;
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
-const watchProgressKey = "youtarr-feed-watch-progress";
-
-function loadStoredWatchProgress(): WatchProgress {
-  if (typeof window === "undefined") return {};
-  try {
-    const saved = window.localStorage.getItem(watchProgressKey);
-    return saved ? (JSON.parse(saved) as WatchProgress) : {};
-  } catch {
-    return {};
-  }
-}
 
 function initials(value: string) {
   return value
@@ -70,6 +57,30 @@ function formatEta(seconds?: number) {
   if (!seconds) return "";
   const minutes = Math.max(1, Math.round(seconds / 60));
   return `${minutes} min resterend`;
+}
+
+function updateMediaSession(video: FeedVideo) {
+  if (
+    typeof navigator === "undefined" ||
+    !("mediaSession" in navigator) ||
+    typeof window.MediaMetadata === "undefined"
+  ) {
+    return;
+  }
+
+  navigator.mediaSession.metadata = new window.MediaMetadata({
+    title: video.title,
+    artist: video.channelName,
+    album: "Youtarr Feed",
+    artwork: video.thumbnail
+      ? [
+          { src: video.thumbnail, sizes: "96x96", type: "image/jpeg" },
+          { src: video.thumbnail, sizes: "128x128", type: "image/jpeg" },
+          { src: video.thumbnail, sizes: "256x256", type: "image/jpeg" },
+          { src: video.thumbnail, sizes: "512x512", type: "image/jpeg" },
+        ]
+      : undefined,
+  });
 }
 
 function ChannelAvatar({
@@ -239,9 +250,7 @@ export default function FeedApp() {
   );
   const [deleteError, setDeleteError] = useState("");
   const [activity, setActivity] = useState<DownloadActivity | null>(null);
-  const [watchProgress, setWatchProgress] = useState<WatchProgress>(
-    loadStoredWatchProgress
-  );
+  const [watchProgress, setWatchProgress] = useState<WatchProgressMap>({});
   const [channelUrl, setChannelUrl] = useState("");
   const [addChannelState, setAddChannelState] = useState<
     "idle" | "adding" | "added" | "error"
@@ -280,6 +289,24 @@ export default function FeedApp() {
     const timer = window.setTimeout(() => void loadFeed(), 0);
     return () => window.clearTimeout(timer);
   }, [loadFeed]);
+
+  useEffect(() => {
+    let stopped = false;
+    async function loadWatchProgress() {
+      try {
+        const response = await fetch("/api/watch-progress", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = (await response.json()) as { progress?: WatchProgressMap };
+        if (!stopped) setWatchProgress(data.progress || {});
+      } catch {
+        // Kijkvoortgang mag de feed nooit blokkeren.
+      }
+    }
+    void loadWatchProgress();
+    return () => {
+      stopped = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (status?.mode !== "live") {
@@ -354,6 +381,26 @@ export default function FeedApp() {
       return true;
     });
   }, [channelVideos, feed?.videos, filter, query, selectedChannel]);
+
+  const continueVideos = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return (feed?.videos || [])
+      .filter((video) => {
+        if (!video.downloaded || !watchProgress[video.id]) return false;
+        if (
+          normalized &&
+          !`${video.title} ${video.channelName}`.toLowerCase().includes(normalized)
+        ) {
+          return false;
+        }
+        return true;
+      })
+      .sort(
+        (a, b) =>
+          (watchProgress[b.id]?.updatedAt || 0) -
+          (watchProgress[a.id]?.updatedAt || 0)
+      );
+  }, [feed?.videos, query, watchProgress]);
 
   async function openChannel(channelId: string) {
     const channel = feed?.channels.find((item) => item.id === channelId);
@@ -440,20 +487,37 @@ export default function FeedApp() {
     if (!force && now - (progressSaveRef.current[videoId] || 0) < 4000) return;
     progressSaveRef.current[videoId] = now;
 
+    let nextEntry: WatchProgressEntry | null = null;
     setWatchProgress((current) => {
       const next = { ...current };
       if (currentTime < 5 || currentTime > duration - 8) {
         delete next[videoId];
       } else {
-        next[videoId] = { currentTime, duration, updatedAt: now };
-      }
-      try {
-        window.localStorage.setItem(watchProgressKey, JSON.stringify(next));
-      } catch {
-        // Opslaan van kijkvoortgang is handig, maar mag afspelen nooit blokkeren.
+        nextEntry = { videoId, currentTime, duration, updatedAt: now };
+        next[videoId] = nextEntry;
       }
       return next;
     });
+
+    void fetch("/api/watch-progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        videoId,
+        currentTime,
+        duration,
+      }),
+    })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const data = (await response.json()) as { progress?: WatchProgressMap };
+        if (data.progress) setWatchProgress(data.progress);
+      })
+      .catch(() => {
+        if (nextEntry) {
+          setWatchProgress((current) => ({ ...current, [videoId]: nextEntry }));
+        }
+      });
   }
 
   function resumePlayback(videoId: string, player: HTMLVideoElement) {
@@ -485,6 +549,11 @@ export default function FeedApp() {
       const data = (await response.json()) as { error?: string; demo?: boolean };
       if (!response.ok) throw new Error(data.error || "Verwijderen mislukte");
       setSelectedVideo({ ...video, downloaded: false, missing: true });
+      setWatchProgress((current) => {
+        const next = { ...current };
+        delete next[video.id];
+        return next;
+      });
       setDeleteState("idle");
       void loadFeed(true);
     } catch (deleteFailure) {
@@ -604,6 +673,13 @@ export default function FeedApp() {
             <span>Feed</span>
           </button>
           <button
+            className={view === "continue" ? "active" : ""}
+            onClick={() => switchView("continue")}
+          >
+            <span className="nav-continue" />
+            <span>Verder kijken</span>
+          </button>
+          <button
             className={view === "channels" ? "active" : ""}
             onClick={() => switchView("channels")}
           >
@@ -694,6 +770,40 @@ export default function FeedApp() {
                 <span className="empty-mark">0</span>
                 <h2>Geen video’s gevonden</h2>
                 <p>Pas je filter of zoekopdracht aan.</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {view === "continue" && (
+          <>
+            <section className="page-heading">
+              <div>
+                <span className="eyebrow">Gesynchroniseerd</span>
+                <h1>Verder kijken</h1>
+                <p>Video&apos;s waar je op deze server al aan begonnen bent.</p>
+              </div>
+            </section>
+            {loading ? (
+              <LoadingGrid />
+            ) : continueVideos.length ? (
+              <div className="video-grid">
+                {continueVideos.map((video, index) => (
+                  <VideoCard
+                    key={`${video.channelId}-${video.id}`}
+                    video={video}
+                    index={index}
+                    progress={progressPercent(video.id)}
+                    onOpen={openVideo}
+                    onChannel={(id) => void openChannel(id)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <span className="empty-mark">0</span>
+                <h2>Niets om verder te kijken</h2>
+                <p>Start een gedownloade video en je vindt hem hier terug.</p>
               </div>
             )}
           </>
@@ -821,6 +931,13 @@ export default function FeedApp() {
           <small>Feed</small>
         </button>
         <button
+          className={view === "continue" ? "active" : ""}
+          onClick={() => switchView("continue")}
+        >
+          <span className="nav-continue" />
+          <small>Verder</small>
+        </button>
+        <button
           className={view === "channels" ? "active" : ""}
           onClick={() => switchView("channels")}
         >
@@ -862,7 +979,13 @@ export default function FeedApp() {
                 playsInline
                 src={`/api/stream/${encodeURIComponent(selectedVideo.id)}`}
                 onLoadedMetadata={(event) =>
-                  resumePlayback(selectedVideo.id, event.currentTarget)
+                  {
+                    updateMediaSession(selectedVideo);
+                    resumePlayback(selectedVideo.id, event.currentTarget);
+                  }
+                }
+                onPlay={() =>
+                  updateMediaSession(selectedVideo)
                 }
                 onTimeUpdate={(event) =>
                   storeWatchProgress(

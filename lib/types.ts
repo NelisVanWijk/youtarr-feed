@@ -57,3 +57,12 @@ export interface DownloadActivity {
   speedBytesPerSecond?: number;
   capturedAt?: number | null;
 }
+
+export interface WatchProgressEntry {
+  videoId: string;
+  currentTime: number;
+  duration: number;
+  updatedAt: number;
+}
+
+export type WatchProgressMap = Record<string, WatchProgressEntry>;

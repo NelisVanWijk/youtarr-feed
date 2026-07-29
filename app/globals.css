@@ -303,6 +303,40 @@ input:focus-visible {
   width: 9px;
 }
 
+.nav-continue {
+  position: relative;
+  width: 19px;
+  height: 19px;
+  display: block;
+  border: 2px solid currentColor;
+  border-radius: 50%;
+}
+
+.nav-continue::before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  left: 6px;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 6px solid currentColor;
+}
+
+.nav-continue::after {
+  content: "";
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  left: -2px;
+  height: 8px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  border-left: 2px solid var(--accent);
+  border-radius: 0 0 11px 11px;
+}
+
 .sidebar-status {
   display: flex;
   align-items: center;
@@ -1434,7 +1468,7 @@ main {
     bottom: 0;
     left: 0;
     height: calc(61px + var(--safe-bottom));
-    padding: 6px 22vw var(--safe-bottom);
+    padding: 6px 15vw var(--safe-bottom);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -1468,6 +1502,10 @@ main {
 
   .bottom-nav .nav-channels {
     transform: scale(0.9);
+  }
+
+  .bottom-nav .nav-continue {
+    transform: scale(0.88);
   }
 
   .modal-backdrop {
