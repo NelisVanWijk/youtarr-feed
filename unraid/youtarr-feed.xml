@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Youtarr Feed</Name>
+  <Repository>ghcr.io/nelisvanwijk/youtarr-feed:latest</Repository>
+  <Registry>https://github.com/NelisVanWijk/youtarr-feed/pkgs/container/youtarr-feed</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/NelisVanWijk/youtarr-feed/issues</Support>
+  <Project>https://github.com/NelisVanWijk/youtarr-feed</Project>
+  <Overview>Mobiele abonnementenfeed voor Youtarr. Bekijk kanalen apart, speel lokale video's af en start ontbrekende downloads met één tik.</Overview>
+  <Category>MediaApp:Video:</Category>
+  <WebUI>http://[IP]:[PORT:3000]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/NelisVanWijk/youtarr-feed/main/unraid/youtarr-feed.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/NelisVanWijk/youtarr-feed/main/unraid/icon.png</Icon>
+  <ExtraParams>--add-host=host.docker.internal:host-gateway</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>Een bereikbare Youtarr-installatie. Youtarr-gebruikersnaam en wachtwoord zijn nodig voor de abonnementenfeed, tenzij je een sessietoken gebruikt.</Requires>
+
+  <Config Name="WebUI Port" Target="3000" Default="3090" Mode="tcp" Description="Poort waarop Youtarr Feed via je Unraid-server bereikbaar is." Type="Port" Display="always" Required="true" Mask="false">3090</Config>
+  <Config Name="Youtarr URL" Target="YOUTARR_URL" Default="http://host.docker.internal:3087" Mode="" Description="Intern adres van Youtarr, bereikbaar vanuit deze container." Type="Variable" Display="always" Required="true" Mask="false">http://host.docker.internal:3087</Config>
+  <Config Name="Youtarr Username" Target="YOUTARR_USERNAME" Default="" Mode="" Description="Gebruikersnaam van Youtarr. Niet nodig wanneer je een sessietoken gebruikt." Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="Youtarr Password" Target="YOUTARR_PASSWORD" Default="" Mode="" Description="Wachtwoord van Youtarr. Blijft alleen als afgeschermde containerinstelling op Unraid." Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="Youtarr API Key" Target="YOUTARR_API_KEY" Default="" Mode="" Description="Optionele Youtarr API-key voor downloadopdrachten. Voor de feed blijven inloggegevens of een sessietoken nodig." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Youtarr Session Token" Target="YOUTARR_SESSION_TOKEN" Default="" Mode="" Description="Alternatief voor gebruikersnaam en wachtwoord. Let op: een sessie kan verlopen." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Youtarr Authentication Disabled" Target="YOUTARR_AUTH_DISABLED" Default="false" Mode="" Description="Alleen op true zetten als authenticatie in jouw Youtarr-installatie bewust is uitgeschakeld." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+
+  <Config Name="Plex URL" Target="PLEX_URL" Default="http://host.docker.internal:32400" Mode="" Description="Optioneel. Intern adres van Plex voor een bibliotheekscan nadat een download klaar is." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Plex Token" Target="PLEX_TOKEN" Default="" Mode="" Description="Optioneel Plex-token. Wordt alleen server-side gebruikt en nooit naar je iPhone gestuurd." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Plex Library ID" Target="PLEX_LIBRARY_ID" Default="" Mode="" Description="Optioneel numeriek ID van je Youtarr-bibliotheek in Plex." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+</Container>

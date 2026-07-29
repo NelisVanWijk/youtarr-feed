@@ -1,0 +1,11 @@
+services:
+  youtarr-feed:
+    build: .
+    container_name: youtarr-feed
+    restart: unless-stopped
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3090:3000"
