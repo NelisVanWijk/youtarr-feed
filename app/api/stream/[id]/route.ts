@@ -31,6 +31,11 @@ export async function GET(
       const value = upstream.headers.get(name);
       if (value) headers.set(name, value);
     });
+    if (!headers.has("content-type")) {
+      headers.set("Content-Type", "video/mp4");
+    }
+    headers.set("Content-Disposition", "inline");
+    headers.set("X-Content-Type-Options", "nosniff");
     headers.set("Cache-Control", "no-store");
     return new Response(upstream.body, {
       status: upstream.status,

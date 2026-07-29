@@ -15,6 +15,7 @@ import type {
 
 type View = "feed" | "continue" | "channels";
 type Filter = "all" | "new" | "downloaded";
+type PlayerMode = "full" | "mini";
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
 
@@ -163,13 +164,16 @@ function VideoCard({
   progress,
   onOpen,
   onChannel,
+  onDelete,
 }: {
   video: FeedVideo;
   index: number;
   progress?: number;
   onOpen: (video: FeedVideo) => void;
   onChannel: (channelId: string) => void;
+  onDelete: (video: FeedVideo) => void;
 }) {
+  const [menuOpen, setMenuOpen] = useState(false);
   const channel = {
     id: video.channelId,
     name: video.channelName,
@@ -198,11 +202,41 @@ function VideoCard({
             {video.channelName} · {relativeDate(video.publishedAt)}
           </span>
         </button>
-        <button className="more-button" aria-label="Meer opties">
-          <span />
-          <span />
-          <span />
-        </button>
+        <div className="video-menu-wrap">
+          <button
+            className="more-button"
+            aria-label="Meer opties"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+          {menuOpen && (
+            <div className="video-menu">
+              <button
+                onClick={() => {
+                  setMenuOpen(false);
+                  onOpen(video);
+                }}
+              >
+                {video.downloaded ? "Afspelen" : "Ophalen"}
+              </button>
+              {video.downloaded && (
+                <button
+                  className="danger-menu-item"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onDelete(video);
+                  }}
+                >
+                  Download verwijderen
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </div>
     </article>
   );
@@ -241,6 +275,7 @@ export default function FeedApp() {
   const [channelVideos, setChannelVideos] = useState<FeedVideo[]>([]);
   const [channelLoading, setChannelLoading] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<FeedVideo | null>(null);
+  const [playerMode, setPlayerMode] = useState<PlayerMode>("full");
   const [downloadState, setDownloadState] = useState<
     "idle" | "queueing" | "queued" | "error"
   >("idle");
@@ -258,6 +293,8 @@ export default function FeedApp() {
   const [addChannelMessage, setAddChannelMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const progressSaveRef = useRef<Record<string, number>>({});
+  const playerRef = useRef<HTMLVideoElement | null>(null);
+  const mode: AppMode = feed?.mode || "demo";
 
   const loadFeed = useCallback(async (quiet = false) => {
     if (quiet) setRefreshing(true);
@@ -366,6 +403,18 @@ export default function FeedApp() {
     status?.plexConfigured,
   ]);
 
+  useEffect(() => {
+    if (
+      playerMode === "full" &&
+      selectedVideo?.downloaded &&
+      mode === "live" &&
+      playerRef.current
+    ) {
+      updateMediaSession(selectedVideo);
+      void requestNativeFullscreen(playerRef.current);
+    }
+  }, [mode, playerMode, selectedVideo]);
+
   const visibleVideos = useMemo(() => {
     const source = selectedChannel ? channelVideos : feed?.videos || [];
     const normalized = query.trim().toLowerCase();
@@ -434,12 +483,36 @@ export default function FeedApp() {
 
   function openVideo(video: FeedVideo) {
     setSelectedVideo(video);
+    setPlayerMode("full");
     setDownloadState("idle");
     setDownloadError("");
     setDeleteState("idle");
     setDeleteError("");
     if (!video.downloaded) {
       void startDownload(video);
+    }
+  }
+
+  function closePlayer() {
+    if (selectedVideo?.downloaded && mode === "live" && playerMode === "full") {
+      setPlayerMode("mini");
+      return;
+    }
+    setSelectedVideo(null);
+  }
+
+  async function requestNativeFullscreen(player: HTMLVideoElement) {
+    try {
+      if ("webkitEnterFullscreen" in player) {
+        (player as HTMLVideoElement & { webkitEnterFullscreen: () => void })
+          .webkitEnterFullscreen();
+        return;
+      }
+      if (player.requestFullscreen) {
+        await player.requestFullscreen();
+      }
+    } catch {
+      // iOS accepteert fullscreen alleen wanneer Safari de gesture toestaat.
     }
   }
 
@@ -548,7 +621,9 @@ export default function FeedApp() {
       });
       const data = (await response.json()) as { error?: string; demo?: boolean };
       if (!response.ok) throw new Error(data.error || "Verwijderen mislukte");
-      setSelectedVideo({ ...video, downloaded: false, missing: true });
+      if (selectedVideo?.id === video.id) {
+        setSelectedVideo(null);
+      }
       setWatchProgress((current) => {
         const next = { ...current };
         delete next[video.id];
@@ -609,7 +684,6 @@ export default function FeedApp() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  const mode: AppMode = feed?.mode || "demo";
   const activeActivity =
     status?.mode === "live" && activity && activity.state !== "idle"
       ? activity
@@ -762,6 +836,7 @@ export default function FeedApp() {
                     progress={progressPercent(video.id)}
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
+                    onDelete={(item) => void removeDownload(item)}
                   />
                 ))}
               </div>
@@ -796,6 +871,7 @@ export default function FeedApp() {
                     progress={progressPercent(video.id)}
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
+                    onDelete={(item) => void removeDownload(item)}
                   />
                 ))}
               </div>
@@ -914,6 +990,7 @@ export default function FeedApp() {
                     progress={progressPercent(video.id)}
                     onOpen={openVideo}
                     onChannel={() => undefined}
+                    onDelete={(item) => void removeDownload(item)}
                   />
                 ))}
               </div>
@@ -952,41 +1029,66 @@ export default function FeedApp() {
 
       {selectedVideo && (
         <div
-          className="modal-backdrop"
+          className={playerMode === "mini" ? "mini-player-shell" : "modal-backdrop"}
           role="presentation"
           onMouseDown={(event) => {
-            if (event.currentTarget === event.target) setSelectedVideo(null);
+            if (playerMode === "full" && event.currentTarget === event.target) {
+              closePlayer();
+            }
           }}
         >
           <section
-            className="video-modal"
+            className={
+              playerMode === "mini" ? "video-modal video-modal-mini" : "video-modal"
+            }
             role="dialog"
             aria-modal="true"
             aria-label={selectedVideo.title}
           >
             <button
-              className="modal-close"
-              onClick={() => setSelectedVideo(null)}
-              aria-label="Sluiten"
+              className={`modal-close ${
+                playerMode === "mini" ? "modal-close-x" : "modal-close-minimize"
+              }`}
+              onClick={closePlayer}
+              aria-label={playerMode === "mini" ? "Sluiten" : "Klein maken"}
             >
               ×
+              {playerMode === "mini" ? "x" : "-"}
             </button>
+            {playerMode === "mini" && (
+              <button
+                className="modal-expand"
+                onClick={() => setPlayerMode("full")}
+                aria-label="Groot maken"
+              >
+                []
+              </button>
+            )}
             {selectedVideo.downloaded && mode === "live" ? (
               <video
+                ref={playerRef}
                 className="player"
                 controls
                 autoPlay
                 playsInline
+                disableRemotePlayback={false}
+                preload="metadata"
                 src={`/api/stream/${encodeURIComponent(selectedVideo.id)}`}
-                onLoadedMetadata={(event) =>
-                  {
-                    updateMediaSession(selectedVideo);
-                    resumePlayback(selectedVideo.id, event.currentTarget);
+                onLoadedMetadata={(event) => {
+                  event.currentTarget.setAttribute("x-webkit-airplay", "allow");
+                  event.currentTarget.setAttribute("webkit-playsinline", "true");
+                  updateMediaSession(selectedVideo);
+                  resumePlayback(selectedVideo.id, event.currentTarget);
+                  if (playerMode === "full") {
+                    void requestNativeFullscreen(event.currentTarget);
                   }
-                }
-                onPlay={() =>
-                  updateMediaSession(selectedVideo)
-                }
+                }}
+                onPlay={(event) => {
+                  updateMediaSession(selectedVideo);
+                  if (playerMode === "full") {
+                    void requestNativeFullscreen(event.currentTarget);
+                  }
+                }}
                 onTimeUpdate={(event) =>
                   storeWatchProgress(
                     selectedVideo.id,
