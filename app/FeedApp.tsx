@@ -18,9 +18,6 @@ type Filter = "all" | "new" | "downloaded";
 type PlayerMode = "full" | "mini";
 type WebKitVideoElement = HTMLVideoElement & {
   webkitEnterFullscreen?: () => void;
-  webkitPresentationMode?: string;
-  webkitSetPresentationMode?: (mode: "fullscreen" | "inline" | "picture-in-picture") => void;
-  webkitSupportsPresentationMode?: (mode: "picture-in-picture") => boolean;
 };
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
@@ -88,7 +85,6 @@ function updateMediaSession(video: FeedVideo) {
         ]
       : undefined,
   });
-  navigator.mediaSession.playbackState = "playing";
 }
 
 function updateMediaSessionControls(player: HTMLVideoElement) {
@@ -453,7 +449,6 @@ export default function FeedApp() {
     const minimizeAfterNativeFullscreen = () => {
       setPlayerMode("mini");
       updateMediaSession(selectedVideo);
-      void keepPlaybackAlive(player);
     };
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement) {
@@ -471,32 +466,6 @@ export default function FeedApp() {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
   }, [mode, selectedVideo]);
-
-  useEffect(() => {
-    const player = playerRef.current;
-    if (!player || !selectedVideo?.downloaded || mode !== "live") {
-      return;
-    }
-
-    if (playerMode === "mini") {
-      updateMediaSession(selectedVideo);
-      void keepPlaybackAlive(player);
-    }
-
-    const handleVisibilityChange = () => {
-      if (!document.hidden) return;
-      updateMediaSession(selectedVideo);
-      void keepPlaybackAlive(player);
-      if (playerMode === "mini") {
-        void requestFloatingPlayback(player);
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [mode, playerMode, selectedVideo]);
 
   const visibleVideos = useMemo(() => {
     const source = selectedChannel ? channelVideos : feed?.videos || [];
@@ -579,9 +548,6 @@ export default function FeedApp() {
   function closePlayer() {
     if (selectedVideo?.downloaded && mode === "live" && playerMode === "full") {
       setPlayerMode("mini");
-      if (playerRef.current) {
-        void keepPlaybackAlive(playerRef.current);
-      }
       return;
     }
     setSelectedVideo(null);
@@ -599,43 +565,6 @@ export default function FeedApp() {
       }
     } catch {
       // iOS accepteert fullscreen alleen wanneer Safari de gesture toestaat.
-    }
-  }
-
-  async function keepPlaybackAlive(player: HTMLVideoElement) {
-    try {
-      if (!player.ended) {
-        await player.play();
-      }
-    } catch {
-      // Safari kan play() weigeren buiten een user gesture; de native controls blijven dan leidend.
-    }
-  }
-
-  async function requestFloatingPlayback(player: HTMLVideoElement) {
-    const webkitPlayer = player as WebKitVideoElement;
-    try {
-      if (
-        webkitPlayer.webkitSetPresentationMode &&
-        webkitPlayer.webkitSupportsPresentationMode?.("picture-in-picture") &&
-        webkitPlayer.webkitPresentationMode !== "picture-in-picture"
-      ) {
-        webkitPlayer.webkitSetPresentationMode("picture-in-picture");
-        return;
-      }
-      if (
-        document.pictureInPictureEnabled &&
-        "requestPictureInPicture" in player &&
-        !document.pictureInPictureElement
-      ) {
-        await (
-          player as HTMLVideoElement & {
-            requestPictureInPicture: () => Promise<PictureInPictureWindow>;
-          }
-        ).requestPictureInPicture();
-      }
-    } catch {
-      // PiP is op iOS alleen toegestaan wanneer Safari dit vanuit de huidige actie accepteert.
     }
   }
 
@@ -1194,7 +1123,7 @@ export default function FeedApp() {
                 autoPlay
                 playsInline
                 disableRemotePlayback={false}
-                disablePictureInPicture={false}
+                disablePictureInPicture
                 preload="metadata"
                 src={`/api/stream/${encodeURIComponent(selectedVideo.id)}`}
                 onLoadedMetadata={(event) => {
@@ -1210,6 +1139,9 @@ export default function FeedApp() {
                 onPlay={(event) => {
                   updateMediaSession(selectedVideo);
                   updateMediaSessionControls(event.currentTarget);
+                  if ("mediaSession" in navigator) {
+                    navigator.mediaSession.playbackState = "playing";
+                  }
                   if (playerMode === "full") {
                     void requestNativeFullscreen(event.currentTarget);
                   }
