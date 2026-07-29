@@ -18,6 +18,9 @@ type Filter = "all" | "new" | "downloaded";
 type PlayerMode = "full" | "mini";
 type WebKitVideoElement = HTMLVideoElement & {
   webkitEnterFullscreen?: () => void;
+  webkitPresentationMode?: string;
+  webkitSetPresentationMode?: (mode: "fullscreen" | "inline" | "picture-in-picture") => void;
+  webkitSupportsPresentationMode?: (mode: "picture-in-picture") => boolean;
 };
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
@@ -568,6 +571,33 @@ export default function FeedApp() {
     }
   }
 
+  async function requestManualPictureInPicture(player: HTMLVideoElement) {
+    const webkitPlayer = player as WebKitVideoElement;
+    try {
+      if (
+        webkitPlayer.webkitSetPresentationMode &&
+        webkitPlayer.webkitSupportsPresentationMode?.("picture-in-picture") &&
+        webkitPlayer.webkitPresentationMode !== "picture-in-picture"
+      ) {
+        webkitPlayer.webkitSetPresentationMode("picture-in-picture");
+        return;
+      }
+      if (
+        document.pictureInPictureEnabled &&
+        "requestPictureInPicture" in player &&
+        !document.pictureInPictureElement
+      ) {
+        await (
+          player as HTMLVideoElement & {
+            requestPictureInPicture: () => Promise<PictureInPictureWindow>;
+          }
+        ).requestPictureInPicture();
+      }
+    } catch {
+      // iOS/Safari bepaalt zelf of PiP in standalone PWA's beschikbaar is.
+    }
+  }
+
   async function startDownload(video: FeedVideo) {
     setDownloadState("queueing");
     setDownloadError("");
@@ -1115,6 +1145,20 @@ export default function FeedApp() {
             >
               {playerMode === "mini" ? "x" : "-"}
             </button>
+            {playerMode === "full" && selectedVideo.downloaded && mode === "live" && (
+              <button
+                className="modal-pip"
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={() => {
+                  if (playerRef.current) {
+                    void requestManualPictureInPicture(playerRef.current);
+                  }
+                }}
+                aria-label="Picture-in-picture"
+              >
+                PiP
+              </button>
+            )}
             {selectedVideo.downloaded && mode === "live" ? (
               <video
                 ref={playerRef}

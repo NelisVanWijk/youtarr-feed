@@ -1107,6 +1107,26 @@ main {
   content: "x";
 }
 
+.modal-pip {
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  right: 54px;
+  min-width: 46px;
+  height: 34px;
+  padding: 0 10px;
+  display: grid;
+  place-items: center;
+  background: rgba(11, 11, 12, 0.74);
+  border: 1px solid rgba(255, 255, 255, 0.11);
+  border-radius: 999px;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  backdrop-filter: blur(8px);
+}
+
 .player {
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -1159,6 +1179,10 @@ main {
 }
 
 .video-modal-mini .modal-copy {
+  display: none;
+}
+
+.video-modal-mini .modal-pip {
   display: none;
 }
 
