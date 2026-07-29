@@ -1029,10 +1029,18 @@ export default function FeedApp() {
 
       {selectedVideo && (
         <div
-          className={playerMode === "mini" ? "mini-player-shell" : "modal-backdrop"}
+          className={
+            playerMode === "mini"
+              ? "mini-player-shell"
+              : "modal-backdrop player-backdrop"
+          }
           role="presentation"
           onMouseDown={(event) => {
-            if (playerMode === "full" && event.currentTarget === event.target) {
+            if (playerMode === "mini") {
+              setPlayerMode("full");
+              return;
+            }
+            if (event.currentTarget === event.target) {
               closePlayer();
             }
           }}
@@ -1049,26 +1057,18 @@ export default function FeedApp() {
               className={`modal-close ${
                 playerMode === "mini" ? "modal-close-x" : "modal-close-minimize"
               }`}
+              onMouseDown={(event) => event.stopPropagation()}
               onClick={closePlayer}
               aria-label={playerMode === "mini" ? "Sluiten" : "Klein maken"}
             >
               ×
               {playerMode === "mini" ? "x" : "-"}
             </button>
-            {playerMode === "mini" && (
-              <button
-                className="modal-expand"
-                onClick={() => setPlayerMode("full")}
-                aria-label="Groot maken"
-              >
-                []
-              </button>
-            )}
             {selectedVideo.downloaded && mode === "live" ? (
               <video
                 ref={playerRef}
                 className="player"
-                controls
+                controls={playerMode === "full"}
                 autoPlay
                 playsInline
                 disableRemotePlayback={false}

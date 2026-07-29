@@ -1042,6 +1042,13 @@ main {
   animation: fade-in 180ms ease both;
 }
 
+.player-backdrop {
+  padding: 0;
+  place-items: stretch;
+  background: #000;
+  backdrop-filter: none;
+}
+
 .video-modal,
 .settings-modal {
   position: relative;
@@ -1052,6 +1059,17 @@ main {
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 19px;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.52);
+}
+
+.player-backdrop .video-modal {
+  width: 100%;
+  height: 100dvh;
+  max-height: none;
+  overflow: hidden;
+  background: #000;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .modal-close {
@@ -1076,8 +1094,7 @@ main {
   font-size: 0;
 }
 
-.modal-close::before,
-.modal-expand::before {
+.modal-close::before {
   font-size: 21px;
   line-height: 1;
 }
@@ -1090,29 +1107,6 @@ main {
   content: "x";
 }
 
-.modal-expand {
-  position: absolute;
-  z-index: 5;
-  top: 12px;
-  right: 54px;
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  background: rgba(11, 11, 12, 0.74);
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  border-radius: 50%;
-  color: #fff;
-  font-size: 0;
-  backdrop-filter: blur(8px);
-}
-
-.modal-expand::before {
-  content: "[]";
-  font-size: 13px;
-  font-weight: 800;
-}
-
 .player {
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -1121,12 +1115,35 @@ main {
   border-radius: 18px 18px 0 0;
 }
 
+.player-backdrop .player {
+  height: 100dvh;
+  aspect-ratio: auto;
+  object-fit: contain;
+  border-radius: 0;
+}
+
+.player-backdrop .demo-player,
+.player-backdrop .download-panel {
+  min-height: 100dvh;
+  border-radius: 0;
+}
+
+.player-backdrop .modal-copy {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  padding: 70px 24px calc(24px + var(--safe-bottom));
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.86), transparent);
+}
+
 .mini-player-shell {
   position: fixed;
   z-index: 90;
   right: 18px;
   bottom: calc(18px + var(--safe-bottom));
   width: min(360px, calc(100vw - 28px));
+  cursor: pointer;
   animation: fade-in 180ms ease both;
 }
 
@@ -1138,24 +1155,10 @@ main {
 }
 
 .video-modal-mini .player {
-  border-radius: 13px 13px 0 0;
+  border-radius: 13px;
 }
 
 .video-modal-mini .modal-copy {
-  padding: 10px 12px 12px;
-  gap: 3px 10px;
-}
-
-.video-modal-mini .modal-copy h2 {
-  overflow: hidden;
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.video-modal-mini .modal-copy button,
-.video-modal-mini .modal-copy span,
-.video-modal-mini .modal-actions {
   display: none;
 }
 
@@ -1661,6 +1664,33 @@ main {
 
   .modal-copy {
     padding-bottom: calc(22px + var(--safe-bottom));
+  }
+
+  .player-backdrop {
+    padding: 0;
+    align-items: stretch;
+  }
+
+  .player-backdrop .video-modal {
+    width: 100%;
+    height: 100dvh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .player-backdrop .player,
+  .player-backdrop .demo-player,
+  .player-backdrop .download-panel {
+    border-radius: 0;
+  }
+
+  .player-backdrop .modal-copy {
+    padding: 70px 18px calc(22px + var(--safe-bottom));
+  }
+
+  .video-modal-mini .player {
+    border-radius: 13px;
   }
 
   .modal-actions {
