@@ -1,9 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { FormEvent } from "react";
 import type {
   AppMode,
   Channel,
+  DownloadActivity,
   FeedResponse,
   FeedStatus,
   FeedVideo,
@@ -11,8 +13,23 @@ import type {
 
 type View = "feed" | "channels";
 type Filter = "all" | "new" | "downloaded";
+type WatchProgress = Record<
+  string,
+  { currentTime: number; duration: number; updatedAt: number }
+>;
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
+const watchProgressKey = "youtarr-feed-watch-progress";
+
+function loadStoredWatchProgress(): WatchProgress {
+  if (typeof window === "undefined") return {};
+  try {
+    const saved = window.localStorage.getItem(watchProgressKey);
+    return saved ? (JSON.parse(saved) as WatchProgress) : {};
+  } catch {
+    return {};
+  }
+}
 
 function initials(value: string) {
   return value
@@ -49,6 +66,12 @@ function relativeDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function formatEta(seconds?: number) {
+  if (!seconds) return "";
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  return `${minutes} min resterend`;
+}
+
 function ChannelAvatar({
   channel,
   size = "normal",
@@ -82,9 +105,11 @@ function ChannelAvatar({
 function Thumbnail({
   video,
   index,
+  progress,
 }: {
   video: FeedVideo;
   index: number;
+  progress?: number;
 }) {
   const [failed, setFailed] = useState(false);
   return (
@@ -111,7 +136,12 @@ function Thumbnail({
       ) : (
         <span className="cloud-badge">Nog ophalen</span>
       )}
-      {video.watched && <span className="watched-progress" />}
+      {(video.watched || progress !== undefined) && (
+        <span
+          className="watched-progress"
+          style={{ width: `${progress ?? 100}%` }}
+        />
+      )}
     </div>
   );
 }
@@ -119,11 +149,13 @@ function Thumbnail({
 function VideoCard({
   video,
   index,
+  progress,
   onOpen,
   onChannel,
 }: {
   video: FeedVideo;
   index: number;
+  progress?: number;
   onOpen: (video: FeedVideo) => void;
   onChannel: (channelId: string) => void;
 }) {
@@ -139,7 +171,7 @@ function VideoCard({
         onClick={() => onOpen(video)}
         aria-label={`${video.title} openen`}
       >
-        <Thumbnail video={video} index={index} />
+        <Thumbnail video={video} index={index} progress={progress} />
       </button>
       <div className="video-details">
         <button
@@ -202,7 +234,21 @@ export default function FeedApp() {
     "idle" | "queueing" | "queued" | "error"
   >("idle");
   const [downloadError, setDownloadError] = useState("");
+  const [deleteState, setDeleteState] = useState<"idle" | "deleting" | "error">(
+    "idle"
+  );
+  const [deleteError, setDeleteError] = useState("");
+  const [activity, setActivity] = useState<DownloadActivity | null>(null);
+  const [watchProgress, setWatchProgress] = useState<WatchProgress>(
+    loadStoredWatchProgress
+  );
+  const [channelUrl, setChannelUrl] = useState("");
+  const [addChannelState, setAddChannelState] = useState<
+    "idle" | "adding" | "added" | "error"
+  >("idle");
+  const [addChannelMessage, setAddChannelMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const progressSaveRef = useRef<Record<string, number>>({});
 
   const loadFeed = useCallback(async (quiet = false) => {
     if (quiet) setRefreshing(true);
@@ -234,6 +280,29 @@ export default function FeedApp() {
     const timer = window.setTimeout(() => void loadFeed(), 0);
     return () => window.clearTimeout(timer);
   }, [loadFeed]);
+
+  useEffect(() => {
+    if (status?.mode !== "live") {
+      return;
+    }
+    let stopped = false;
+    async function loadActivity() {
+      try {
+        const response = await fetch("/api/activity", { cache: "no-store" });
+        if (!response.ok) return;
+        const data = (await response.json()) as DownloadActivity;
+        if (!stopped) setActivity(data);
+      } catch {
+        // De volgende poll probeert het opnieuw.
+      }
+    }
+    void loadActivity();
+    const timer = window.setInterval(loadActivity, 5000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [status?.mode]);
 
   useEffect(() => {
     if (downloadState !== "queued" || !selectedVideo || status?.mode !== "live") {
@@ -320,6 +389,8 @@ export default function FeedApp() {
     setSelectedVideo(video);
     setDownloadState("idle");
     setDownloadError("");
+    setDeleteState("idle");
+    setDeleteError("");
     if (!video.downloaded) {
       void startDownload(video);
     }
@@ -358,6 +429,109 @@ export default function FeedApp() {
     }
   }
 
+  function storeWatchProgress(
+    videoId: string,
+    currentTime: number,
+    duration: number,
+    force = false
+  ) {
+    if (!Number.isFinite(duration) || duration <= 0) return;
+    const now = Date.now();
+    if (!force && now - (progressSaveRef.current[videoId] || 0) < 4000) return;
+    progressSaveRef.current[videoId] = now;
+
+    setWatchProgress((current) => {
+      const next = { ...current };
+      if (currentTime < 5 || currentTime > duration - 8) {
+        delete next[videoId];
+      } else {
+        next[videoId] = { currentTime, duration, updatedAt: now };
+      }
+      try {
+        window.localStorage.setItem(watchProgressKey, JSON.stringify(next));
+      } catch {
+        // Opslaan van kijkvoortgang is handig, maar mag afspelen nooit blokkeren.
+      }
+      return next;
+    });
+  }
+
+  function resumePlayback(videoId: string, player: HTMLVideoElement) {
+    const progress = watchProgress[videoId];
+    if (!progress || progress.currentTime < 5) return;
+    const duration = Number.isFinite(player.duration)
+      ? player.duration
+      : progress.duration;
+    if (progress.currentTime < duration - 8) {
+      player.currentTime = progress.currentTime;
+    }
+  }
+
+  function progressPercent(videoId: string) {
+    const progress = watchProgress[videoId];
+    if (!progress?.duration) return undefined;
+    return Math.max(2, Math.min(98, (progress.currentTime / progress.duration) * 100));
+  }
+
+  async function removeDownload(video: FeedVideo) {
+    setDeleteState("deleting");
+    setDeleteError("");
+    try {
+      const response = await fetch("/api/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: video.id }),
+      });
+      const data = (await response.json()) as { error?: string; demo?: boolean };
+      if (!response.ok) throw new Error(data.error || "Verwijderen mislukte");
+      setSelectedVideo({ ...video, downloaded: false, missing: true });
+      setDeleteState("idle");
+      void loadFeed(true);
+    } catch (deleteFailure) {
+      setDeleteState("error");
+      setDeleteError(
+        deleteFailure instanceof Error
+          ? deleteFailure.message
+          : "Verwijderen mislukte"
+      );
+    }
+  }
+
+  async function submitChannel(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const url = channelUrl.trim();
+    if (!url) return;
+    setAddChannelState("adding");
+    setAddChannelMessage("");
+    try {
+      const response = await fetch("/api/channels/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        channel?: { name?: string; restored?: boolean };
+      };
+      if (!response.ok) throw new Error(data.error || "Kanaal toevoegen mislukte");
+      setChannelUrl("");
+      setAddChannelState("added");
+      setAddChannelMessage(
+        data.channel?.restored
+          ? `${data.channel.name || "Kanaal"} is hersteld`
+          : `${data.channel?.name || "Kanaal"} is toegevoegd`
+      );
+      void loadFeed(true);
+    } catch (addFailure) {
+      setAddChannelState("error");
+      setAddChannelMessage(
+        addFailure instanceof Error
+          ? addFailure.message
+          : "Kanaal toevoegen mislukte"
+      );
+    }
+  }
+
   function switchView(next: View) {
     setView(next);
     setSelectedChannel(null);
@@ -367,6 +541,10 @@ export default function FeedApp() {
   }
 
   const mode: AppMode = feed?.mode || "demo";
+  const activeActivity =
+    status?.mode === "live" && activity && activity.state !== "idle"
+      ? activity
+      : null;
 
   return (
     <div className="app-shell">
@@ -454,6 +632,18 @@ export default function FeedApp() {
           </div>
         )}
 
+        {activeActivity && (
+          <section className={`activity-strip activity-${activeActivity.state}`}>
+            <div>
+              <strong>{activeActivity.label}</strong>
+              <span>{formatEta(activeActivity.etaSeconds) || "Youtarr werkt op de achtergrond"}</span>
+            </div>
+            <div className="activity-meter" aria-label="Downloadvoortgang">
+              <span style={{ width: `${activeActivity.percent}%` }} />
+            </div>
+          </section>
+        )}
+
         {view === "feed" && (
           <>
             <section className="page-heading">
@@ -493,6 +683,7 @@ export default function FeedApp() {
                     key={`${video.channelId}-${video.id}`}
                     video={video}
                     index={index}
+                    progress={progressPercent(video.id)}
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                   />
@@ -517,6 +708,25 @@ export default function FeedApp() {
                 <p>{feed?.channels.length || 0} actieve abonnementen</p>
               </div>
             </section>
+            <form className="add-channel-form" onSubmit={submitChannel}>
+              <input
+                value={channelUrl}
+                onChange={(event) => setChannelUrl(event.target.value)}
+                placeholder="YouTube-kanaal URL of handle"
+                aria-label="YouTube-kanaal URL of handle"
+              />
+              <button
+                className="primary-button"
+                disabled={addChannelState === "adding" || mode !== "live"}
+              >
+                {addChannelState === "adding" ? "Bezig" : "Toevoegen"}
+              </button>
+              {addChannelMessage && (
+                <span className={`form-message form-${addChannelState}`}>
+                  {addChannelMessage}
+                </span>
+              )}
+            </form>
             {loading ? (
               <LoadingGrid />
             ) : (
@@ -591,6 +801,7 @@ export default function FeedApp() {
                     key={video.id}
                     video={video}
                     index={index}
+                    progress={progressPercent(video.id)}
                     onOpen={openVideo}
                     onChannel={() => undefined}
                   />
@@ -650,6 +861,32 @@ export default function FeedApp() {
                 autoPlay
                 playsInline
                 src={`/api/stream/${encodeURIComponent(selectedVideo.id)}`}
+                onLoadedMetadata={(event) =>
+                  resumePlayback(selectedVideo.id, event.currentTarget)
+                }
+                onTimeUpdate={(event) =>
+                  storeWatchProgress(
+                    selectedVideo.id,
+                    event.currentTarget.currentTime,
+                    event.currentTarget.duration
+                  )
+                }
+                onPause={(event) =>
+                  storeWatchProgress(
+                    selectedVideo.id,
+                    event.currentTarget.currentTime,
+                    event.currentTarget.duration,
+                    true
+                  )
+                }
+                onEnded={(event) =>
+                  storeWatchProgress(
+                    selectedVideo.id,
+                    event.currentTarget.duration,
+                    event.currentTarget.duration,
+                    true
+                  )
+                }
               />
             ) : selectedVideo.downloaded ? (
               <div className="demo-player">
@@ -703,6 +940,18 @@ export default function FeedApp() {
                 {selectedVideo.channelName}
               </button>
               <span>{relativeDate(selectedVideo.publishedAt)}</span>
+              {selectedVideo.downloaded && (
+                <div className="modal-actions">
+                  <button
+                    className="danger-button"
+                    onClick={() => void removeDownload(selectedVideo)}
+                    disabled={deleteState === "deleting"}
+                  >
+                    {deleteState === "deleting" ? "Verwijderen" : "Download verwijderen"}
+                  </button>
+                  {deleteState === "error" && <small>{deleteError}</small>}
+                </div>
+              )}
             </div>
           </section>
         </div>

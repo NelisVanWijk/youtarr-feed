@@ -39,3 +39,21 @@ export interface FeedResponse {
   channels: Channel[];
   warnings?: string[];
 }
+
+export interface DownloadProgress {
+  state?: string;
+  percent?: number;
+  downloadedBytes?: number;
+  totalBytes?: number;
+  speedBytesPerSecond?: number;
+  etaSeconds?: number;
+}
+
+export interface DownloadActivity {
+  state: "idle" | "active" | "complete" | "error";
+  label: string;
+  percent: number;
+  etaSeconds?: number;
+  speedBytesPerSecond?: number;
+  capturedAt?: number | null;
+}

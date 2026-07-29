@@ -1,4 +1,4 @@
-import type { Channel, FeedVideo } from "./types";
+import type { Channel, DownloadActivity, FeedVideo } from "./types";
 
 type YoutarrChannel = {
   channel_id?: string;
@@ -19,6 +19,39 @@ type YoutarrVideo = {
   removed?: boolean;
   youtube_removed?: boolean;
   watchedBy?: string[];
+};
+
+type YoutarrChannelInfo = YoutarrChannel & {
+  id?: string;
+  title?: string;
+  enabled?: boolean;
+  existing?: boolean;
+};
+
+type YoutarrActivitySnapshot = {
+  capturedAt?: number | null;
+  terminal?: boolean;
+  activity?: {
+    progress?: {
+      state?: string;
+      percent?: number;
+      etaSeconds?: number;
+      speedBytesPerSecond?: number;
+    };
+    videoCount?: {
+      current?: number;
+      total?: number;
+      completed?: number;
+      skipped?: number;
+    };
+    text?: string;
+    finalSummary?: {
+      totalDownloaded?: number;
+      totalFailed?: number;
+      totalSkipped?: number;
+    };
+  } | null;
+  lastFinalActivity?: YoutarrActivitySnapshot["activity"];
 };
 
 const configuredUrl = process.env.YOUTARR_URL?.trim().replace(/\/+$/, "") || "";
@@ -259,6 +292,125 @@ export async function queueDownload(youtubeId: string) {
     throw new Error(data.error || `Download starten mislukte (${response.status})`);
   }
   return data;
+}
+
+export async function deleteDownload(youtubeId: string) {
+  if (!/^[A-Za-z0-9_-]{11}$/.test(youtubeId)) {
+    throw new Error("Ongeldig video-ID");
+  }
+  const response = await requestYoutarr("/api/videos", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ youtubeIds: [youtubeId] }),
+  });
+  const data = (await response.json().catch(() => ({}))) as {
+    success?: boolean;
+    error?: string;
+    message?: string;
+  };
+  if (!response.ok || data.success === false) {
+    throw new Error(data.error || data.message || `Verwijderen mislukte (${response.status})`);
+  }
+  return data;
+}
+
+export async function addChannel(url: string) {
+  const normalized = url.trim();
+  if (!normalized) throw new Error("Kanaal-URL ontbreekt");
+
+  const infoResponse = await requestYoutarr("/addchannelinfo", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url: normalized }),
+  });
+  const infoData = (await infoResponse.json().catch(() => ({}))) as {
+    status?: string;
+    message?: string;
+    channelInfo?: YoutarrChannelInfo;
+  };
+  if (!infoResponse.ok || infoData.status !== "success" || !infoData.channelInfo) {
+    throw new Error(infoData.message || `Kanaal toevoegen mislukte (${infoResponse.status})`);
+  }
+  if (infoData.channelInfo.enabled) {
+    throw new Error("Dit kanaal staat al in Youtarr");
+  }
+
+  const channelId = infoData.channelInfo.channel_id || infoData.channelInfo.id || "";
+  const updateResponse = await requestYoutarr("/updatechannels", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      add: [{ url: normalized, channel_id: channelId }],
+    }),
+  });
+  const updateData = (await updateResponse.json().catch(() => ({}))) as {
+    status?: string;
+    message?: string;
+  };
+  if (!updateResponse.ok || updateData.status !== "success") {
+    throw new Error(updateData.message || `Kanaal opslaan mislukte (${updateResponse.status})`);
+  }
+
+  return {
+    id: channelId,
+    name: infoData.channelInfo.uploader || infoData.channelInfo.title || normalized,
+    url: normalized,
+    restored: infoData.channelInfo.existing === true,
+  };
+}
+
+function summarizeActivity(snapshot: YoutarrActivitySnapshot): DownloadActivity {
+  const activity = snapshot.activity || snapshot.lastFinalActivity || null;
+  const progress = activity?.progress || {};
+  const finalSummary = activity?.finalSummary;
+  const rawPercent = Number(progress.percent);
+  const percent = Number.isFinite(rawPercent)
+    ? Math.max(0, Math.min(100, rawPercent))
+    : finalSummary
+      ? 100
+      : 0;
+  const state = progress.state || (snapshot.terminal ? "idle" : "active");
+
+  if (!activity || (snapshot.terminal && !finalSummary && state === "idle")) {
+    return { state: "idle", label: "Geen actieve download", percent: 0 };
+  }
+
+  if (finalSummary || state === "complete") {
+    const downloaded = finalSummary?.totalDownloaded ?? activity.videoCount?.completed ?? 0;
+    const failed = finalSummary?.totalFailed ?? 0;
+    return {
+      state: failed > 0 ? "error" : "complete",
+      label: failed > 0 ? `${failed} mislukt, ${downloaded} klaar` : `${downloaded} video klaar`,
+      percent: 100,
+      capturedAt: snapshot.capturedAt ?? null,
+    };
+  }
+
+  const total = activity.videoCount?.total || 0;
+  const current = activity.videoCount?.current || 0;
+  const label =
+    state === "initiating"
+      ? "Download voorbereiden"
+      : total > 1
+        ? `Video ${Math.max(current, 1)} van ${total}`
+        : "Download bezig";
+
+  return {
+    state: state === "error" ? "error" : "active",
+    label,
+    percent,
+    etaSeconds: progress.etaSeconds,
+    speedBytesPerSecond: progress.speedBytesPerSecond,
+    capturedAt: snapshot.capturedAt ?? null,
+  };
+}
+
+export async function getDownloadActivity(): Promise<DownloadActivity> {
+  const response = await requestYoutarr("/api/jobs/current-activity");
+  if (!response.ok) {
+    throw new Error(`Voortgang ophalen mislukte (${response.status})`);
+  }
+  return summarizeActivity((await response.json()) as YoutarrActivitySnapshot);
 }
 
 export async function getStream(youtubeId: string, range?: string | null) {

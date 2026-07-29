@@ -818,6 +818,40 @@ main {
   font-size: clamp(27px, 3.5vw, 38px);
 }
 
+.add-channel-form {
+  max-width: 1120px;
+  margin: -8px auto 22px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 9px;
+}
+
+.add-channel-form input {
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.add-channel-form .primary-button {
+  height: 40px;
+}
+
+.form-message {
+  grid-column: 1 / -1;
+  padding: 0 2px;
+  color: var(--quiet);
+  font-size: 11px;
+}
+
+.form-error {
+  color: #ffb7b1;
+}
+
 .empty-state {
   max-width: 540px;
   margin: 12vh auto;
@@ -871,6 +905,53 @@ main {
   border-radius: 7px;
   font-size: 11px;
   font-weight: 700;
+}
+
+.activity-strip {
+  max-width: 1480px;
+  margin: 0 auto 22px;
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(170px, 260px);
+  align-items: center;
+  gap: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.activity-strip strong,
+.activity-strip span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activity-strip strong {
+  font-size: 12px;
+}
+
+.activity-strip span {
+  margin-top: 3px;
+  color: var(--quiet);
+  font-size: 11px;
+}
+
+.activity-meter {
+  height: 7px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+}
+
+.activity-meter span {
+  width: 0;
+  height: 100%;
+  display: block;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 260ms ease;
 }
 
 .bottom-nav {
@@ -1020,6 +1101,39 @@ main {
 
 .modal-copy span {
   color: var(--quiet);
+  font-size: 11px;
+  text-align: right;
+}
+
+.modal-actions {
+  grid-column: 1 / -1;
+  margin-top: 10px;
+  padding-top: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.danger-button {
+  padding: 10px 13px;
+  background: rgba(255, 74, 61, 0.12);
+  border: 1px solid rgba(255, 74, 61, 0.32);
+  border-radius: 10px;
+  color: #ffb7b1;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.danger-button:disabled,
+.primary-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.modal-actions small {
+  color: #ffb7b1;
   font-size: 11px;
   text-align: right;
 }
@@ -1224,7 +1338,9 @@ main {
   .filter-row,
   .channel-hero,
   .back-button,
-  .error-banner {
+  .error-banner,
+  .activity-strip,
+  .add-channel-form {
     margin-right: 16px;
     margin-left: 16px;
   }
@@ -1285,6 +1401,19 @@ main {
   .channel-card {
     padding: 13px;
     border-radius: 14px;
+  }
+
+  .add-channel-form {
+    grid-template-columns: 1fr;
+  }
+
+  .add-channel-form .primary-button {
+    width: 100%;
+  }
+
+  .activity-strip {
+    grid-template-columns: 1fr;
+    gap: 9px;
   }
 
   .avatar-large {
@@ -1370,6 +1499,15 @@ main {
 
   .modal-copy {
     padding-bottom: calc(22px + var(--safe-bottom));
+  }
+
+  .modal-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .modal-actions small {
+    text-align: left;
   }
 
   .settings-modal {

@@ -91,3 +91,39 @@ test("validates downloads and simulates them in demo mode", async () => {
     message: "Voorbeelddownload gestart",
   });
 });
+
+test("reports idle activity before Youtarr is configured", async () => {
+  const worker = await createWorker();
+  const response = await fetchFrom(worker, "/api/activity");
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    state: "idle",
+    label: "Geen actieve download",
+    percent: 0,
+  });
+});
+
+test("simulates deleting a download in demo mode", async () => {
+  const worker = await createWorker();
+  const response = await fetchFrom(worker, "/api/delete", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: "dmo00000002" }),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    success: true,
+    demo: true,
+  });
+});
+
+test("requires a live Youtarr connection before adding channels", async () => {
+  const worker = await createWorker();
+  const response = await fetchFrom(worker, "/api/channels/add", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url: "https://www.youtube.com/@openai" }),
+  });
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /Youtarr gekoppeld/);
+});
