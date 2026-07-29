@@ -415,6 +415,32 @@ export default function FeedApp() {
     }
   }, [mode, playerMode, selectedVideo]);
 
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player || !selectedVideo?.downloaded || mode !== "live") {
+      return;
+    }
+
+    const minimizeAfterNativeFullscreen = () => {
+      setPlayerMode("mini");
+    };
+    const handleFullscreenChange = () => {
+      if (!document.fullscreenElement) {
+        minimizeAfterNativeFullscreen();
+      }
+    };
+
+    player.addEventListener("webkitendfullscreen", minimizeAfterNativeFullscreen);
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      player.removeEventListener(
+        "webkitendfullscreen",
+        minimizeAfterNativeFullscreen
+      );
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, [mode, selectedVideo]);
+
   const visibleVideos = useMemo(() => {
     const source = selectedChannel ? channelVideos : feed?.videos || [];
     const normalized = query.trim().toLowerCase();
@@ -1061,7 +1087,6 @@ export default function FeedApp() {
               onClick={closePlayer}
               aria-label={playerMode === "mini" ? "Sluiten" : "Klein maken"}
             >
-              ×
               {playerMode === "mini" ? "x" : "-"}
             </button>
             {selectedVideo.downloaded && mode === "live" ? (
