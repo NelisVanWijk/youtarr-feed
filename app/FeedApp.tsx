@@ -1123,7 +1123,6 @@ export default function FeedApp() {
                 autoPlay
                 playsInline
                 disableRemotePlayback={false}
-                disablePictureInPicture
                 preload="metadata"
                 src={`/api/stream/${encodeURIComponent(selectedVideo.id)}`}
                 onLoadedMetadata={(event) => {
