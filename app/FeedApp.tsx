@@ -41,6 +41,46 @@ type DownloadJob = {
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
 
+function NavIcon({ view }: { view: View }) {
+  if (view === "feed") {
+    return (
+      <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 10.6 12 4l8 6.6" />
+        <path d="M6.5 9.5V20h11V9.5" />
+        <path d="M10 20v-5h4v5" />
+      </svg>
+    );
+  }
+  if (view === "continue") {
+    return (
+      <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4 12a8 8 0 1 1 2.35 5.65" />
+        <path d="M4 18v-5h5" />
+        <path d="m10.5 8.8 5 3.2-5 3.2Z" />
+      </svg>
+    );
+  }
+  if (view === "local") {
+    return (
+      <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M4.5 7.5h6l1.7 2h7.3v8.8a1.7 1.7 0 0 1-1.7 1.7H6.2a1.7 1.7 0 0 1-1.7-1.7Z" />
+        <path d="M12 11.5v5" />
+        <path d="m9.8 14.5 2.2 2.2 2.2-2.2" />
+      </svg>
+    );
+  }
+  return (
+    <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6.5 7.5h11" />
+      <path d="M6.5 12h11" />
+      <path d="M6.5 16.5h7" />
+      <circle cx="4" cy="7.5" r="0.8" />
+      <circle cx="4" cy="12" r="0.8" />
+      <circle cx="4" cy="16.5" r="0.8" />
+    </svg>
+  );
+}
+
 function initials(value: string) {
   return value
     .split(/\s+/)
@@ -1119,32 +1159,28 @@ export default function FeedApp() {
             className={view === "feed" ? "active" : ""}
             onClick={() => switchView("feed")}
           >
-            <span className="nav-home" />
+            <NavIcon view="feed" />
             <span>Feed</span>
           </button>
           <button
             className={view === "continue" ? "active" : ""}
             onClick={() => switchView("continue")}
           >
-            <span className="nav-continue" />
+            <NavIcon view="continue" />
             <span>Verder kijken</span>
           </button>
           <button
             className={view === "local" ? "active" : ""}
             onClick={() => switchView("local")}
           >
-            <span className="nav-local" />
+            <NavIcon view="local" />
             <span>Lokaal</span>
           </button>
           <button
             className={view === "channels" ? "active" : ""}
             onClick={() => switchView("channels")}
           >
-            <span className="nav-channels">
-              <i />
-              <i />
-              <i />
-            </span>
+            <NavIcon view="channels" />
             <span>Kanalen</span>
           </button>
         </nav>
@@ -1436,32 +1472,28 @@ export default function FeedApp() {
           className={view === "feed" ? "active" : ""}
           onClick={() => switchView("feed")}
         >
-          <span className="nav-home" />
+          <NavIcon view="feed" />
           <small>Feed</small>
         </button>
         <button
           className={view === "continue" ? "active" : ""}
           onClick={() => switchView("continue")}
         >
-          <span className="nav-continue" />
+          <NavIcon view="continue" />
           <small>Verder</small>
         </button>
         <button
           className={view === "local" ? "active" : ""}
           onClick={() => switchView("local")}
         >
-          <span className="nav-local" />
+          <NavIcon view="local" />
           <small>Lokaal</small>
         </button>
         <button
           className={view === "channels" ? "active" : ""}
           onClick={() => switchView("channels")}
         >
-          <span className="nav-channels">
-            <i />
-            <i />
-            <i />
-          </span>
+          <NavIcon view="channels" />
           <small>Kanalen</small>
         </button>
       </nav>
