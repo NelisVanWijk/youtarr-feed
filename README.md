@@ -1,53 +1,290 @@
 # Youtarr Feed
 
-Een mobiele abonnementenfeed voor Youtarr, gemaakt om op een iPhone als app te
-gebruiken. De app toont gewone kanaalvideo’s, geen Shorts. Video’s die al lokaal
-staan worden vanuit Youtarr afgespeeld. Tik je op een ontbrekende video, dan
-start Youtarr de download meteen.
+Youtarr Feed is a mobile-first web app for [Youtarr](https://github.com/DialmasterOrg/Youtarr).
+It is designed to feel good as an iPhone homescreen app: one chronological feed
+for your subscriptions, channel views, server-side watch progress, a Continue
+Watching tab, direct download actions, and local playback of downloaded videos.
 
-Je Youtarr-wachtwoord blijft alleen als serverinstelling in `.env`; het wordt
-niet naar de browser of iPhone gestuurd.
+The app talks to Youtarr from the server side. Your Youtarr password, session
+token, API key, and optional Plex token are never sent to the browser.
 
-## Koppelen
+## Features
 
-1. Kopieer `.env.example` naar een nieuw bestand met de naam `.env`.
-2. Vul daarin je Youtarr-gebruikersnaam en -wachtwoord in.
-3. Pas `YOUTARR_URL` alleen aan als Youtarr niet via poort 3087 op dezelfde
-   server bereikbaar is.
-4. Start de app met `docker compose up -d --build`.
-4. Open `http://ADRES-VAN-JE-SERVER:3090` op je iPhone.
-5. Kies in Safari voor **Deel → Zet op beginscherm**.
+- Chronological feed of Youtarr channel videos.
+- Separate channel view.
+- Filters for all, not downloaded, and downloaded videos.
+- Add channels from the app.
+- Start a Youtarr download by opening a missing video.
+- Delete a downloaded video through Youtarr.
+- Server-side watch progress stored in `/data/watch-progress.json`.
+- Continue Watching tab synced across browsers/devices.
+- Optional Plex library refresh after a download completes.
+- Optional direct local file streaming from the mounted Youtarr media folder.
+- iPhone/PWA manifest with portrait orientation.
 
-Zonder `.env` start de interface veilig in voorbeeldmodus.
+## How Playback Works
 
-## Wat je krijgt
+By default, playback falls back to Youtarr's own stream endpoint:
 
-- één chronologische feed van alle Youtarr-kanalen;
-- een apart overzicht per kanaal;
-- filters voor alles, nog ophalen en al gedownload;
-- direct downloaden zodra je een ontbrekende video opent;
-- lokaal afspelen zodra Youtarr klaar is;
-- server-side kijkvoortgang en een Verder kijken-overzicht;
-- een indeling die zich als iPhone-app laat installeren.
+```text
+browser -> youtarr-feed -> Youtarr -> video file
+```
 
-## Unraid
+For smoother 4K playback and AirPlay, it is recommended to mount the same
+Youtarr output folder into this container as read-only:
 
-De repository bevat een Unraid-template in `unraid/youtarr-feed.xml`. Daarin
-kun je het Youtarr-adres, je inloggegevens, een optionele API-key en optionele
-Plex-gegevens rechtstreeks in het Unraid-formulier invullen.
+```text
+browser -> youtarr-feed -> video file
+```
 
-De Plex-velden zijn alleen nodig wanneer deze app na een afgeronde download
-zelf een Plex-bibliotheekscan moet starten. Als Youtarr dat al doet, laat je ze
-leeg.
+When `YOUTARR_MEDIA_DIR` is configured, Youtarr Feed first searches that folder
+for a video file whose filename contains the YouTube video ID. If it finds one,
+it streams the file directly with HTTP Range support. If it does not find one,
+it falls back to Youtarr.
 
-GitHub Actions bouwt bij elke wijziging op `main` automatisch
-`ghcr.io/nelisvanwijk/youtarr-feed:latest`.
+Direct local streaming does not change delete behavior. Deletes still go
+through Youtarr, so Youtarr remains the owner of the library.
 
-Na publicatie kun je de ruwe URL van `unraid/youtarr-feed.xml` in Unraid
-gebruiken of de template indienen bij Community Applications.
+## Recommended Youtarr Mount Layout
 
-## Belangrijk
+Use the same container path in both containers. For example:
 
-Zet de app voor gebruik buitenshuis achter HTTPS, bijvoorbeeld via je bestaande
-reverse proxy of een privéverbinding zoals Tailscale. Publiceer de app en
-Youtarr niet rechtstreeks via onbeveiligde HTTP-poorten.
+```text
+Youtarr:
+  /mnt/user/Media/Youtarr -> /usr/src/app/data
+
+Youtarr Feed:
+  /mnt/user/Media/Youtarr -> /usr/src/app/data:ro
+```
+
+Then set:
+
+```env
+YOUTARR_MEDIA_DIR=/usr/src/app/data
+```
+
+This keeps paths simple and avoids having to translate between different
+container paths.
+
+## Unraid Installation
+
+The Unraid template is in:
+
+```text
+unraid/youtarr-feed.xml
+```
+
+Template URL:
+
+```text
+https://raw.githubusercontent.com/NelisVanWijk/youtarr-feed/main/unraid/youtarr-feed.xml
+```
+
+Typical Unraid settings:
+
+```text
+Repository:
+  ghcr.io/nelisvanwijk/youtarr-feed:latest
+
+WebUI Port:
+  3090
+
+Youtarr URL:
+  http://host.docker.internal:3087
+
+App Data:
+  /mnt/user/appdata/youtarr-feed -> /data
+
+Youtarr Media Path:
+  /mnt/user/Media/Youtarr -> /usr/src/app/data:ro
+
+Data Directory:
+  /data
+
+Media Directory:
+  /usr/src/app/data
+```
+
+The App Data path is important. Watch progress is stored there and survives
+container updates:
+
+```text
+/mnt/user/appdata/youtarr-feed/watch-progress.json
+```
+
+If watch progress disappears after updates, check that `/data` is mapped to a
+persistent host path.
+
+### Youtarr Permissions On Unraid
+
+For Youtarr itself, the upstream Unraid documentation recommends running as
+Unraid's `nobody:users` user by adding this to Youtarr's Extra Parameters:
+
+```bash
+--user 99:100
+```
+
+Then repair ownership/modes on the Youtarr output folder:
+
+```bash
+chown -R 99:100 /mnt/user/Media/Youtarr
+find /mnt/user/Media/Youtarr -type d -exec chmod 775 {} \;
+find /mnt/user/Media/Youtarr -type f -exec chmod 664 {} \;
+```
+
+Youtarr Feed only needs read access to the media folder.
+
+### Updating On Unraid
+
+The container image is published to GitHub Container Registry:
+
+```text
+ghcr.io/nelisvanwijk/youtarr-feed:latest
+```
+
+Update the container in Unraid when a new version is published. If PWA manifest
+changes such as orientation do not appear on iPhone, remove the homescreen app
+and add it again from Safari. iOS can cache manifests aggressively.
+
+## Docker Compose Installation
+
+Copy the example environment file:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```env
+YOUTARR_URL=http://host.docker.internal:3087
+YOUTARR_USERNAME=your-username
+YOUTARR_PASSWORD=your-password
+YOUTARR_FEED_DATA_DIR=/data
+YOUTARR_MEDIA_DIR=/usr/src/app/data
+```
+
+Edit `docker-compose.yml` so the media mount matches your host:
+
+```yaml
+services:
+  youtarr-feed:
+    image: ghcr.io/nelisvanwijk/youtarr-feed:latest
+    container_name: youtarr-feed
+    restart: unless-stopped
+    env_file:
+      - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "3090:3000"
+    volumes:
+      - ./data:/data
+      - /path/to/youtarr/output:/usr/src/app/data:ro
+```
+
+Start it:
+
+```bash
+docker compose up -d
+```
+
+Open:
+
+```text
+http://SERVER-IP:3090
+```
+
+On iPhone, open the site in Safari and use Share -> Add to Home Screen.
+
+## Docker Run Example
+
+```bash
+docker run -d \
+  --name youtarr-feed \
+  --restart unless-stopped \
+  --add-host=host.docker.internal:host-gateway \
+  -p 3090:3000 \
+  -e YOUTARR_URL=http://host.docker.internal:3087 \
+  -e YOUTARR_USERNAME=your-username \
+  -e YOUTARR_PASSWORD=your-password \
+  -e YOUTARR_FEED_DATA_DIR=/data \
+  -e YOUTARR_MEDIA_DIR=/usr/src/app/data \
+  -v ./data:/data \
+  -v /path/to/youtarr/output:/usr/src/app/data:ro \
+  ghcr.io/nelisvanwijk/youtarr-feed:latest
+```
+
+## Environment Variables
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `YOUTARR_URL` | Yes for live mode | URL reachable from the Youtarr Feed container. |
+| `YOUTARR_USERNAME` | Usually | Youtarr username. Not needed when using a session token or disabled auth. |
+| `YOUTARR_PASSWORD` | Usually | Youtarr password. Kept server-side only. |
+| `YOUTARR_SESSION_TOKEN` | Optional | Alternative to username/password. Sessions may expire. |
+| `YOUTARR_AUTH_DISABLED` | Optional | Set to `true` only if your Youtarr auth is intentionally disabled. |
+| `YOUTARR_API_KEY` | Optional | Optional Youtarr API key for download commands. |
+| `YOUTARR_FEED_DATA_DIR` | Recommended | Persistent app data directory. Defaults to `/data` in production. |
+| `YOUTARR_MEDIA_DIR` | Recommended | Read-only mount of the Youtarr output folder for direct streaming. |
+| `PLEX_URL` | Optional | Plex server URL for refresh requests. |
+| `PLEX_TOKEN` | Optional | Plex token. |
+| `PLEX_LIBRARY_ID` | Optional | Numeric Plex library section ID. |
+
+## iPhone, AirPlay, And Codecs
+
+Direct local streaming can reduce buffering because it removes the Youtarr
+stream proxy from the playback path. It does not fix codec compatibility.
+
+For Apple devices and AirPlay, the safest high-quality target is usually:
+
+```text
+MP4 container + HEVC/H.265 video + AAC audio
+```
+
+4K is possible on Apple TV with HEVC, but many YouTube 4K files are VP9 or AV1.
+Those may show black video, audio-only playback, or unstable AirPlay depending
+on the device, browser, and container.
+
+In Youtarr's yt-dlp custom arguments, Apple-friendly examples are:
+
+```bash
+-S "res,codec:hevc:h264,acodec:aac" --merge-output-format mp4
+```
+
+Stricter compatibility, often lower than 4K:
+
+```bash
+-S vcodec:h264,acodec:aac --merge-output-format mp4
+```
+
+## Development
+
+Install dependencies:
+
+```bash
+pnpm install
+```
+
+Run locally:
+
+```bash
+pnpm dev
+```
+
+Checks:
+
+```bash
+pnpm lint
+pnpm test
+```
+
+Without Youtarr configuration the app starts in demo mode.
+
+## Security
+
+Do not expose Youtarr or Youtarr Feed directly to the internet over plain HTTP.
+Use HTTPS through a reverse proxy or private access such as Tailscale/WireGuard.
+
+Mount the Youtarr media folder read-only in Youtarr Feed. Let Youtarr handle
+downloads and deletes.

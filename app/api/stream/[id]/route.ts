@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getLocalMediaResponse } from "../../../../lib/local-media";
 import { getStream, isYoutarrConfigured } from "../../../../lib/youtarr";
 
 export const dynamic = "force-dynamic";
@@ -11,15 +12,20 @@ export async function GET(
   if (!/^[A-Za-z0-9_-]{11}$/.test(id)) {
     return NextResponse.json({ error: "Ongeldige video" }, { status: 400 });
   }
-  if (!isYoutarrConfigured()) {
-    return NextResponse.json(
-      { error: "Afspelen is niet beschikbaar in de voorbeeldmodus" },
-      { status: 404 }
-    );
-  }
+  const range = request.headers.get("range");
 
   try {
-    const upstream = await getStream(id, request.headers.get("range"));
+    const localResponse = await getLocalMediaResponse(id, range);
+    if (localResponse) return localResponse;
+
+    if (!isYoutarrConfigured()) {
+      return NextResponse.json(
+        { error: "Afspelen is niet beschikbaar in de voorbeeldmodus" },
+        { status: 404 }
+      );
+    }
+
+    const upstream = await getStream(id, range);
     const headers = new Headers();
     [
       "content-type",

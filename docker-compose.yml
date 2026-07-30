@@ -1,6 +1,6 @@
 services:
   youtarr-feed:
-    build: .
+    image: ghcr.io/nelisvanwijk/youtarr-feed:latest
     container_name: youtarr-feed
     restart: unless-stopped
     env_file:
@@ -11,3 +11,6 @@ services:
       - "3090:3000"
     volumes:
       - ./data:/data
+      # Gebruik hier dezelfde hostmap als Youtarr, read-only.
+      # Pas de hostpath aan voor jouw server.
+      - /mnt/user/Media/Youtarr:/usr/src/app/data:ro
