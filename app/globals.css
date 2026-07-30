@@ -588,8 +588,22 @@ main {
   left: 8px;
 }
 
-.local-badge {
+.local-badge,
+.local-badge-checking {
   background: rgba(17, 105, 66, 0.9);
+}
+
+.local-badge-direct {
+  background: rgba(17, 105, 66, 0.92);
+}
+
+.local-badge-youtarr {
+  background: rgba(139, 101, 28, 0.92);
+}
+
+.local-badge-checking {
+  background: rgba(20, 20, 22, 0.82);
+  color: #dddcd8;
 }
 
 .cloud-badge {

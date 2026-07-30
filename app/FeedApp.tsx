@@ -157,12 +157,20 @@ function Thumbnail({
   video,
   index,
   progress,
+  streamSource,
 }: {
   video: FeedVideo;
   index: number;
   progress?: number;
+  streamSource?: StreamSourceInfo | null;
 }) {
   const [failed, setFailed] = useState(false);
+  const localLabel =
+    streamSource?.source === "local"
+      ? "Direct"
+      : streamSource?.source === "youtarr"
+        ? "Youtarr"
+        : "Lokaal...";
   return (
     <div className={`thumbnail thumbnail-${palette[index % palette.length]}`}>
       {video.thumbnail && !failed ? (
@@ -183,7 +191,17 @@ function Thumbnail({
       )}
       <span className="duration">{formatDuration(video.duration)}</span>
       {video.downloaded ? (
-        <span className="local-badge">Lokaal</span>
+        <span
+          className={`local-badge ${
+            streamSource?.source === "local"
+              ? "local-badge-direct"
+              : streamSource?.source === "youtarr"
+                ? "local-badge-youtarr"
+                : "local-badge-checking"
+          }`}
+        >
+          {localLabel}
+        </span>
       ) : (
         <span className="cloud-badge">Nog ophalen</span>
       )}
@@ -201,6 +219,7 @@ function VideoCard({
   video,
   index,
   progress,
+  streamSource,
   onOpen,
   onChannel,
   onDelete,
@@ -208,6 +227,7 @@ function VideoCard({
   video: FeedVideo;
   index: number;
   progress?: number;
+  streamSource?: StreamSourceInfo | null;
   onOpen: (video: FeedVideo) => void;
   onChannel: (channelId: string) => void;
   onDelete: (video: FeedVideo) => void;
@@ -225,7 +245,12 @@ function VideoCard({
         onClick={() => onOpen(video)}
         aria-label={`${video.title} openen`}
       >
-        <Thumbnail video={video} index={index} progress={progress} />
+        <Thumbnail
+          video={video}
+          index={index}
+          progress={progress}
+          streamSource={streamSource}
+        />
       </button>
       <div className="video-details">
         <button
@@ -333,6 +358,7 @@ export default function FeedApp() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [standaloneMode, setStandaloneMode] = useState(false);
   const [streamSource, setStreamSource] = useState<StreamSourceInfo | null>(null);
+  const [streamSources, setStreamSources] = useState<Record<string, StreamSourceInfo>>({});
   const progressSaveRef = useRef<Record<string, number>>({});
   const playerRef = useRef<HTMLVideoElement | null>(null);
   const intendedPlaybackRef = useRef(false);
@@ -584,6 +610,45 @@ export default function FeedApp() {
           (watchProgress[a.id]?.updatedAt || 0)
       );
   }, [feed?.videos, query, watchProgress]);
+
+  useEffect(() => {
+    if (mode !== "live") return;
+    const candidates = (view === "continue" ? continueVideos : visibleVideos)
+      .filter((video) => video.downloaded && !streamSources[video.id])
+      .slice(0, 80);
+    if (candidates.length === 0) return;
+
+    let stopped = false;
+    async function loadCardSources() {
+      const entries = await Promise.all(
+        candidates.map(async (video) => {
+          try {
+            const response = await fetch(
+              `/api/stream/${encodeURIComponent(video.id)}/source`,
+              { cache: "no-store" }
+            );
+            if (!response.ok) return null;
+            return [video.id, (await response.json()) as StreamSourceInfo] as const;
+          } catch {
+            return null;
+          }
+        })
+      );
+      if (stopped) return;
+      setStreamSources((current) => {
+        const next = { ...current };
+        entries.forEach((entry) => {
+          if (entry) next[entry[0]] = entry[1];
+        });
+        return next;
+      });
+    }
+
+    void loadCardSources();
+    return () => {
+      stopped = true;
+    };
+  }, [continueVideos, mode, streamSources, view, visibleVideos]);
 
   async function openChannel(channelId: string) {
     const channel = feed?.channels.find((item) => item.id === channelId);
@@ -995,6 +1060,7 @@ export default function FeedApp() {
                     video={video}
                     index={index}
                     progress={progressPercent(video.id)}
+                    streamSource={streamSources[video.id]}
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
@@ -1030,6 +1096,7 @@ export default function FeedApp() {
                     video={video}
                     index={index}
                     progress={progressPercent(video.id)}
+                    streamSource={streamSources[video.id]}
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
@@ -1149,6 +1216,7 @@ export default function FeedApp() {
                     video={video}
                     index={index}
                     progress={progressPercent(video.id)}
+                    streamSource={streamSources[video.id]}
                     onOpen={openVideo}
                     onChannel={() => undefined}
                     onDelete={(item) => void removeDownload(item)}

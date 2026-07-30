@@ -48,6 +48,9 @@ The player shows the active source for downloaded videos:
 - `Via Youtarr`: local file was not found, so playback uses Youtarr's stream
   endpoint.
 
+Video thumbnails also show a compact `Direct` or `Youtarr` badge for downloaded
+items, so you can see the expected playback path before opening the video.
+
 Direct local streaming does not change delete behavior. Deletes still go
 through Youtarr, so Youtarr remains the owner of the library.
 
