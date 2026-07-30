@@ -53,16 +53,22 @@ type YoutarrActivitySnapshot = {
   } | null;
   lastFinalActivity?: YoutarrActivitySnapshot["activity"];
 };
+type OrderedFeedVideo = FeedVideo & {
+  sourceOrder: number;
+};
 
 const configuredUrl = process.env.YOUTARR_URL?.trim().replace(/\/+$/, "") || "";
 const configuredSession = process.env.YOUTARR_SESSION_TOKEN?.trim() || "";
 const configuredUser = process.env.YOUTARR_USERNAME?.trim() || "";
 const configuredPassword = process.env.YOUTARR_PASSWORD || "";
 const configuredApiKey = process.env.YOUTARR_API_KEY?.trim() || "";
+const configuredYouTubeApiKey = process.env.YOUTUBE_API_KEY?.trim() || "";
 const authDisabled = process.env.YOUTARR_AUTH_DISABLED === "true";
 
 let cachedToken = configuredSession;
 let tokenExpiresAt = configuredSession ? Number.POSITIVE_INFINITY : 0;
+let youtubeApiBackoffUntil = 0;
+const youtubePublishedAtCache = new Map<string, string | null>();
 
 export function isYoutarrConfigured() {
   return Boolean(
@@ -187,6 +193,95 @@ function toVideo(video: YoutarrVideo, channel: Channel): FeedVideo | null {
   };
 }
 
+function toOrderedVideo(
+  video: YoutarrVideo,
+  channel: Channel,
+  sourceOrder: number
+): OrderedFeedVideo | null {
+  const mapped = toVideo(video, channel);
+  return mapped ? { ...mapped, sourceOrder } : null;
+}
+
+function publishedSortTime(value: string | null) {
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sortByPublishedDateThenSourceOrder(
+  left: OrderedFeedVideo,
+  right: OrderedFeedVideo
+) {
+  const timeDifference =
+    publishedSortTime(right.publishedAt) - publishedSortTime(left.publishedAt);
+  if (timeDifference !== 0) return timeDifference;
+  return left.sourceOrder - right.sourceOrder;
+}
+
+function stripSourceOrder(video: OrderedFeedVideo): FeedVideo {
+  const feedVideo: Partial<OrderedFeedVideo> = { ...video };
+  delete feedVideo.sourceOrder;
+  return feedVideo as FeedVideo;
+}
+
+function needsPublishedAtEnrichment(video: FeedVideo) {
+  return !video.publishedAt || /^\d{4}-\d{2}-\d{2}$/.test(video.publishedAt);
+}
+
+async function enrichPublishedTimes(videos: OrderedFeedVideo[]) {
+  if (!configuredYouTubeApiKey || Date.now() < youtubeApiBackoffUntil) return;
+
+  const ids = [
+    ...new Set(
+      videos
+        .filter(needsPublishedAtEnrichment)
+        .map((video) => video.id)
+        .filter((id) => /^[A-Za-z0-9_-]{11}$/.test(id))
+    ),
+  ].filter((id) => !youtubePublishedAtCache.has(id));
+
+  for (let index = 0; index < ids.length; index += 50) {
+    const batch = ids.slice(index, index + 50);
+    const url = new URL("https://www.googleapis.com/youtube/v3/videos");
+    url.searchParams.set("part", "snippet");
+    url.searchParams.set("id", batch.join(","));
+    url.searchParams.set("key", configuredYouTubeApiKey);
+
+    try {
+      const response = await fetch(url, { cache: "no-store" });
+      if (!response.ok) {
+        youtubeApiBackoffUntil = Date.now() + 5 * 60 * 1000;
+        break;
+      }
+
+      const data = (await response.json()) as {
+        items?: Array<{ id?: string; snippet?: { publishedAt?: string } }>;
+      };
+      const found = new Set<string>();
+      for (const item of data.items || []) {
+        if (item.id) {
+          youtubePublishedAtCache.set(
+            item.id,
+            item.snippet?.publishedAt || null
+          );
+          found.add(item.id);
+        }
+      }
+      for (const id of batch) {
+        if (!found.has(id)) youtubePublishedAtCache.set(id, null);
+      }
+    } catch {
+      youtubeApiBackoffUntil = Date.now() + 5 * 60 * 1000;
+      break;
+    }
+  }
+
+  for (const video of videos) {
+    const publishedAt = youtubePublishedAtCache.get(video.id);
+    if (publishedAt) video.publishedAt = publishedAt;
+  }
+}
+
 export async function getChannels(): Promise<Channel[]> {
   const first = await getJson<{
     channels?: YoutarrChannel[];
@@ -219,25 +314,34 @@ async function fetchChannelVideos(
     query("only", Math.max(pageSize, 100))
   );
 
-  const merged = new Map<string, FeedVideo>();
+  const merged = new Map<string, OrderedFeedVideo>();
   [...(data.videos || []), ...(downloadedData.videos || [])]
-    .map((video) => toVideo(video, channel))
-    .filter((video): video is FeedVideo => video !== null)
+    .map((video, index) => toOrderedVideo(video, channel, index))
+    .filter((video): video is OrderedFeedVideo => video !== null)
     .forEach((video) => {
       const current = merged.get(video.id);
-      merged.set(video.id, current ? { ...current, ...video } : video);
+      merged.set(
+        video.id,
+        current
+          ? { ...current, ...video, sourceOrder: current.sourceOrder }
+          : video
+      );
     });
 
-  return [...merged.values()];
+  return [...merged.values()].map(stripSourceOrder);
 }
 
-async function fetchDownloadedChannelVideos(channel: Channel): Promise<FeedVideo[]> {
+async function fetchDownloadedChannelVideos(
+  channel: Channel
+): Promise<OrderedFeedVideo[]> {
   const data = await getJson<{ videos?: YoutarrVideo[] }>(
     `/getchannelvideos/${encodeURIComponent(channel.id)}?page=1&pageSize=300&tabType=videos&sortBy=date&sortOrder=desc&downloadedFilter=only`
   );
   return (data.videos || [])
-    .map((video) => toVideo(video, channel))
-    .filter((video): video is FeedVideo => video !== null && video.downloaded);
+    .map((video, index) => toOrderedVideo(video, channel, index))
+    .filter(
+      (video): video is OrderedFeedVideo => video !== null && video.downloaded
+    );
 }
 
 export async function getFeed(): Promise<{
@@ -246,7 +350,7 @@ export async function getFeed(): Promise<{
   warnings: string[];
 }> {
   const channels = await getChannels();
-  const videos: FeedVideo[] = [];
+  const videos: OrderedFeedVideo[] = [];
   const warnings: string[] = [];
   const batchSize = 4;
 
@@ -257,20 +361,26 @@ export async function getFeed(): Promise<{
     );
     results.forEach((result, resultIndex) => {
       if (result.status === "fulfilled") {
-        videos.push(...result.value);
+        videos.push(
+          ...result.value.map((video, videoIndex) => ({
+            ...video,
+            sourceOrder: (index + resultIndex) * 10_000 + videoIndex,
+          }))
+        );
       } else {
         warnings.push(`${batch[resultIndex].name} kon niet worden bijgewerkt`);
       }
     });
   }
 
-  videos.sort((a, b) => {
-    const aTime = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
-    const bTime = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
-    return bTime - aTime;
-  });
+  await enrichPublishedTimes(videos);
+  videos.sort(sortByPublishedDateThenSourceOrder);
 
-  return { channels, videos: videos.slice(0, 160), warnings };
+  return {
+    channels,
+    videos: videos.slice(0, 160).map(stripSourceOrder),
+    warnings,
+  };
 }
 
 export async function getVideosForChannel(channelId: string, page = 1) {
@@ -287,7 +397,7 @@ export async function getDownloadedVideos(): Promise<{
   warnings: string[];
 }> {
   const channels = await getChannels();
-  const videos: FeedVideo[] = [];
+  const videos: OrderedFeedVideo[] = [];
   const warnings: string[] = [];
   const batchSize = 4;
 
@@ -298,20 +408,22 @@ export async function getDownloadedVideos(): Promise<{
     );
     results.forEach((result, resultIndex) => {
       if (result.status === "fulfilled") {
-        videos.push(...result.value);
+        videos.push(
+          ...result.value.map((video, videoIndex) => ({
+            ...video,
+            sourceOrder: (index + resultIndex) * 10_000 + videoIndex,
+          }))
+        );
       } else {
         warnings.push(`${batch[resultIndex].name} kon lokale video's niet laden`);
       }
     });
   }
 
-  videos.sort((a, b) => {
-    const aTime = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
-    const bTime = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
-    return bTime - aTime;
-  });
+  await enrichPublishedTimes(videos);
+  videos.sort(sortByPublishedDateThenSourceOrder);
 
-  return { channels, videos, warnings };
+  return { channels, videos: videos.map(stripSourceOrder), warnings };
 }
 
 export async function queueDownload(

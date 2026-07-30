@@ -23,6 +23,8 @@ token, API key, and optional Plex token are never sent to the browser.
 - Local downloads tab with all videos Youtarr currently marks as downloaded.
 - Optional Plex library refresh after a download completes.
 - Optional direct local file streaming from the mounted Youtarr media folder.
+- Stable feed sorting when Youtarr returns date-only publish values.
+- Optional YouTube Data API fallback for exact publish timestamps.
 - iPhone/PWA manifest with portrait orientation.
 
 ## How Playback Works
@@ -60,6 +62,23 @@ through Youtarr, so Youtarr remains the owner of the library.
 The Local tab uses Youtarr's downloaded-video state as its source of truth. It
 shows all videos Youtarr reports as downloaded and lets you play or delete them
 from one overview.
+
+## Feed Ordering
+
+Youtarr Feed sorts by the `publishedAt` value it receives from Youtarr. If
+Youtarr returns a full timestamp, that timestamp is used directly. If Youtarr
+only returns a date such as `2026-07-30`, videos from the same date keep a
+stable Youtarr source order so the feed does not reshuffle on refresh.
+
+For the most accurate chronological feed, add a YouTube Data API key in
+Youtarr's own Configuration page under Integrations. Youtarr uses its
+`youtubeApiKey` setting for channel and video metadata.
+
+As a fallback, this app can also use `YOUTUBE_API_KEY`. When set, Youtarr Feed
+enriches date-only or missing publish values server-side through the official
+YouTube `videos.list` endpoint and then sorts using the returned
+`snippet.publishedAt` timestamp. Requests are batched in groups of up to 50
+video IDs; `videos.list` costs 1 quota unit per call.
 
 ## Recommended Youtarr Mount Layout
 
@@ -273,6 +292,7 @@ docker run -d \
 | `YOUTARR_SESSION_TOKEN` | Optional | Alternative to username/password. Sessions may expire. |
 | `YOUTARR_AUTH_DISABLED` | Optional | Set to `true` only if your Youtarr auth is intentionally disabled. |
 | `YOUTARR_API_KEY` | Optional | Optional Youtarr API key for download commands. |
+| `YOUTUBE_API_KEY` | Optional | Fallback YouTube Data API key for enriching date-only publish values with exact timestamps. Prefer setting the key in Youtarr first. |
 | `YOUTARR_FEED_DATA_DIR` | Recommended | Persistent app data directory. Defaults to `/data` in production. |
 | `YOUTARR_MEDIA_DIR` | Recommended | Read-only mount of the Youtarr output folder for direct streaming. |
 | `PLEX_URL` | Optional | Plex server URL for refresh requests. |
