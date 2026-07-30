@@ -314,37 +314,56 @@ export async function getDownloadedVideos(): Promise<{
   return { channels, videos, warnings };
 }
 
-export async function queueDownload(youtubeId: string) {
+export async function queueDownload(
+  youtubeId: string,
+  options: { allowRedownload?: boolean; channelId?: string } = {}
+) {
   if (!/^[A-Za-z0-9_-]{11}$/.test(youtubeId)) {
     throw new Error("Ongeldig video-ID");
   }
+  const url = `https://www.youtube.com/watch?v=${youtubeId}`;
+  const body =
+    options.allowRedownload
+      ? {
+          urls: [url],
+          overrideSettings: { allowRedownload: true },
+          ...(options.channelId && /^UC[A-Za-z0-9_-]{22}$/.test(options.channelId)
+            ? { videoChannelMap: { [youtubeId]: options.channelId } }
+            : {}),
+        }
+      : {
+          url,
+        };
   const headers = new Headers({ "Content-Type": "application/json" });
   let response: Response;
-  if (configuredApiKey) {
+  if (options.allowRedownload) {
+    response = await requestYoutarr("/triggerspecificdownloads", {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    });
+  } else if (configuredApiKey) {
     headers.set("x-api-key", configuredApiKey);
     response = await fetch(`${configuredUrl}/api/videos/download`, {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        url: `https://www.youtube.com/watch?v=${youtubeId}`,
-      }),
+      body: JSON.stringify(body),
       cache: "no-store",
     });
   } else {
     response = await requestYoutarr("/api/videos/download", {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        url: `https://www.youtube.com/watch?v=${youtubeId}`,
-      }),
+      body: JSON.stringify(body),
     });
   }
   const data = (await response.json().catch(() => ({}))) as {
     success?: boolean;
+    status?: string;
     error?: string;
     message?: string;
   };
-  if (!response.ok || data.success === false) {
+  if (!response.ok || data.success === false || data.status === "error") {
     throw new Error(data.error || `Download starten mislukte (${response.status})`);
   }
   return data;

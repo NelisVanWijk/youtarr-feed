@@ -217,7 +217,9 @@ function Thumbnail({
               ? "Bezig"
               : downloadJob?.state === "error"
                 ? "Mislukt"
-                : "Nog ophalen"}
+                : video.missing
+                  ? "Opnieuw ophalen"
+                  : "Nog ophalen"}
         </span>
       )}
       {!video.downloaded &&
@@ -315,7 +317,9 @@ function VideoCard({
                     ? "Opnieuw proberen"
                     : downloadJob
                       ? "Download loopt"
-                      : "Ophalen"}
+                      : video.missing
+                        ? "Opnieuw ophalen"
+                        : "Ophalen"}
               </button>
               {video.downloaded && (
                 <button
@@ -879,7 +883,11 @@ export default function FeedApp() {
       const response = await fetch("/api/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: video.id }),
+        body: JSON.stringify({
+          id: video.id,
+          missing: video.missing,
+          channelId: video.channelId,
+        }),
       });
       const data = (await response.json()) as {
         error?: string;
@@ -1588,13 +1596,7 @@ export default function FeedApp() {
               </div>
             ) : (
               <div className="download-panel">
-                <div
-                  className={`download-orbit ${
-                    false
-                      ? "active"
-                      : ""
-                  }`}
-                >
+                <div className="download-orbit">
                   <span>↓</span>
                 </div>
                 <span className="eyebrow">Nog niet lokaal</span>
@@ -1604,14 +1606,6 @@ export default function FeedApp() {
                 <p>
                   Sluit dit scherm en start de download opnieuw vanaf de thumbnail.
                 </p>
-                {false && (
-                  <button
-                    className="primary-button"
-                    onClick={() => void startDownload(selectedVideo)}
-                  >
-                    Opnieuw proberen
-                  </button>
-                )}
               </div>
             )}
             <div className="modal-copy">

@@ -16,6 +16,7 @@ token, API key, and optional Plex token are never sent to the browser.
 - Filters for all, not downloaded, and downloaded videos.
 - Add channels from the app.
 - Start a Youtarr download by opening a missing video.
+- Re-download videos Youtarr marks as missing after their files were removed.
 - Delete a downloaded video through Youtarr.
 - Server-side watch progress stored in `/data/watch-progress.json`.
 - Continue Watching tab synced across browsers/devices.

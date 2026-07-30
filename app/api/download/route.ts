@@ -4,7 +4,11 @@ import { isYoutarrConfigured, queueDownload } from "../../../lib/youtarr";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as { id?: string };
+  const body = (await request.json().catch(() => ({}))) as {
+    id?: string;
+    missing?: boolean;
+    channelId?: string;
+  };
   if (!body.id || !/^[A-Za-z0-9_-]{11}$/.test(body.id)) {
     return NextResponse.json({ error: "Ongeldige video" }, { status: 400 });
   }
@@ -18,7 +22,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await queueDownload(body.id);
+    const result = await queueDownload(body.id, {
+      allowRedownload: body.missing === true,
+      channelId: body.channelId,
+    });
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return NextResponse.json(
