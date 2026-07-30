@@ -209,12 +209,26 @@ async function fetchChannelVideos(
   page = 1,
   pageSize = 16
 ): Promise<FeedVideo[]> {
+  const query = (downloadedFilter: "off" | "only", requestedPageSize: number) =>
+    `/getchannelvideos/${encodeURIComponent(channel.id)}?page=${page}&pageSize=${requestedPageSize}&tabType=videos&sortBy=date&sortOrder=desc&downloadedFilter=${downloadedFilter}`;
+
   const data = await getJson<{ videos?: YoutarrVideo[] }>(
-    `/getchannelvideos/${encodeURIComponent(channel.id)}?page=${page}&pageSize=${pageSize}&tabType=videos&sortBy=date&sortOrder=desc&downloadedFilter=off`
+    query("off", pageSize)
   );
-  return (data.videos || [])
+  const downloadedData = await getJson<{ videos?: YoutarrVideo[] }>(
+    query("only", Math.max(pageSize, 100))
+  );
+
+  const merged = new Map<string, FeedVideo>();
+  [...(data.videos || []), ...(downloadedData.videos || [])]
     .map((video) => toVideo(video, channel))
-    .filter((video): video is FeedVideo => video !== null);
+    .filter((video): video is FeedVideo => video !== null)
+    .forEach((video) => {
+      const current = merged.get(video.id);
+      merged.set(video.id, current ? { ...current, ...video } : video);
+    });
+
+  return [...merged.values()];
 }
 
 export async function getFeed(): Promise<{
