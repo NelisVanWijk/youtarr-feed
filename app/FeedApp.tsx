@@ -416,6 +416,7 @@ export default function FeedApp() {
   const [localLoading, setLocalLoading] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<FeedVideo | null>(null);
   const [playerMode, setPlayerMode] = useState<PlayerMode>("full");
+  const [playerPlaying, setPlayerPlaying] = useState(false);
   const [downloadJobs, setDownloadJobs] = useState<Record<string, DownloadJob>>({});
   const [deleteState, setDeleteState] = useState<"idle" | "deleting" | "error">(
     "idle"
@@ -858,6 +859,7 @@ export default function FeedApp() {
     }
     setSelectedVideo(video);
     setPlayerMode("full");
+    setPlayerPlaying(false);
     setDeleteState("idle");
     setDeleteError("");
   }
@@ -867,7 +869,25 @@ export default function FeedApp() {
       setPlayerMode("mini");
       return;
     }
+    playerRef.current?.pause();
+    intendedPlaybackRef.current = false;
+    setPlayerPlaying(false);
     setSelectedVideo(null);
+  }
+
+  function toggleMiniPlayback() {
+    const player = playerRef.current;
+    if (!player) return;
+    if (player.paused || player.ended) {
+      intendedPlaybackRef.current = true;
+      void player.play().catch(() => {
+        intendedPlaybackRef.current = false;
+        setPlayerPlaying(false);
+      });
+      return;
+    }
+    intendedPlaybackRef.current = false;
+    player.pause();
   }
 
   async function requestNativeFullscreen(player: HTMLVideoElement) {
@@ -1498,6 +1518,14 @@ export default function FeedApp() {
         </button>
       </nav>
 
+      <div className="orientation-guard" role="status" aria-live="polite">
+        <div>
+          <span className="orientation-mark" aria-hidden="true" />
+          <strong>Draai je iPhone terug</strong>
+          <p>Youtarr Feed is vastgezet voor staand gebruik.</p>
+        </div>
+      </div>
+
       {selectedVideo && (
         <div
           className={
@@ -1552,75 +1580,106 @@ export default function FeedApp() {
                 </button>
               )}
             {selectedVideo.downloaded && mode === "live" ? (
-              <video
-                ref={playerRef}
-                className="player"
-                controls={playerMode === "full"}
-                autoPlay
-                playsInline
-                disableRemotePlayback={false}
-                preload="metadata"
-                poster={selectedVideo.thumbnail || undefined}
-                src={`/api/stream/${encodeURIComponent(selectedVideo.id)}`}
-                onLoadedMetadata={(event) => {
-                  event.currentTarget.setAttribute("x-webkit-airplay", "allow");
-                  event.currentTarget.setAttribute("webkit-playsinline", "true");
-                  updateMediaSession(selectedVideo);
-                  updateMediaSessionControls(event.currentTarget);
-                  resumePlayback(selectedVideo.id, event.currentTarget);
-                  if (playerMode === "full") {
-                    void requestNativeFullscreen(event.currentTarget);
+              <>
+                <video
+                  ref={playerRef}
+                  className="player"
+                  controls={playerMode === "full"}
+                  autoPlay
+                  playsInline
+                  disableRemotePlayback={false}
+                  preload="metadata"
+                  poster={selectedVideo.thumbnail || undefined}
+                  src={`/api/stream/${encodeURIComponent(selectedVideo.id)}`}
+                  onLoadedMetadata={(event) => {
+                    event.currentTarget.setAttribute("x-webkit-airplay", "allow");
+                    event.currentTarget.setAttribute("webkit-playsinline", "true");
+                    updateMediaSession(selectedVideo);
+                    updateMediaSessionControls(event.currentTarget);
+                    resumePlayback(selectedVideo.id, event.currentTarget);
+                    if (playerMode === "full") {
+                      void requestNativeFullscreen(event.currentTarget);
+                    }
+                  }}
+                  onPlay={(event) => {
+                    if (pauseIntentTimerRef.current) {
+                      window.clearTimeout(pauseIntentTimerRef.current);
+                      pauseIntentTimerRef.current = null;
+                    }
+                    intendedPlaybackRef.current = true;
+                    setPlayerPlaying(true);
+                    updateMediaSession(selectedVideo);
+                    updateMediaSessionControls(event.currentTarget);
+                    if ("mediaSession" in navigator) {
+                      navigator.mediaSession.playbackState = "playing";
+                    }
+                    if (playerMode === "full") {
+                      void requestNativeFullscreen(event.currentTarget);
+                    }
+                  }}
+                  onTimeUpdate={(event) =>
+                    storeWatchProgress(
+                      selectedVideo.id,
+                      event.currentTarget.currentTime,
+                      event.currentTarget.duration
+                    )
                   }
-                }}
-                onPlay={(event) => {
-                  if (pauseIntentTimerRef.current) {
-                    window.clearTimeout(pauseIntentTimerRef.current);
-                    pauseIntentTimerRef.current = null;
-                  }
-                  intendedPlaybackRef.current = true;
-                  updateMediaSession(selectedVideo);
-                  updateMediaSessionControls(event.currentTarget);
-                  if ("mediaSession" in navigator) {
-                    navigator.mediaSession.playbackState = "playing";
-                  }
-                  if (playerMode === "full") {
-                    void requestNativeFullscreen(event.currentTarget);
-                  }
-                }}
-                onTimeUpdate={(event) =>
-                  storeWatchProgress(
-                    selectedVideo.id,
-                    event.currentTarget.currentTime,
-                    event.currentTarget.duration
-                  )
-                }
-                onPause={(event) => {
-                  if (pauseIntentTimerRef.current) {
-                    window.clearTimeout(pauseIntentTimerRef.current);
-                  }
-                  pauseIntentTimerRef.current = window.setTimeout(() => {
+                  onPause={(event) => {
+                    if (pauseIntentTimerRef.current) {
+                      window.clearTimeout(pauseIntentTimerRef.current);
+                    }
+                    pauseIntentTimerRef.current = window.setTimeout(() => {
+                      intendedPlaybackRef.current = false;
+                      pauseIntentTimerRef.current = null;
+                    }, 350);
+                    setPlayerPlaying(false);
+                    if ("mediaSession" in navigator) {
+                      navigator.mediaSession.playbackState = "paused";
+                    }
+                    storeWatchProgress(
+                      selectedVideo.id,
+                      event.currentTarget.currentTime,
+                      event.currentTarget.duration,
+                      true
+                    );
+                  }}
+                  onEnded={(event) => {
                     intendedPlaybackRef.current = false;
-                    pauseIntentTimerRef.current = null;
-                  }, 350);
-                  if ("mediaSession" in navigator) {
-                    navigator.mediaSession.playbackState = "paused";
-                  }
-                  storeWatchProgress(
-                    selectedVideo.id,
-                    event.currentTarget.currentTime,
-                    event.currentTarget.duration,
-                    true
-                  );
-                }}
-                onEnded={(event) =>
-                  storeWatchProgress(
-                    selectedVideo.id,
-                    event.currentTarget.duration,
-                    event.currentTarget.duration,
-                    true
-                  )
-                }
-              />
+                    setPlayerPlaying(false);
+                    storeWatchProgress(
+                      selectedVideo.id,
+                      event.currentTarget.duration,
+                      event.currentTarget.duration,
+                      true
+                    );
+                  }}
+                />
+                {playerMode === "mini" && (
+                  <div
+                    className="mini-player-controls"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onMouseDown={(event) => event.stopPropagation()}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <button
+                      className="mini-play-button"
+                      onClick={toggleMiniPlayback}
+                      aria-label={playerPlaying ? "Pauzeren" : "Afspelen"}
+                    >
+                      {playerPlaying ? (
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M8 6v12" />
+                          <path d="M16 6v12" />
+                        </svg>
+                      ) : (
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="m9 6 9 6-9 6Z" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                )}
+              </>
             ) : selectedVideo.downloaded ? (
               <div className="demo-player">
                 <span className="demo-play">▶</span>

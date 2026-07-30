@@ -1152,6 +1152,7 @@ main {
 }
 
 .video-modal-mini {
+  position: relative;
   width: 100%;
   max-height: none;
   overflow: hidden;
@@ -1168,6 +1169,68 @@ main {
 
 .video-modal-mini .modal-pip {
   display: none;
+}
+
+.mini-player-controls {
+  position: absolute;
+  z-index: 3;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  gap: 8px;
+}
+
+.mini-play-button {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  background: rgba(12, 12, 13, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  color: #fff;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.36);
+}
+
+.mini-play-button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.mini-play-button svg path[d*="Z"] {
+  fill: currentColor;
+  stroke: none;
+}
+
+.orientation-guard {
+  display: none;
+}
+
+.orientation-mark {
+  position: relative;
+  width: 38px;
+  height: 54px;
+  display: block;
+  border: 2px solid currentColor;
+  border-radius: 10px;
+}
+
+.orientation-mark::after {
+  content: "";
+  position: absolute;
+  bottom: 5px;
+  left: 50%;
+  width: 4px;
+  height: 4px;
+  background: currentColor;
+  border-radius: 50%;
+  transform: translateX(-50%);
 }
 
 .demo-player,
@@ -1763,6 +1826,39 @@ main {
 
   .settings-modal {
     padding: 42px 24px calc(28px + var(--safe-bottom));
+  }
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+  .orientation-guard {
+    position: fixed;
+    z-index: 220;
+    inset: 0;
+    padding: calc(18px + var(--safe-top)) 24px calc(18px + var(--safe-bottom));
+    display: grid;
+    place-items: center;
+    background: #0c0c0d;
+    color: #fff;
+  }
+
+  .orientation-guard div {
+    display: grid;
+    justify-items: center;
+    gap: 11px;
+    text-align: center;
+  }
+
+  .orientation-guard strong {
+    font-size: 20px;
+    letter-spacing: 0;
+  }
+
+  .orientation-guard p {
+    max-width: 310px;
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.4;
   }
 }
 
