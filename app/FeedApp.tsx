@@ -320,8 +320,11 @@ export default function FeedApp() {
   >("idle");
   const [addChannelMessage, setAddChannelMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [standaloneMode, setStandaloneMode] = useState(false);
   const progressSaveRef = useRef<Record<string, number>>({});
   const playerRef = useRef<HTMLVideoElement | null>(null);
+  const intendedPlaybackRef = useRef(false);
+  const pauseIntentTimerRef = useRef<number | null>(null);
   const mode: AppMode = feed?.mode || "demo";
 
   const loadFeed = useCallback(async (quiet = false) => {
@@ -354,6 +357,21 @@ export default function FeedApp() {
     const timer = window.setTimeout(() => void loadFeed(), 0);
     return () => window.clearTimeout(timer);
   }, [loadFeed]);
+
+  useEffect(() => {
+    const standaloneQuery = window.matchMedia("(display-mode: standalone)");
+    const updateStandaloneMode = () => {
+      setStandaloneMode(
+        standaloneQuery.matches ||
+          Boolean((navigator as Navigator & { standalone?: boolean }).standalone)
+      );
+    };
+    updateStandaloneMode();
+    standaloneQuery.addEventListener("change", updateStandaloneMode);
+    return () => {
+      standaloneQuery.removeEventListener("change", updateStandaloneMode);
+    };
+  }, []);
 
   useEffect(() => {
     let stopped = false;
@@ -452,6 +470,19 @@ export default function FeedApp() {
     const minimizeAfterNativeFullscreen = () => {
       setPlayerMode("mini");
       updateMediaSession(selectedVideo);
+      if (intendedPlaybackRef.current) {
+        if (pauseIntentTimerRef.current) {
+          window.clearTimeout(pauseIntentTimerRef.current);
+          pauseIntentTimerRef.current = null;
+        }
+        window.setTimeout(() => {
+          if (intendedPlaybackRef.current && !player.ended) {
+            void player.play().catch(() => {
+              // iOS kan hervatten weigeren; dan blijft de mini-speler netjes gepauzeerd.
+            });
+          }
+        }, 120);
+      }
     };
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement) {
@@ -469,6 +500,14 @@ export default function FeedApp() {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
   }, [mode, selectedVideo]);
+
+  useEffect(() => {
+    intendedPlaybackRef.current = false;
+    if (pauseIntentTimerRef.current) {
+      window.clearTimeout(pauseIntentTimerRef.current);
+      pauseIntentTimerRef.current = null;
+    }
+  }, [selectedVideo?.id]);
 
   const visibleVideos = useMemo(() => {
     const source = selectedChannel ? channelVideos : feed?.videos || [];
@@ -1145,20 +1184,23 @@ export default function FeedApp() {
             >
               {playerMode === "mini" ? "x" : "-"}
             </button>
-            {playerMode === "full" && selectedVideo.downloaded && mode === "live" && (
-              <button
-                className="modal-pip"
-                onMouseDown={(event) => event.stopPropagation()}
-                onClick={() => {
-                  if (playerRef.current) {
-                    void requestManualPictureInPicture(playerRef.current);
-                  }
-                }}
-                aria-label="Picture-in-picture"
-              >
-                PiP
-              </button>
-            )}
+            {playerMode === "full" &&
+              standaloneMode &&
+              selectedVideo.downloaded &&
+              mode === "live" && (
+                <button
+                  className="modal-pip"
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={() => {
+                    if (playerRef.current) {
+                      void requestManualPictureInPicture(playerRef.current);
+                    }
+                  }}
+                  aria-label="Picture-in-picture"
+                >
+                  PiP
+                </button>
+              )}
             {selectedVideo.downloaded && mode === "live" ? (
               <video
                 ref={playerRef}
@@ -1168,6 +1210,7 @@ export default function FeedApp() {
                 playsInline
                 disableRemotePlayback={false}
                 preload="metadata"
+                poster={selectedVideo.thumbnail || undefined}
                 src={`/api/stream/${encodeURIComponent(selectedVideo.id)}`}
                 onLoadedMetadata={(event) => {
                   event.currentTarget.setAttribute("x-webkit-airplay", "allow");
@@ -1180,6 +1223,11 @@ export default function FeedApp() {
                   }
                 }}
                 onPlay={(event) => {
+                  if (pauseIntentTimerRef.current) {
+                    window.clearTimeout(pauseIntentTimerRef.current);
+                    pauseIntentTimerRef.current = null;
+                  }
+                  intendedPlaybackRef.current = true;
                   updateMediaSession(selectedVideo);
                   updateMediaSessionControls(event.currentTarget);
                   if ("mediaSession" in navigator) {
@@ -1197,6 +1245,13 @@ export default function FeedApp() {
                   )
                 }
                 onPause={(event) => {
+                  if (pauseIntentTimerRef.current) {
+                    window.clearTimeout(pauseIntentTimerRef.current);
+                  }
+                  pauseIntentTimerRef.current = window.setTimeout(() => {
+                    intendedPlaybackRef.current = false;
+                    pauseIntentTimerRef.current = null;
+                  }, 350);
                   if ("mediaSession" in navigator) {
                     navigator.mediaSession.playbackState = "paused";
                   }
