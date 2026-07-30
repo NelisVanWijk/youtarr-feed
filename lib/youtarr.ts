@@ -225,7 +225,11 @@ function stripSourceOrder(video: OrderedFeedVideo): FeedVideo {
 }
 
 function needsPublishedAtEnrichment(video: FeedVideo) {
-  return !video.publishedAt || /^\d{4}-\d{2}-\d{2}$/.test(video.publishedAt);
+  if (!video.publishedAt) return true;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(video.publishedAt)) return true;
+  return /^\d{4}-\d{2}-\d{2}T\d{2}:00:00(?:\.000)?Z$/.test(
+    video.publishedAt
+  );
 }
 
 async function enrichPublishedTimes(videos: OrderedFeedVideo[]) {

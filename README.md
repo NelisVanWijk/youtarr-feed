@@ -67,8 +67,10 @@ from one overview.
 
 Youtarr Feed sorts by the `publishedAt` value it receives from Youtarr. If
 Youtarr returns a full timestamp, that timestamp is used directly. If Youtarr
-only returns a date such as `2026-07-30`, videos from the same date keep a
-stable Youtarr source order so the feed does not reshuffle on refresh.
+only returns a date such as `2026-07-30`, or a date converted to a synthetic
+whole-hour timestamp such as `2026-07-30T02:00:00.000Z`, videos from the same
+date keep a stable Youtarr source order so the feed does not reshuffle on
+refresh.
 
 For the most accurate chronological feed, add a YouTube Data API key in
 Youtarr's own Configuration page under Integrations. Youtarr uses its
