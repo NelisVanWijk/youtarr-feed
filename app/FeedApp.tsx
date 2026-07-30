@@ -437,7 +437,6 @@ export default function FeedApp() {
   const playerRef = useRef<HTMLVideoElement | null>(null);
   const intendedPlaybackRef = useRef(false);
   const pauseIntentTimerRef = useRef<number | null>(null);
-  const resumeAfterMiniTimerRef = useRef<number[]>([]);
   const mode: AppMode = feed?.mode || "demo";
 
   const loadFeed = useCallback(async (quiet = false) => {
@@ -621,7 +620,13 @@ export default function FeedApp() {
           window.clearTimeout(pauseIntentTimerRef.current);
           pauseIntentTimerRef.current = null;
         }
-        resumeMiniPlayback(player);
+        window.setTimeout(() => {
+          if (intendedPlaybackRef.current && !player.ended) {
+            void player.play().catch(() => {
+              // iOS kan hervatten weigeren; dan blijft de mini-speler netjes gepauzeerd.
+            });
+          }
+        }, 120);
       }
     };
     const handleFullscreenChange = () => {
@@ -647,8 +652,6 @@ export default function FeedApp() {
       window.clearTimeout(pauseIntentTimerRef.current);
       pauseIntentTimerRef.current = null;
     }
-    resumeAfterMiniTimerRef.current.forEach((timer) => window.clearTimeout(timer));
-    resumeAfterMiniTimerRef.current = [];
   }, [selectedVideo?.id]);
 
   useEffect(() => {
@@ -885,25 +888,6 @@ export default function FeedApp() {
     }
     intendedPlaybackRef.current = false;
     player.pause();
-  }
-
-  function resumeMiniPlayback(player: HTMLVideoElement) {
-    if (pauseIntentTimerRef.current) {
-      window.clearTimeout(pauseIntentTimerRef.current);
-      pauseIntentTimerRef.current = null;
-    }
-    resumeAfterMiniTimerRef.current.forEach((timer) => window.clearTimeout(timer));
-    resumeAfterMiniTimerRef.current = [80, 260, 700, 1300].map((delay) =>
-      window.setTimeout(() => {
-        if (!intendedPlaybackRef.current || player.ended || !player.paused) return;
-        void player
-          .play()
-          .then(() => setPlayerPlaying(true))
-          .catch(() => {
-            // iOS kan autoplay hervatten weigeren na native fullscreen-exit.
-          });
-      }, delay)
-    );
   }
 
   async function requestNativeFullscreen(player: HTMLVideoElement) {
@@ -1647,7 +1631,7 @@ export default function FeedApp() {
                     pauseIntentTimerRef.current = window.setTimeout(() => {
                       intendedPlaybackRef.current = false;
                       pauseIntentTimerRef.current = null;
-                    }, 1800);
+                    }, 350);
                     setPlayerPlaying(false);
                     if ("mediaSession" in navigator) {
                       navigator.mediaSession.playbackState = "paused";

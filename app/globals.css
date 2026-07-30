@@ -1156,17 +1156,11 @@ main {
   width: 100%;
   max-height: none;
   overflow: hidden;
-  background: transparent;
-  border: 0;
   border-radius: 14px;
-  box-shadow: none;
 }
 
 .video-modal-mini .player {
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
   border-radius: 13px;
-  box-shadow: 0 16px 45px rgba(0, 0, 0, 0.4);
 }
 
 .video-modal-mini .modal-copy {
