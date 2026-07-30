@@ -1283,6 +1283,39 @@ main {
   text-align: right;
 }
 
+.stream-source {
+  grid-column: 1 / -1;
+  width: fit-content;
+  max-width: 100%;
+  margin: 5px 0 0;
+  padding: 7px 9px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stream-source strong {
+  margin-right: 6px;
+  color: #fff;
+  font-weight: 800;
+}
+
+.stream-source-local {
+  background: rgba(95, 214, 139, 0.1);
+  border-color: rgba(95, 214, 139, 0.26);
+}
+
+.stream-source-youtarr {
+  background: rgba(255, 198, 92, 0.1);
+  border-color: rgba(255, 198, 92, 0.26);
+}
+
 .modal-actions {
   grid-column: 1 / -1;
   margin-top: 10px;

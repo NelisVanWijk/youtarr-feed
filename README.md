@@ -42,6 +42,12 @@ for a video file whose filename contains the YouTube video ID. If it finds one,
 it streams the file directly with HTTP Range support. If it does not find one,
 it falls back to Youtarr.
 
+The player shows the active source for downloaded videos:
+
+- `Direct bestand`: streaming from the read-only media mount.
+- `Via Youtarr`: local file was not found, so playback uses Youtarr's stream
+  endpoint.
+
 Direct local streaming does not change delete behavior. Deletes still go
 through Youtarr, so Youtarr remains the owner of the library.
 

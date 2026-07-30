@@ -22,6 +22,17 @@ type WebKitVideoElement = HTMLVideoElement & {
   webkitSetPresentationMode?: (mode: "fullscreen" | "inline" | "picture-in-picture") => void;
   webkitSupportsPresentationMode?: (mode: "picture-in-picture") => boolean;
 };
+type StreamSourceInfo = {
+  source: "local" | "youtarr";
+  local?: {
+    configured: boolean;
+    available: boolean;
+    fileName?: string;
+    extension?: string;
+    size?: number;
+  };
+  youtarrConfigured: boolean;
+};
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
 
@@ -321,6 +332,7 @@ export default function FeedApp() {
   const [addChannelMessage, setAddChannelMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [standaloneMode, setStandaloneMode] = useState(false);
+  const [streamSource, setStreamSource] = useState<StreamSourceInfo | null>(null);
   const progressSaveRef = useRef<Record<string, number>>({});
   const playerRef = useRef<HTMLVideoElement | null>(null);
   const intendedPlaybackRef = useRef(false);
@@ -508,6 +520,34 @@ export default function FeedApp() {
       pauseIntentTimerRef.current = null;
     }
   }, [selectedVideo?.id]);
+
+  useEffect(() => {
+    let stopped = false;
+    const resetTimer = window.setTimeout(() => {
+      if (!stopped) setStreamSource(null);
+    }, 0);
+
+    async function loadStreamSource() {
+      if (!selectedVideo?.downloaded || mode !== "live") return;
+      try {
+        const response = await fetch(
+          `/api/stream/${encodeURIComponent(selectedVideo.id)}/source`,
+          { cache: "no-store" }
+        );
+        if (!response.ok) return;
+        const data = (await response.json()) as StreamSourceInfo;
+        if (!stopped) setStreamSource(data);
+      } catch {
+        // Broninfo is alleen diagnostisch; afspelen mag hier niet op stuklopen.
+      }
+    }
+
+    void loadStreamSource();
+    return () => {
+      stopped = true;
+      window.clearTimeout(resetTimer);
+    };
+  }, [mode, selectedVideo?.downloaded, selectedVideo?.id]);
 
   const visibleVideos = useMemo(() => {
     const source = selectedChannel ? channelVideos : feed?.videos || [];
@@ -1323,6 +1363,24 @@ export default function FeedApp() {
                 {selectedVideo.channelName}
               </button>
               <span>{relativeDate(selectedVideo.publishedAt)}</span>
+              {selectedVideo.downloaded && (
+                <p className={`stream-source stream-source-${streamSource?.source || "unknown"}`}>
+                  <strong>
+                    {streamSource?.source === "local"
+                      ? "Direct bestand"
+                      : streamSource?.source === "youtarr"
+                        ? "Via Youtarr"
+                        : "Bron controleren"}
+                  </strong>
+                  {streamSource?.source === "local" && streamSource.local?.fileName
+                    ? `Read-only mount: ${streamSource.local.fileName}`
+                    : streamSource?.local?.configured === false
+                      ? "Geen media-mount ingesteld; fallback naar Youtarr."
+                      : streamSource?.source === "youtarr"
+                        ? "Lokaal bestand niet gevonden; stream fallback."
+                        : "Even kijken welk stream-pad wordt gebruikt."}
+                </p>
+              )}
               {selectedVideo.downloaded && (
                 <div className="modal-actions">
                   <button

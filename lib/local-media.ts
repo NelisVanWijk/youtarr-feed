@@ -54,6 +54,52 @@ async function findLocalVideoFile(videoId: string) {
   return null;
 }
 
+async function getLocalMediaLookup(videoId: string) {
+  if (!mediaDirectory) {
+    return {
+      configured: false,
+      available: false,
+      source: "youtarr" as const,
+    };
+  }
+
+  const filePath = await findLocalVideoFile(videoId);
+  if (!filePath) {
+    return {
+      configured: true,
+      available: false,
+      source: "youtarr" as const,
+    };
+  }
+
+  try {
+    const fileStat = await stat(filePath);
+    return {
+      configured: true,
+      available: true,
+      source: "local" as const,
+      filePath,
+      fileName: path.basename(filePath),
+      size: fileStat.size,
+      extension: path.extname(filePath).toLowerCase(),
+    };
+  } catch {
+    return {
+      configured: true,
+      available: false,
+      source: "youtarr" as const,
+    };
+  }
+}
+
+export async function getLocalMediaStatus(videoId: string) {
+  const status = await getLocalMediaLookup(videoId);
+  if ("filePath" in status) {
+    delete status.filePath;
+  }
+  return status;
+}
+
 function parseRange(range: string | null, fileSize: number) {
   if (!range) return null;
   const match = /^bytes=(\d*)-(\d*)$/.exec(range);
@@ -83,8 +129,10 @@ function parseRange(range: string | null, fileSize: number) {
 }
 
 export async function getLocalMediaResponse(videoId: string, range: string | null) {
-  const filePath = await findLocalVideoFile(videoId);
-  if (!filePath) return null;
+  const status = await getLocalMediaLookup(videoId);
+  if (!status.available) return null;
+
+  const filePath = status.filePath;
 
   let fileStat;
   try {
