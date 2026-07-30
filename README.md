@@ -212,6 +212,38 @@ http://SERVER-IP:3090
 
 On iPhone, open the site in Safari and use Share -> Add to Home Screen.
 
+## Native iOS App
+
+An experimental SwiftUI iOS client lives in:
+
+```text
+ios/YoutarrFeed/YoutarrFeed.xcodeproj
+```
+
+Open that project in Xcode on a Mac, select the `Youtarr Feed` target, choose
+your Apple development team under Signing & Capabilities, and run it on an
+iPhone or simulator.
+
+The iOS app uses the same Youtarr Feed server API as the web app:
+
+- Feed, Continue Watching, Local, Offline, Channels, and Settings tabs.
+- Native `AVPlayer` playback with AirPlay, PiP, and lock screen metadata hooks.
+- Server-side watch progress sync through `/api/watch-progress`.
+- Offline playback progress is kept locally and synced back when the server is
+  reachable.
+- Server download and delete actions through Youtarr Feed.
+- Offline iPhone downloads stored in the app sandbox through background
+  `URLSession` downloads.
+
+On a real iPhone, set the server URL in the app settings to a LAN-reachable
+address, for example:
+
+```text
+http://192.168.1.50:3090
+```
+
+Do not use `localhost` on a real iPhone; that points to the phone itself.
+
 ## Docker Run Example
 
 ```bash
