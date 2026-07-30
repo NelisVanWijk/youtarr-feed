@@ -33,6 +33,11 @@ type StreamSourceInfo = {
   };
   youtarrConfigured: boolean;
 };
+type DownloadJob = {
+  state: "queueing" | "queued" | "error";
+  channelId: string;
+  error?: string;
+};
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
 
@@ -158,11 +163,13 @@ function Thumbnail({
   index,
   progress,
   streamSource,
+  downloadJob,
 }: {
   video: FeedVideo;
   index: number;
   progress?: number;
   streamSource?: StreamSourceInfo | null;
+  downloadJob?: DownloadJob;
 }) {
   const [failed, setFailed] = useState(false);
   const localLabel =
@@ -203,8 +210,22 @@ function Thumbnail({
           {localLabel}
         </span>
       ) : (
-        <span className="cloud-badge">Nog ophalen</span>
+        <span className={`cloud-badge ${downloadJob ? `cloud-badge-${downloadJob.state}` : ""}`}>
+          {downloadJob?.state === "queueing"
+            ? "Aanvragen"
+            : downloadJob?.state === "queued"
+              ? "Bezig"
+              : downloadJob?.state === "error"
+                ? "Mislukt"
+                : "Nog ophalen"}
+        </span>
       )}
+      {!video.downloaded &&
+        (downloadJob?.state === "queueing" || downloadJob?.state === "queued") && (
+          <span className="download-thumb-overlay" aria-label="Download bezig">
+            <span />
+          </span>
+        )}
       {(video.watched || progress !== undefined) && (
         <span
           className="watched-progress"
@@ -220,6 +241,7 @@ function VideoCard({
   index,
   progress,
   streamSource,
+  downloadJob,
   onOpen,
   onChannel,
   onDelete,
@@ -228,6 +250,7 @@ function VideoCard({
   index: number;
   progress?: number;
   streamSource?: StreamSourceInfo | null;
+  downloadJob?: DownloadJob;
   onOpen: (video: FeedVideo) => void;
   onChannel: (channelId: string) => void;
   onDelete: (video: FeedVideo) => void;
@@ -250,6 +273,7 @@ function VideoCard({
           index={index}
           progress={progress}
           streamSource={streamSource}
+          downloadJob={downloadJob}
         />
       </button>
       <div className="video-details">
@@ -285,7 +309,13 @@ function VideoCard({
                   onOpen(video);
                 }}
               >
-                {video.downloaded ? "Afspelen" : "Ophalen"}
+                {video.downloaded
+                  ? "Afspelen"
+                  : downloadJob?.state === "error"
+                    ? "Opnieuw proberen"
+                    : downloadJob
+                      ? "Download loopt"
+                      : "Ophalen"}
               </button>
               {video.downloaded && (
                 <button
@@ -342,10 +372,7 @@ export default function FeedApp() {
   const [localLoading, setLocalLoading] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<FeedVideo | null>(null);
   const [playerMode, setPlayerMode] = useState<PlayerMode>("full");
-  const [downloadState, setDownloadState] = useState<
-    "idle" | "queueing" | "queued" | "error"
-  >("idle");
-  const [downloadError, setDownloadError] = useState("");
+  const [downloadJobs, setDownloadJobs] = useState<Record<string, DownloadJob>>({});
   const [deleteState, setDeleteState] = useState<"idle" | "deleting" | "error">(
     "idle"
   );
@@ -455,39 +482,64 @@ export default function FeedApp() {
   }, [status?.mode]);
 
   useEffect(() => {
-    if (downloadState !== "queued" || !selectedVideo || status?.mode !== "live") {
-      return;
-    }
-    const timer = window.setInterval(async () => {
-      try {
-        const response = await fetch(
-          `/api/channels/${encodeURIComponent(selectedVideo.channelId)}`,
-          { cache: "no-store" }
-        );
-        if (!response.ok) return;
-        const data = (await response.json()) as { videos: FeedVideo[] };
-        const updated = data.videos.find((video) => video.id === selectedVideo.id);
-        if (updated?.downloaded) {
-          setSelectedVideo(updated);
-          setDownloadState("idle");
-          window.clearInterval(timer);
-          if (status.plexConfigured) {
-            void fetch("/api/plex/refresh", { method: "POST" });
+    const queuedJobs = Object.entries(downloadJobs).filter(
+      ([, job]) => job.state === "queued"
+    );
+    if (queuedJobs.length === 0 || status?.mode !== "live") return;
+
+    let stopped = false;
+    async function checkDownloads() {
+      const jobsByChannel = new Map<string, string[]>();
+      queuedJobs.forEach(([videoId, job]) => {
+        jobsByChannel.set(job.channelId, [
+          ...(jobsByChannel.get(job.channelId) || []),
+          videoId,
+        ]);
+      });
+
+      const completed: string[] = [];
+      await Promise.all(
+        [...jobsByChannel.entries()].map(async ([channelId, videoIds]) => {
+          try {
+            const response = await fetch(
+              `/api/channels/${encodeURIComponent(channelId)}`,
+              { cache: "no-store" }
+            );
+            if (!response.ok) return;
+            const data = (await response.json()) as { videos: FeedVideo[] };
+            data.videos.forEach((video) => {
+              if (video.downloaded && videoIds.includes(video.id)) {
+                completed.push(video.id);
+                markVideoDownloaded(video);
+              }
+            });
+          } catch {
+            // De volgende poll probeert het opnieuw.
           }
-          void loadFeed(true);
-        }
-      } catch {
-        // De volgende poll probeert het opnieuw.
+        })
+      );
+
+      if (stopped || completed.length === 0) return;
+      setDownloadJobs((current) => {
+        const next = { ...current };
+        completed.forEach((id) => delete next[id]);
+        return next;
+      });
+      if (status.plexConfigured) {
+        void fetch("/api/plex/refresh", { method: "POST" });
       }
-    }, 7000);
-    return () => window.clearInterval(timer);
-  }, [
-    downloadState,
-    loadFeed,
-    selectedVideo,
-    status?.mode,
-    status?.plexConfigured,
-  ]);
+      if (view === "local") {
+        void loadLocalVideos(true);
+      }
+    }
+
+    void checkDownloads();
+    const timer = window.setInterval(checkDownloads, 5000);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+    };
+  }, [downloadJobs, status?.mode, status?.plexConfigured, view]);
 
   useEffect(() => {
     if (view === "local") {
@@ -708,6 +760,23 @@ export default function FeedApp() {
     }
   }
 
+  function markVideoDownloaded(updatedVideo: FeedVideo) {
+    const updated = { ...updatedVideo, downloaded: true };
+    const updateList = (videos: FeedVideo[]) =>
+      videos.map((video) =>
+        video.id === updated.id ? { ...video, ...updated } : video
+      );
+
+    setFeed((current) =>
+      current ? { ...current, videos: updateList(current.videos) } : current
+    );
+    setChannelVideos((current) => updateList(current));
+    setLocalVideos((current) => updateList(current));
+    setSelectedVideo((current) =>
+      current?.id === updated.id ? { ...current, ...updated } : current
+    );
+  }
+
   async function openChannel(channelId: string) {
     const channel = feed?.channels.find((item) => item.id === channelId);
     if (!channel) return;
@@ -739,15 +808,14 @@ export default function FeedApp() {
   }
 
   function openVideo(video: FeedVideo) {
-    setSelectedVideo(video);
-    setPlayerMode("full");
-    setDownloadState("idle");
-    setDownloadError("");
-    setDeleteState("idle");
-    setDeleteError("");
     if (!video.downloaded) {
       void startDownload(video);
+      return;
     }
+    setSelectedVideo(video);
+    setPlayerMode("full");
+    setDeleteState("idle");
+    setDeleteError("");
   }
 
   function closePlayer() {
@@ -801,8 +869,12 @@ export default function FeedApp() {
   }
 
   async function startDownload(video: FeedVideo) {
-    setDownloadState("queueing");
-    setDownloadError("");
+    const existing = downloadJobs[video.id];
+    if (existing && existing.state !== "error") return;
+    setDownloadJobs((current) => ({
+      ...current,
+      [video.id]: { state: "queueing", channelId: video.channelId },
+    }));
     try {
       const response = await fetch("/api/download", {
         method: "POST",
@@ -814,22 +886,30 @@ export default function FeedApp() {
         demo?: boolean;
       };
       if (!response.ok) throw new Error(data.error || "Download starten mislukte");
-      setDownloadState("queued");
+      setDownloadJobs((current) => ({
+        ...current,
+        [video.id]: { state: "queued", channelId: video.channelId },
+      }));
       if (data.demo) {
         window.setTimeout(() => {
-          setSelectedVideo((current) =>
-            current ? { ...current, downloaded: true } : current
-          );
-          setDownloadState("idle");
+          markVideoDownloaded({ ...video, downloaded: true });
+          setDownloadJobs((current) => {
+            const next = { ...current };
+            delete next[video.id];
+            return next;
+          });
         }, 3200);
       }
     } catch (downloadFailure) {
-      setDownloadState("error");
-      setDownloadError(
+      const message =
         downloadFailure instanceof Error
           ? downloadFailure.message
-          : "Download starten mislukte"
-      );
+          : "Download starten mislukte";
+      setDownloadJobs((current) => ({
+        ...current,
+        [video.id]: { state: "error", channelId: video.channelId, error: message },
+      }));
+      setError(message);
     }
   }
 
@@ -1130,6 +1210,7 @@ export default function FeedApp() {
                     index={index}
                     progress={progressPercent(video.id)}
                     streamSource={streamSources[video.id]}
+                    downloadJob={downloadJobs[video.id]}
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
@@ -1166,6 +1247,7 @@ export default function FeedApp() {
                     index={index}
                     progress={progressPercent(video.id)}
                     streamSource={streamSources[video.id]}
+                    downloadJob={downloadJobs[video.id]}
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
@@ -1208,6 +1290,7 @@ export default function FeedApp() {
                     index={index}
                     progress={progressPercent(video.id)}
                     streamSource={streamSources[video.id]}
+                    downloadJob={downloadJobs[video.id]}
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
@@ -1328,6 +1411,7 @@ export default function FeedApp() {
                     index={index}
                     progress={progressPercent(video.id)}
                     streamSource={streamSources[video.id]}
+                    downloadJob={downloadJobs[video.id]}
                     onOpen={openVideo}
                     onChannel={() => undefined}
                     onDelete={(item) => void removeDownload(item)}
@@ -1506,7 +1590,7 @@ export default function FeedApp() {
               <div className="download-panel">
                 <div
                   className={`download-orbit ${
-                    downloadState === "queueing" || downloadState === "queued"
+                    false
                       ? "active"
                       : ""
                   }`}
@@ -1515,19 +1599,12 @@ export default function FeedApp() {
                 </div>
                 <span className="eyebrow">Nog niet lokaal</span>
                 <h2>
-                  {downloadState === "queueing" && "Download wordt aangevraagd"}
-                  {downloadState === "queued" && "Youtarr is bezig"}
-                  {downloadState === "error" && "Dat ging niet goed"}
-                  {downloadState === "idle" && "Klaar om op te halen"}
+                  Deze video is nog niet klaar om af te spelen.
                 </h2>
                 <p>
-                  {downloadState === "queued"
-                    ? "Je kunt dit scherm sluiten. De video verschijnt automatisch zodra hij klaar is."
-                    : downloadState === "error"
-                      ? downloadError
-                      : "De video wordt via Youtarr aan je eigen bibliotheek toegevoegd."}
+                  Sluit dit scherm en start de download opnieuw vanaf de thumbnail.
                 </p>
-                {downloadState === "error" && (
+                {false && (
                   <button
                     className="primary-button"
                     onClick={() => void startDownload(selectedVideo)}

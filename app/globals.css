@@ -643,6 +643,37 @@ main {
   color: #dddcd8;
 }
 
+.cloud-badge-queueing,
+.cloud-badge-queued {
+  background: rgba(255, 74, 61, 0.9);
+  color: #fff;
+}
+
+.cloud-badge-error {
+  background: rgba(183, 39, 39, 0.92);
+  color: #fff;
+}
+
+.download-thumb-overlay {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(1px);
+}
+
+.download-thumb-overlay span {
+  width: 46px;
+  height: 46px;
+  display: block;
+  border: 3px solid rgba(255, 255, 255, 0.34);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 0.85s linear infinite;
+}
+
 .watched-progress {
   position: absolute;
   z-index: 3;
