@@ -13,7 +13,7 @@ import type {
   WatchProgressMap,
 } from "../lib/types";
 
-type View = "feed" | "continue" | "channels";
+type View = "feed" | "continue" | "local" | "channels";
 type Filter = "all" | "new" | "downloaded";
 type PlayerMode = "full" | "mini";
 type WebKitVideoElement = HTMLVideoElement & {
@@ -338,6 +338,8 @@ export default function FeedApp() {
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
   const [channelVideos, setChannelVideos] = useState<FeedVideo[]>([]);
   const [channelLoading, setChannelLoading] = useState(false);
+  const [localVideos, setLocalVideos] = useState<FeedVideo[]>([]);
+  const [localLoading, setLocalLoading] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<FeedVideo | null>(null);
   const [playerMode, setPlayerMode] = useState<PlayerMode>("full");
   const [downloadState, setDownloadState] = useState<
@@ -488,6 +490,14 @@ export default function FeedApp() {
   ]);
 
   useEffect(() => {
+    if (view === "local") {
+      void loadLocalVideos(localVideos.length > 0);
+    }
+    // loadLocalVideos is intentionally local to this component; view changes drive refreshes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
+
+  useEffect(() => {
     if (
       playerMode === "full" &&
       selectedVideo?.downloaded &&
@@ -611,9 +621,28 @@ export default function FeedApp() {
       );
   }, [feed?.videos, query, watchProgress]);
 
+  const filteredLocalVideos = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return localVideos.filter((video) => {
+      if (
+        normalized &&
+        !`${video.title} ${video.channelName}`.toLowerCase().includes(normalized)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [localVideos, query]);
+
   useEffect(() => {
     if (mode !== "live") return;
-    const candidates = (view === "continue" ? continueVideos : visibleVideos)
+    const source =
+      view === "continue"
+        ? continueVideos
+        : view === "local"
+          ? filteredLocalVideos
+          : visibleVideos;
+    const candidates = source
       .filter((video) => video.downloaded && !streamSources[video.id])
       .slice(0, 80);
     if (candidates.length === 0) return;
@@ -648,7 +677,36 @@ export default function FeedApp() {
     return () => {
       stopped = true;
     };
-  }, [continueVideos, mode, streamSources, view, visibleVideos]);
+  }, [
+    continueVideos,
+    filteredLocalVideos,
+    mode,
+    streamSources,
+    view,
+    visibleVideos,
+  ]);
+
+  async function loadLocalVideos(quiet = false) {
+    if (!quiet) setLocalLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/local-videos", { cache: "no-store" });
+      const data = (await response.json()) as {
+        videos?: FeedVideo[];
+        error?: string;
+      };
+      if (!response.ok) throw new Error(data.error || "Lokale video's laden mislukte");
+      setLocalVideos(data.videos || []);
+    } catch (localError) {
+      setError(
+        localError instanceof Error
+          ? localError.message
+          : "Lokale video's laden mislukte"
+      );
+    } finally {
+      setLocalLoading(false);
+    }
+  }
 
   async function openChannel(channelId: string) {
     const channel = feed?.channels.find((item) => item.id === channelId);
@@ -855,8 +913,12 @@ export default function FeedApp() {
         delete next[video.id];
         return next;
       });
+      setLocalVideos((current) => current.filter((item) => item.id !== video.id));
       setDeleteState("idle");
       void loadFeed(true);
+      if (view === "local") {
+        void loadLocalVideos(true);
+      }
     } catch (deleteFailure) {
       setDeleteState("error");
       setDeleteError(
@@ -978,6 +1040,13 @@ export default function FeedApp() {
           >
             <span className="nav-continue" />
             <span>Verder kijken</span>
+          </button>
+          <button
+            className={view === "local" ? "active" : ""}
+            onClick={() => switchView("local")}
+          >
+            <span className="nav-local" />
+            <span>Lokaal</span>
           </button>
           <button
             className={view === "channels" ? "active" : ""}
@@ -1113,6 +1182,48 @@ export default function FeedApp() {
           </>
         )}
 
+        {view === "local" && (
+          <>
+            <section className="page-heading">
+              <div>
+                <span className="eyebrow">Gedownload</span>
+                <h1>Lokale video&apos;s</h1>
+                <p>Alles wat Youtarr als lokaal gedownload ziet, met delete-opties.</p>
+              </div>
+              <button
+                className="settings-link"
+                onClick={() => void loadLocalVideos(true)}
+              >
+                Verversen
+              </button>
+            </section>
+            {localLoading ? (
+              <LoadingGrid />
+            ) : filteredLocalVideos.length ? (
+              <div className="video-grid">
+                {filteredLocalVideos.map((video, index) => (
+                  <VideoCard
+                    key={`${video.channelId}-${video.id}`}
+                    video={video}
+                    index={index}
+                    progress={progressPercent(video.id)}
+                    streamSource={streamSources[video.id]}
+                    onOpen={openVideo}
+                    onChannel={(id) => void openChannel(id)}
+                    onDelete={(item) => void removeDownload(item)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <span className="empty-mark">0</span>
+                <h2>Geen lokale video&apos;s</h2>
+                <p>Gedownloade video&apos;s verschijnen hier zodra Youtarr ze ziet.</p>
+              </div>
+            )}
+          </>
+        )}
+
         {view === "channels" && !selectedChannel && (
           <>
             <section className="page-heading">
@@ -1242,6 +1353,13 @@ export default function FeedApp() {
         >
           <span className="nav-continue" />
           <small>Verder</small>
+        </button>
+        <button
+          className={view === "local" ? "active" : ""}
+          onClick={() => switchView("local")}
+        >
+          <span className="nav-local" />
+          <small>Lokaal</small>
         </button>
         <button
           className={view === "channels" ? "active" : ""}

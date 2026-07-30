@@ -231,6 +231,15 @@ async function fetchChannelVideos(
   return [...merged.values()];
 }
 
+async function fetchDownloadedChannelVideos(channel: Channel): Promise<FeedVideo[]> {
+  const data = await getJson<{ videos?: YoutarrVideo[] }>(
+    `/getchannelvideos/${encodeURIComponent(channel.id)}?page=1&pageSize=300&tabType=videos&sortBy=date&sortOrder=desc&downloadedFilter=only`
+  );
+  return (data.videos || [])
+    .map((video) => toVideo(video, channel))
+    .filter((video): video is FeedVideo => video !== null && video.downloaded);
+}
+
 export async function getFeed(): Promise<{
   channels: Channel[];
   videos: FeedVideo[];
@@ -270,6 +279,39 @@ export async function getVideosForChannel(channelId: string, page = 1) {
   if (!channel) throw new Error("Kanaal niet gevonden");
   const videos = await fetchChannelVideos(channel, page, 36);
   return { channel, videos };
+}
+
+export async function getDownloadedVideos(): Promise<{
+  channels: Channel[];
+  videos: FeedVideo[];
+  warnings: string[];
+}> {
+  const channels = await getChannels();
+  const videos: FeedVideo[] = [];
+  const warnings: string[] = [];
+  const batchSize = 4;
+
+  for (let index = 0; index < channels.length; index += batchSize) {
+    const batch = channels.slice(index, index + batchSize);
+    const results = await Promise.allSettled(
+      batch.map((channel) => fetchDownloadedChannelVideos(channel))
+    );
+    results.forEach((result, resultIndex) => {
+      if (result.status === "fulfilled") {
+        videos.push(...result.value);
+      } else {
+        warnings.push(`${batch[resultIndex].name} kon lokale video's niet laden`);
+      }
+    });
+  }
+
+  videos.sort((a, b) => {
+    const aTime = a.publishedAt ? new Date(a.publishedAt).getTime() : 0;
+    const bTime = b.publishedAt ? new Date(b.publishedAt).getTime() : 0;
+    return bTime - aTime;
+  });
+
+  return { channels, videos, warnings };
 }
 
 export async function queueDownload(youtubeId: string) {

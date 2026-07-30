@@ -337,6 +337,38 @@ input:focus-visible {
   border-radius: 0 0 11px 11px;
 }
 
+.nav-local {
+  position: relative;
+  width: 19px;
+  height: 16px;
+  display: block;
+  border: 2px solid currentColor;
+  border-radius: 4px;
+}
+
+.nav-local::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: 2px;
+  width: 7px;
+  height: 5px;
+  border: 2px solid currentColor;
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+}
+
+.nav-local::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  left: 3px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 2px;
+}
+
 .sidebar-status {
   display: flex;
   align-items: center;
@@ -1696,6 +1728,10 @@ main {
   }
 
   .bottom-nav .nav-continue {
+    transform: scale(0.88);
+  }
+
+  .bottom-nav .nav-local {
     transform: scale(0.88);
   }
 

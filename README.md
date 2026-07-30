@@ -3,7 +3,8 @@
 Youtarr Feed is a mobile-first web app for [Youtarr](https://github.com/DialmasterOrg/Youtarr).
 It is designed to feel good as an iPhone homescreen app: one chronological feed
 for your subscriptions, channel views, server-side watch progress, a Continue
-Watching tab, direct download actions, and local playback of downloaded videos.
+Watching tab, a local downloads tab, direct download actions, and local playback
+of downloaded videos.
 
 The app talks to Youtarr from the server side. Your Youtarr password, session
 token, API key, and optional Plex token are never sent to the browser.
@@ -18,6 +19,7 @@ token, API key, and optional Plex token are never sent to the browser.
 - Delete a downloaded video through Youtarr.
 - Server-side watch progress stored in `/data/watch-progress.json`.
 - Continue Watching tab synced across browsers/devices.
+- Local downloads tab with all videos Youtarr currently marks as downloaded.
 - Optional Plex library refresh after a download completes.
 - Optional direct local file streaming from the mounted Youtarr media folder.
 - iPhone/PWA manifest with portrait orientation.
@@ -53,6 +55,10 @@ items, so you can see the expected playback path before opening the video.
 
 Direct local streaming does not change delete behavior. Deletes still go
 through Youtarr, so Youtarr remains the owner of the library.
+
+The Local tab uses Youtarr's downloaded-video state as its source of truth. It
+shows all videos Youtarr reports as downloaded and lets you play or delete them
+from one overview.
 
 ## Recommended Youtarr Mount Layout
 
