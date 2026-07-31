@@ -432,7 +432,12 @@ export async function getDownloadedVideos(): Promise<{
 
 export async function queueDownload(
   youtubeId: string,
-  options: { allowRedownload?: boolean; channelId?: string } = {}
+  options: {
+    allowRedownload?: boolean;
+    channelId?: string;
+    resolution?: string;
+    subfolder?: string;
+  } = {}
 ) {
   if (!/^[A-Za-z0-9_-]{11}$/.test(youtubeId)) {
     throw new Error("Invalid video ID");
@@ -442,13 +447,19 @@ export async function queueDownload(
     options.allowRedownload
       ? {
           urls: [url],
-          overrideSettings: { allowRedownload: true },
+          overrideSettings: {
+            allowRedownload: true,
+            ...(options.resolution ? { resolution: options.resolution } : {}),
+            ...(options.subfolder ? { subfolder: options.subfolder } : {}),
+          },
           ...(options.channelId && /^UC[A-Za-z0-9_-]{22}$/.test(options.channelId)
             ? { videoChannelMap: { [youtubeId]: options.channelId } }
             : {}),
         }
       : {
           url,
+          ...(options.resolution ? { resolution: options.resolution } : {}),
+          ...(options.subfolder ? { subfolder: options.subfolder } : {}),
         };
   const headers = new Headers({ "Content-Type": "application/json" });
   let response: Response;
@@ -483,6 +494,42 @@ export async function queueDownload(
     throw new Error(data.error || `Could not start download (${response.status})`);
   }
   return data;
+}
+
+export async function queueDualQualityDownload(
+  youtubeId: string,
+  options: { allowRedownload?: boolean; channelId?: string } = {}
+) {
+  const dualEnabled = process.env.YOUTARR_DUAL_QUALITY_DOWNLOADS === "true";
+  const primaryResolution =
+    process.env.YOUTARR_PRIMARY_DOWNLOAD_RESOLUTION?.trim() || "";
+  const secondaryResolution =
+    process.env.YOUTARR_SECONDARY_DOWNLOAD_RESOLUTION?.trim() || "1080";
+  const secondarySubfolder =
+    process.env.YOUTARR_SECONDARY_DOWNLOAD_SUBFOLDER?.trim() || "1080p";
+
+  const primary = await queueDownload(youtubeId, {
+    ...options,
+    ...(primaryResolution ? { resolution: primaryResolution } : {}),
+  });
+  if (!dualEnabled) return primary;
+
+  try {
+    await queueDownload(youtubeId, {
+      ...options,
+      allowRedownload: true,
+      resolution: secondaryResolution,
+      subfolder: secondarySubfolder,
+    });
+    return { ...primary, dualQuality: true };
+  } catch (error) {
+    return {
+      ...primary,
+      dualQuality: false,
+      dualQualityError:
+        error instanceof Error ? error.message : "Could not queue secondary quality",
+    };
+  }
 }
 
 export async function deleteDownload(youtubeId: string) {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  type LocalMediaQuality,
   getLocalMediaResponse,
   isLikelyAppleClient,
 } from "../../../../lib/local-media";
@@ -17,11 +18,17 @@ export async function GET(
     return NextResponse.json({ error: "Invalid video" }, { status: 400 });
   }
   const range = request.headers.get("range");
-  const direct = new URL(request.url).searchParams.get("direct") !== "0";
+  const searchParams = new URL(request.url).searchParams;
+  const direct = searchParams.get("direct") !== "0";
+  const requestedQuality = searchParams.get("quality");
+  const quality: LocalMediaQuality =
+    requestedQuality === "original" || requestedQuality === "1080"
+      ? requestedQuality
+      : "auto";
 
   try {
     if (direct) {
-      if (isLikelyAppleClient(request.headers.get("user-agent"))) {
+      if (isLikelyAppleClient(request.headers.get("user-agent")) && quality !== "original") {
         const compatibleResponse = await getTranscodeMediaResponse(id, range);
         if (compatibleResponse) return compatibleResponse;
       }
@@ -29,7 +36,8 @@ export async function GET(
       const localResponse = await getLocalMediaResponse(
         id,
         range,
-        request.headers.get("user-agent")
+        request.headers.get("user-agent"),
+        quality
       );
       if (localResponse) return localResponse;
     }

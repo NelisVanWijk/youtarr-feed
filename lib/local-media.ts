@@ -14,6 +14,18 @@ const mimeTypes = new Map([
   [".mkv", "video/x-matroska"],
 ]);
 
+export type LocalMediaQuality = "auto" | "original" | "1080";
+
+export type LocalMediaVariant = {
+  quality: "original" | "1080";
+  label: string;
+  fileName: string;
+  size: number;
+  extension: string;
+  compatible: boolean;
+  height?: number;
+};
+
 function isValidVideoId(value: string) {
   return /^[A-Za-z0-9_-]{11}$/.test(value);
 }
@@ -32,7 +44,22 @@ function isInsideMediaDirectory(filePath: string) {
   return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
-async function findLocalVideoFile(videoId: string) {
+function inferHeight(filePath: string) {
+  const normalized = filePath.toLowerCase();
+  if (/\b4k\b/.test(normalized)) return 2160;
+  const match = /(?:^|[^\d])(2160|1440|1080|720|480)p?(?:[^\d]|$)/.exec(
+    normalized
+  );
+  return match ? Number(match[1]) : undefined;
+}
+
+function variantLabel(height?: number) {
+  if (!height) return "Original";
+  if (height >= 2160) return "4K";
+  return `${height}p`;
+}
+
+async function findLocalVideoFiles(videoId: string) {
   if (!mediaDirectory || !isValidVideoId(videoId)) return null;
 
   const stack = [mediaDirectory];
@@ -65,11 +92,20 @@ async function findLocalVideoFile(videoId: string) {
   return matches.sort((left, right) => {
     const leftExtension = path.extname(left).toLowerCase();
     const rightExtension = path.extname(right).toLowerCase();
+    const leftHeight = inferHeight(left) || 0;
+    const rightHeight = inferHeight(right) || 0;
+    if (leftHeight !== rightHeight) return rightHeight - leftHeight;
     const leftFriendly = appleFriendlyExtensions.has(leftExtension) ? 0 : 1;
     const rightFriendly = appleFriendlyExtensions.has(rightExtension) ? 0 : 1;
     if (leftFriendly !== rightFriendly) return leftFriendly - rightFriendly;
     return left.localeCompare(right);
-  })[0] || null;
+  });
+}
+
+async function findLocalVideoFile(videoId: string) {
+  const files = await findLocalVideoFiles(videoId);
+  if (!files?.length) return null;
+  return files.find((file) => inferHeight(file) !== 1080) || files[0];
 }
 
 export async function getLocalMediaFile(videoId: string) {
@@ -92,7 +128,57 @@ export async function getLocalMediaFile(videoId: string) {
   }
 }
 
-async function getLocalMediaLookup(videoId: string, userAgent?: string | null) {
+export async function getLocalMediaVariants(videoId: string) {
+  const files = await findLocalVideoFiles(videoId);
+  if (!files?.length) return [];
+
+  const variants: Array<LocalMediaVariant & { filePath: string }> = [];
+  for (const filePath of files) {
+    try {
+      const fileStat = await stat(filePath);
+      const extension = path.extname(filePath).toLowerCase();
+      const height = inferHeight(filePath);
+      const quality = height === 1080 ? "1080" : "original";
+      if (variants.some((variant) => variant.quality === quality)) continue;
+      variants.push({
+        quality,
+        label: quality === "1080" ? "1080p" : variantLabel(height),
+        filePath,
+        fileName: path.basename(filePath),
+        size: fileStat.size,
+        extension,
+        compatible: appleFriendlyExtensions.has(extension),
+        height,
+      });
+    } catch {
+      continue;
+    }
+  }
+
+  return variants.sort((left, right) => {
+    if (left.quality === right.quality) return 0;
+    return left.quality === "original" ? -1 : 1;
+  });
+}
+
+function selectVariant(
+  variants: Array<LocalMediaVariant & { filePath: string }>,
+  userAgent?: string | null,
+  quality: LocalMediaQuality = "auto"
+) {
+  const original = variants.find((variant) => variant.quality === "original");
+  const hd = variants.find((variant) => variant.quality === "1080");
+  if (quality === "1080") return hd || original || null;
+  if (quality === "original") return original || hd || null;
+  if (isLikelyAppleClient(userAgent) && hd) return hd;
+  return original || hd || null;
+}
+
+async function getLocalMediaLookup(
+  videoId: string,
+  userAgent?: string | null,
+  quality: LocalMediaQuality = "auto"
+) {
   if (!mediaDirectory) {
     return {
       configured: false,
@@ -101,7 +187,8 @@ async function getLocalMediaLookup(videoId: string, userAgent?: string | null) {
     };
   }
 
-  const localFile = await getLocalMediaFile(videoId);
+  const variants = await getLocalMediaVariants(videoId);
+  const localFile = selectVariant(variants, userAgent, quality);
   if (!localFile) {
     return {
       configured: true,
@@ -112,7 +199,7 @@ async function getLocalMediaLookup(videoId: string, userAgent?: string | null) {
 
   try {
     const appleCompatible = !isLikelyAppleClient(userAgent) ||
-      appleFriendlyExtensions.has(localFile.extension);
+      localFile.compatible;
     return {
       configured: true,
       available: appleCompatible,
@@ -122,6 +209,8 @@ async function getLocalMediaLookup(videoId: string, userAgent?: string | null) {
       size: localFile.size,
       extension: localFile.extension,
       compatible: appleCompatible,
+      quality: localFile.quality,
+      variants: variants.map(({ filePath: _filePath, ...variant }) => variant),
     };
   } catch {
     return {
@@ -132,8 +221,12 @@ async function getLocalMediaLookup(videoId: string, userAgent?: string | null) {
   }
 }
 
-export async function getLocalMediaStatus(videoId: string, userAgent?: string | null) {
-  const status = await getLocalMediaLookup(videoId, userAgent);
+export async function getLocalMediaStatus(
+  videoId: string,
+  userAgent?: string | null,
+  quality: LocalMediaQuality = "auto"
+) {
+  const status = await getLocalMediaLookup(videoId, userAgent, quality);
   if ("filePath" in status) {
     delete status.filePath;
   }
@@ -171,9 +264,10 @@ function parseRange(range: string | null, fileSize: number) {
 export async function getLocalMediaResponse(
   videoId: string,
   range: string | null,
-  userAgent?: string | null
+  userAgent?: string | null,
+  quality: LocalMediaQuality = "auto"
 ) {
-  const status = await getLocalMediaLookup(videoId, userAgent);
+  const status = await getLocalMediaLookup(videoId, userAgent, quality);
   if (!status.available) return null;
 
   const filePath = status.filePath;

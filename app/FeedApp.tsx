@@ -49,6 +49,7 @@ type View = "feed" | "continue" | "local" | "singles" | "channels";
 type Filter = "all" | "new" | "downloaded";
 type PlayerMode = "full" | "mini";
 type PlayerStreamMode = "direct" | "youtarr" | "compatible";
+type PlayerQuality = "auto" | "original" | "1080";
 type WebKitVideoElement = HTMLVideoElement & {
   webkitEnterFullscreen?: () => void;
   webkitPresentationMode?: string;
@@ -64,6 +65,16 @@ type StreamSourceInfo = {
     extension?: string;
     size?: number;
     compatible?: boolean;
+    quality?: "original" | "1080";
+    variants?: Array<{
+      quality: "original" | "1080";
+      label: string;
+      fileName: string;
+      size: number;
+      extension: string;
+      compatible: boolean;
+      height?: number;
+    }>;
   };
   transcode?: {
     enabled: boolean;
@@ -97,6 +108,11 @@ type DownloadJob = {
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
 const languageStorageKey = "youtarr-feed-language";
+const qualityStorageKey = "youtarr-feed-quality";
+
+function isPlayerQuality(value: string | null): value is PlayerQuality {
+  return value === "auto" || value === "original" || value === "1080";
+}
 
 function isApplePlaybackUserAgent(value: string) {
   return /\b(iPhone|iPad|iPod)\b/i.test(value) || (
@@ -499,6 +515,11 @@ export default function FeedApp() {
     const storedLanguage = window.localStorage.getItem(languageStorageKey);
     return isLanguage(storedLanguage) ? storedLanguage : defaultLanguage;
   });
+  const [playbackQuality, setPlaybackQuality] = useState<PlayerQuality>(() => {
+    if (typeof window === "undefined") return "auto";
+    const storedQuality = window.localStorage.getItem(qualityStorageKey);
+    return isPlayerQuality(storedQuality) ? storedQuality : "auto";
+  });
   const [view, setView] = useState<View>("feed");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -561,6 +582,10 @@ export default function FeedApp() {
     window.localStorage.setItem(languageStorageKey, language);
     document.documentElement.lang = language;
   }, [language]);
+
+  useEffect(() => {
+    window.localStorage.setItem(qualityStorageKey, playbackQuality);
+  }, [playbackQuality]);
 
   const loadFeed = useCallback(async (quiet = false, refresh = false) => {
     if (quiet) setRefreshing(true);
@@ -871,6 +896,22 @@ export default function FeedApp() {
   }, [playerStreamMode]);
 
   useEffect(() => {
+    if (!playerRef.current || playerStreamMode !== "direct") return;
+    const player = playerRef.current;
+    const wasPlaying = !player.paused && !player.ended;
+    const currentTime = player.currentTime;
+    player.load();
+    const restorePlayback = () => {
+      player.currentTime = currentTime;
+      if (wasPlaying) {
+        void player.play().catch(() => setPlayerPlaying(false));
+      }
+    };
+    player.addEventListener("loadedmetadata", restorePlayback, { once: true });
+    return () => player.removeEventListener("loadedmetadata", restorePlayback);
+  }, [playbackQuality, playerStreamMode]);
+
+  useEffect(() => {
     let stopped = false;
     const resetTimer = window.setTimeout(() => {
       if (!stopped) setStreamSource(null);
@@ -880,7 +921,7 @@ export default function FeedApp() {
       if (!selectedVideo?.downloaded || mode !== "live") return;
       try {
         const response = await fetch(
-          `/api/stream/${encodeURIComponent(selectedVideo.id)}/source?detail=1`,
+          `/api/stream/${encodeURIComponent(selectedVideo.id)}/source?detail=1&${qualityQuery()}`,
           { cache: "no-store" }
         );
         if (!response.ok) return;
@@ -896,7 +937,7 @@ export default function FeedApp() {
       stopped = true;
       window.clearTimeout(resetTimer);
     };
-  }, [mode, selectedVideo?.downloaded, selectedVideo?.id]);
+  }, [mode, playbackQuality, selectedVideo?.downloaded, selectedVideo?.id]);
 
   const visibleVideos = useMemo(() => {
     const source = selectedChannel ? channelVideos : feed?.videos || [];
@@ -982,7 +1023,7 @@ export default function FeedApp() {
         candidates.map(async (video) => {
           try {
             const response = await fetch(
-              `/api/stream/${encodeURIComponent(video.id)}/source`,
+              `/api/stream/${encodeURIComponent(video.id)}/source?${qualityQuery()}`,
               { cache: "no-store" }
             );
             if (!response.ok) return null;
@@ -1011,6 +1052,7 @@ export default function FeedApp() {
     filteredLocalVideos,
     filteredSingleVideos,
     mode,
+    playbackQuality,
     streamSources,
     view,
     visibleVideos,
@@ -1101,6 +1143,10 @@ export default function FeedApp() {
   function isApplePlaybackClient() {
     if (typeof navigator === "undefined") return false;
     return isApplePlaybackUserAgent(navigator.userAgent);
+  }
+
+  function qualityQuery() {
+    return `quality=${encodeURIComponent(playbackQuality)}`;
   }
 
   function wait(milliseconds: number) {
@@ -1281,7 +1327,7 @@ export default function FeedApp() {
       if (mode === "live") {
         try {
           const response = await fetch(
-            `/api/stream/${encodeURIComponent(video.id)}/source`,
+            `/api/stream/${encodeURIComponent(video.id)}/source?${qualityQuery()}`,
             { cache: "no-store" }
           );
           if (response.ok) {
@@ -1709,12 +1755,17 @@ export default function FeedApp() {
     streamSource?.transcode?.mediaUrl ||
     streamSource?.transcode?.playlistUrl ||
     `/api/transcode/${selectedVideoId}/hls/index.m3u8`;
+  const directPlayerSource = `/api/stream/${selectedVideoId}?${qualityQuery()}${
+    playerStreamMode === "youtarr" ? "&direct=0" : ""
+  }`;
+  const localVariants = streamSource?.local?.variants || [];
+  const hasQualityVariants =
+    localVariants.some((variant) => variant.quality === "original") &&
+    localVariants.some((variant) => variant.quality === "1080");
   const playerSource = selectedVideo
     ? playerStreamMode === "compatible" && transcodeState === "ready"
       ? compatiblePlayerSource
-      : `/api/stream/${selectedVideoId}${
-          playerStreamMode === "youtarr" ? "?direct=0" : ""
-        }`
+      : directPlayerSource
     : "";
   const transcodePreparing =
     selectedVideo?.downloaded &&
@@ -2470,6 +2521,30 @@ export default function FeedApp() {
               )}
               {selectedVideo.downloaded &&
                 mode === "live" &&
+                hasQualityVariants && (
+                  <div className="stream-switch" aria-label={copy.player.qualityMode}>
+                    {[
+                      ["auto", copy.player.useAutoQuality],
+                      ["original", copy.player.useOriginalQuality],
+                      ["1080", copy.player.use1080Quality],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        className={playbackQuality === value ? "active" : ""}
+                        onClick={() => {
+                          setPlaybackQuality(value as PlayerQuality);
+                          setPlayerStreamMode("direct");
+                          setTranscodeState("idle");
+                          setTranscodeStartTime(0);
+                        }}
+                      >
+                        <span>{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              {selectedVideo.downloaded &&
+                mode === "live" &&
                 streamSource?.transcode?.enabled &&
                 isApplePlaybackClient() && (
                   <div className="stream-switch" aria-label={copy.player.streamMode}>
@@ -2601,6 +2676,24 @@ export default function FeedApp() {
                       onClick={() => setLanguage(option.code)}
                     >
                       {option.label}
+                    </button>
+                  ))}
+                </strong>
+              </div>
+              <div>
+                <span>{copy.settings.qualityLabel}</span>
+                <strong className="language-switcher">
+                  {[
+                    ["auto", copy.settings.qualityAuto],
+                    ["original", copy.settings.qualityOriginal],
+                    ["1080", copy.settings.quality1080],
+                  ].map(([value, label]) => (
+                    <button
+                      key={value}
+                      className={playbackQuality === value ? "active" : ""}
+                      onClick={() => setPlaybackQuality(value as PlayerQuality)}
+                    >
+                      {label}
                     </button>
                   ))}
                 </strong>

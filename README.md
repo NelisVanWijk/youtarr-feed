@@ -332,6 +332,10 @@ docker run -d \
 | `YOUTARR_FEED_DATA_DIR` | Recommended | Persistent app data directory. Defaults to `/data` in production. |
 | `YOUTARR_FEED_CACHE_TTL_SECONDS` | Optional | Server-side feed/local-video cache duration. Defaults to `300`. |
 | `YOUTARR_MEDIA_DIR` | Recommended | Read-only mount of the Youtarr output folder for direct streaming. |
+| `YOUTARR_DUAL_QUALITY_DOWNLOADS` | Optional | Set to `true` to ask Youtarr for a second 1080p copy whenever Youtarr Feed starts a download. Defaults to `false`. |
+| `YOUTARR_PRIMARY_DOWNLOAD_RESOLUTION` | Optional | Resolution override for the primary/original download. Leave empty to use Youtarr's channel/global setting. |
+| `YOUTARR_SECONDARY_DOWNLOAD_RESOLUTION` | Optional | Resolution for the second copy. Defaults to `1080`. |
+| `YOUTARR_SECONDARY_DOWNLOAD_SUBFOLDER` | Optional | Subfolder for the second copy so it does not overwrite the original. Defaults to `1080p`. |
 | `YOUTARR_TRANSCODE_ENABLED` | Optional | Set to `true` to enable Apple-compatible transcoding. |
 | `YOUTARR_TRANSCODE_ACCEL` | Optional | Use `vaapi` for Intel Quick Sync, or `software`. Defaults to `vaapi` when a device is configured. |
 | `YOUTARR_TRANSCODE_DEVICE` | Optional | VAAPI render device, usually `/dev/dri/renderD128` on Unraid/Linux. |
@@ -351,6 +355,37 @@ docker run -d \
 Direct local streaming can reduce buffering because it removes the Youtarr
 stream proxy from the playback path. It does not fix codec compatibility by
 itself.
+
+### Dual-Quality Downloads
+
+If you prefer to avoid server-side transcoding, Youtarr Feed can ask Youtarr for
+two downloads when you start a download from this app: the normal/original copy
+and a second 1080p copy. Enable it with:
+
+```env
+YOUTARR_DUAL_QUALITY_DOWNLOADS=true
+YOUTARR_SECONDARY_DOWNLOAD_RESOLUTION=1080
+YOUTARR_SECONDARY_DOWNLOAD_SUBFOLDER=1080p
+```
+
+Leave `YOUTARR_PRIMARY_DOWNLOAD_RESOLUTION` empty to keep using the quality set
+in Youtarr for that channel or globally. Set it to `2160` only if you want this
+app to force the primary download toward 4K.
+
+The second copy should use a separate subfolder or a Youtarr filename template
+that includes the resolution. Otherwise the 1080p copy may overwrite or conflict
+with the original. Youtarr Feed scans the media mount recursively, so a separate
+`1080p` subfolder is fine.
+
+When both variants exist, the player shows a quality switch:
+
+```text
+Auto | Original | 1080p
+```
+
+`Auto` uses 1080p on Apple/Safari-style clients when available, and Original on
+other browsers such as Firefox on macOS. If only one 1080p file exists, no switch
+is shown.
 
 When transcoding is enabled, Youtarr Feed checks local video files with
 `ffprobe`. By default it only prepares compatible versions for 1440p and 4K
