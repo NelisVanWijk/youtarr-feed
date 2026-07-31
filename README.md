@@ -355,6 +355,10 @@ the app prepares an Apple-compatible HLS stream with `ffmpeg`. Other clients
 keep using direct playback, so transcoding is not used for Windows/Chrome-style
 playback.
 
+HLS playback starts as soon as the first playlist and media segment are
+available; the remaining transcode continues in the background and is kept as a
+cache for later playback.
+
 For Intel Quick Sync on Unraid, pass the render device into the container:
 
 ```text

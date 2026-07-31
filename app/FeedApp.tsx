@@ -68,6 +68,7 @@ type StreamSourceInfo = {
     configured: boolean;
     available: boolean;
     ready: boolean;
+    complete: boolean;
     running: boolean;
     playlistUrl?: string;
     error?: string;
@@ -1081,7 +1082,7 @@ export default function FeedApp() {
       if (data.error && !data.running) {
         throw new Error(data.error);
       }
-      await wait(1500);
+      await wait(700);
     }
     throw new Error(copy.player.transcodeTimeout);
   }

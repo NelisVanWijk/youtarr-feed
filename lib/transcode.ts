@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { spawn } from "node:child_process";
@@ -27,6 +27,7 @@ export type TranscodeStatus = {
   configured: boolean;
   available: boolean;
   ready: boolean;
+  complete: boolean;
   running: boolean;
   playlistUrl?: string;
   error?: string;
@@ -131,6 +132,17 @@ async function isReady(videoId: string) {
   }
 }
 
+async function hasPlayableHls(videoId: string) {
+  try {
+    const playlistStat = await stat(playlistPath(videoId));
+    if (!playlistStat.isFile()) return false;
+    const files = await readdir(transcodeDirectory(videoId));
+    return files.some((fileName) => /^segment_\d{5}\.ts$/.test(fileName));
+  } catch {
+    return false;
+  }
+}
+
 function ffmpegArguments(inputPath: string, outputDirectory: string) {
   const segmentPath = path.join(outputDirectory, "segment_%05d.ts");
   const commonOutput = [
@@ -144,8 +156,10 @@ function ffmpegArguments(inputPath: string, outputDirectory: string) {
     "hls",
     "-hls_time",
     "4",
-    "-hls_playlist_type",
-    "vod",
+    "-hls_list_size",
+    "0",
+    "-hls_flags",
+    "independent_segments",
     "-hls_segment_filename",
     segmentPath,
     path.join(outputDirectory, "index.m3u8"),
@@ -205,6 +219,7 @@ export async function getTranscodeStatus(videoId: string): Promise<TranscodeStat
       configured: Boolean(transcodeRoot),
       available: false,
       ready: false,
+      complete: false,
       running: false,
       error: "Invalid video",
     };
@@ -212,14 +227,16 @@ export async function getTranscodeStatus(videoId: string): Promise<TranscodeStat
 
   const localFile = await getLocalMediaFile(videoId);
   const job = transcodeJobs.get(videoId);
-  const ready = transcodeEnabled && await isReady(videoId);
+  const complete = transcodeEnabled && await isReady(videoId);
+  const playable = complete || Boolean(job?.state === "running" && await hasPlayableHls(videoId));
   return {
     enabled: transcodeEnabled,
     configured: Boolean(transcodeRoot),
     available: Boolean(localFile),
-    ready,
+    ready: playable,
+    complete,
     running: job?.state === "running",
-    playlistUrl: ready ? playlistUrl(videoId) : undefined,
+    playlistUrl: playable ? playlistUrl(videoId) : undefined,
     error: job?.state === "error" ? job.error : undefined,
   };
 }
@@ -284,6 +301,7 @@ export async function startTranscode(videoId: string): Promise<TranscodeStatus> 
       configured: Boolean(transcodeRoot),
       available: false,
       ready: false,
+      complete: false,
       running: false,
       error: "Transcoding is disabled",
     };
@@ -294,6 +312,7 @@ export async function startTranscode(videoId: string): Promise<TranscodeStatus> 
       configured: Boolean(transcodeRoot),
       available: false,
       ready: false,
+      complete: false,
       running: false,
       error: "Invalid video",
     };
@@ -309,6 +328,7 @@ export async function startTranscode(videoId: string): Promise<TranscodeStatus> 
       configured: Boolean(transcodeRoot),
       available: false,
       ready: false,
+      complete: false,
       running: false,
       error: "Local media file not found",
     };
@@ -380,7 +400,6 @@ export async function getTranscodeHlsResponse(videoId: string, fileName: string)
   if (!transcodeEnabled || !isValidVideoId(videoId) || !hlsFilePattern.test(fileName)) {
     return null;
   }
-  if (!await isReady(videoId)) return null;
 
   const filePath = path.join(transcodeDirectory(videoId), fileName);
   try {
