@@ -91,6 +91,14 @@ type DownloadJob = {
 const palette = ["coral", "blue", "lime", "violet", "gold"];
 const languageStorageKey = "youtarr-feed-language";
 
+function isApplePlaybackUserAgent(value: string) {
+  return /\b(iPhone|iPad|iPod)\b/i.test(value) || (
+    /\bMacintosh\b/i.test(value) &&
+    /\bSafari\b/i.test(value) &&
+    !/\b(Chrome|Chromium|Edg|OPR|Firefox|CriOS|FxiOS)\b/i.test(value)
+  );
+}
+
 function NavIcon({ view }: { view: View }) {
   const icon =
     view === "feed"
@@ -524,7 +532,7 @@ export default function FeedApp() {
   const shouldUseInlineWatchPage = useCallback(() => {
     if (standaloneMode) return true;
     if (typeof navigator === "undefined") return false;
-    return /\b(iPhone|iPad|iPod)\b/i.test(navigator.userAgent);
+    return isApplePlaybackUserAgent(navigator.userAgent);
   }, [standaloneMode]);
 
   useEffect(() => {
@@ -1042,11 +1050,7 @@ export default function FeedApp() {
 
   function isApplePlaybackClient() {
     if (typeof navigator === "undefined") return false;
-    return /\b(iPhone|iPad|iPod)\b/i.test(navigator.userAgent) || (
-      /\bMacintosh\b/i.test(navigator.userAgent) &&
-      /\bSafari\b/i.test(navigator.userAgent) &&
-      !/\b(Chrome|Chromium|Edg|OPR|Firefox)\b/i.test(navigator.userAgent)
-    );
+    return isApplePlaybackUserAgent(navigator.userAgent);
   }
 
   function wait(milliseconds: number) {
