@@ -343,7 +343,7 @@ docker run -d \
 | `YOUTARR_DUAL_QUALITY_DOWNLOADS` | Optional | Set to `true` to ask Youtarr for a second 1080p copy whenever Youtarr Feed starts a download. Defaults to `false`. |
 | `YOUTARR_PRIMARY_DOWNLOAD_RESOLUTION` | Optional | Resolution override for the primary/original download. Leave empty to use Youtarr's channel/global setting. |
 | `YOUTARR_SECONDARY_DOWNLOAD_RESOLUTION` | Optional | Resolution for the second copy. Defaults to `1080`. |
-| `YOUTARR_SECONDARY_DOWNLOAD_SUBFOLDER` | Optional | Subfolder for the second copy so it does not overwrite the original. Defaults to `1080p`. |
+| `YOUTARR_SECONDARY_DOWNLOAD_SUBFOLDER` | Optional | Subfolder for the second copy so it does not overwrite the original. Defaults to `__1080p`. |
 | `YOUTARR_TRANSCODE_ENABLED` | Optional | Set to `true` to enable Apple-compatible transcoding. |
 | `YOUTARR_TRANSCODE_ACCEL` | Optional | Use `vaapi` for Intel Quick Sync, or `software`. Defaults to `vaapi` when a device is configured. |
 | `YOUTARR_TRANSCODE_DEVICE` | Optional | VAAPI render device, usually `/dev/dri/renderD128` on Unraid/Linux. |
@@ -373,7 +373,7 @@ and a second 1080p copy. Enable it with:
 ```env
 YOUTARR_DUAL_QUALITY_DOWNLOADS=true
 YOUTARR_SECONDARY_DOWNLOAD_RESOLUTION=1080
-YOUTARR_SECONDARY_DOWNLOAD_SUBFOLDER=1080p
+YOUTARR_SECONDARY_DOWNLOAD_SUBFOLDER=__1080p
 ```
 
 Leave `YOUTARR_PRIMARY_DOWNLOAD_RESOLUTION` empty to keep using the quality set
@@ -383,7 +383,7 @@ app to force the primary download toward 4K.
 The second copy should use a separate subfolder or a Youtarr filename template
 that includes the resolution. Otherwise the 1080p copy may overwrite or conflict
 with the original. Youtarr Feed scans the media mount recursively, so a separate
-`1080p` subfolder is fine.
+`__1080p` subfolder is fine.
 
 When `YOUTARR_FEED_DELETE_LOCAL_FILES=true` and the media mount is writable,
 Youtarr Feed removes every local file matching the deleted YouTube video ID after

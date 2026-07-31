@@ -1786,6 +1786,16 @@ export default function FeedApp() {
     playerStreamMode === "youtarr" ? "&direct=0" : ""
   }`;
   const localVariants = streamSource?.local?.variants || [];
+  const activeLocalVariant = localVariants.find(
+    (variant) => variant.quality === streamSource?.local?.quality
+  );
+  const activeLocalQualityLabel =
+    activeLocalVariant?.label ||
+    (streamSource?.local?.quality === "1080"
+      ? "1080p"
+      : streamSource?.local?.quality === "original"
+        ? "Original"
+        : undefined);
   const hasQualityVariants =
     localVariants.some((variant) => variant.quality === "original") &&
     localVariants.some((variant) => variant.quality === "1080");
@@ -2538,7 +2548,10 @@ export default function FeedApp() {
                   {playerStreamMode === "compatible"
                     ? copy.player.sourceCompatibleBody
                     : streamSource?.source === "local" && streamSource.local?.fileName
-                    ? copy.player.sourceDirectBody(streamSource.local.fileName)
+                    ? copy.player.sourceDirectBody(
+                        streamSource.local.fileName,
+                        activeLocalQualityLabel
+                      )
                     : streamSource?.local?.configured === false
                       ? copy.player.sourceNoMount
                       : streamSource?.source === "youtarr"

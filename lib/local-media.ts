@@ -4,6 +4,9 @@ import path from "node:path";
 import { Readable } from "node:stream";
 
 const mediaDirectory = process.env.YOUTARR_MEDIA_DIR?.trim() || "";
+const secondaryQualitySubfolder =
+  process.env.YOUTARR_SECONDARY_DOWNLOAD_SUBFOLDER?.trim().toLowerCase() ||
+  "__1080p";
 const allowedExtensions = new Set([".mp4", ".m4v", ".mov", ".webm", ".mkv"]);
 const appleFriendlyExtensions = new Set([".mp4", ".m4v", ".mov"]);
 const mimeTypes = new Map([
@@ -57,6 +60,22 @@ function variantLabel(height?: number) {
   if (!height) return "Original";
   if (height >= 2160) return "4K";
   return `${height}p`;
+}
+
+function isSecondaryQualityPath(filePath: string) {
+  if (!mediaDirectory || !secondaryQualitySubfolder) return false;
+  const relative = path.relative(mediaDirectory, filePath).toLowerCase();
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
+    return false;
+  }
+  return relative
+    .split(/[\\/]+/)
+    .some((segment) => segment === secondaryQualitySubfolder);
+}
+
+function inferVariantQuality(filePath: string): "original" | "1080" {
+  if (isSecondaryQualityPath(filePath)) return "1080";
+  return inferHeight(filePath) === 1080 ? "1080" : "original";
 }
 
 async function findLocalVideoFiles(videoId: string) {
@@ -161,7 +180,7 @@ export async function getLocalMediaVariants(videoId: string) {
       const fileStat = await stat(filePath);
       const extension = path.extname(filePath).toLowerCase();
       const height = inferHeight(filePath);
-      const quality = height === 1080 ? "1080" : "original";
+      const quality = inferVariantQuality(filePath);
       if (variants.some((variant) => variant.quality === quality)) continue;
       variants.push({
         quality,
@@ -191,8 +210,8 @@ function selectVariant(
 ) {
   const original = variants.find((variant) => variant.quality === "original");
   const hd = variants.find((variant) => variant.quality === "1080");
-  if (quality === "1080") return hd || original || null;
-  if (quality === "original") return original || hd || null;
+  if (quality === "1080") return hd || null;
+  if (quality === "original") return original || null;
   if (isLikelyAppleClient(userAgent) && hd) return hd;
   return original || hd || null;
 }
@@ -312,6 +331,8 @@ export async function getLocalMediaResponse(
     "Content-Type": contentType,
     "X-Content-Type-Options": "nosniff",
     "Cache-Control": "no-store",
+    "X-Youtarr-Feed-File": encodeURIComponent(status.fileName),
+    "X-Youtarr-Feed-Quality": status.quality || "unknown",
   });
 
   if (parsedRange === "invalid") {

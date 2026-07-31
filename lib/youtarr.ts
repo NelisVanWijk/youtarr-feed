@@ -506,7 +506,7 @@ export async function queueDualQualityDownload(
   const secondaryResolution =
     process.env.YOUTARR_SECONDARY_DOWNLOAD_RESOLUTION?.trim() || "1080";
   const secondarySubfolder =
-    process.env.YOUTARR_SECONDARY_DOWNLOAD_SUBFOLDER?.trim() || "1080p";
+    process.env.YOUTARR_SECONDARY_DOWNLOAD_SUBFOLDER?.trim() || "__1080p";
 
   const primary = await queueDownload(youtubeId, {
     ...options,

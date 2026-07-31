@@ -156,7 +156,8 @@ export const translations = {
       sourceDirect: "Direct file",
       sourceYoutarr: "Via Youtarr",
       sourceCompatible: "Compatible stream",
-      sourceDirectBody: (fileName: string) => `Read-only mount: ${fileName}`,
+      sourceDirectBody: (fileName: string, quality?: string) =>
+        `Direct ${quality ? `${quality}: ` : ""}${fileName}`,
       sourceCompatibleBody: "Apple-friendly HLS stream prepared on this server.",
       sourceNoMount: "No media mount configured; falling back to Youtarr.",
       sourceFallback: "Local file not found; using stream fallback.",
@@ -345,7 +346,8 @@ export const translations = {
       sourceDirect: "Direct bestand",
       sourceYoutarr: "Via Youtarr",
       sourceCompatible: "Compatible stream",
-      sourceDirectBody: (fileName: string) => `Read-only mount: ${fileName}`,
+      sourceDirectBody: (fileName: string, quality?: string) =>
+        `Direct ${quality ? `${quality}: ` : ""}${fileName}`,
       sourceCompatibleBody: "Apple-vriendelijke HLS-stream voorbereid op deze server.",
       sourceNoMount: "Geen media-mount ingesteld; fallback naar Youtarr.",
       sourceFallback: "Lokaal bestand niet gevonden; stream fallback.",
