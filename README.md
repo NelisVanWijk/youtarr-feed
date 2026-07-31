@@ -368,6 +368,14 @@ YOUTARR_TRANSCODE_ACCEL=vaapi
 YOUTARR_TRANSCODE_DEVICE=/dev/dri/renderD128
 ```
 
+After updating the container, VAAPI can be checked from inside the container:
+
+```bash
+docker exec -it youtarr-feed vainfo --display drm --device /dev/dri/renderD128
+```
+
+For Intel 11th gen and newer, the container uses the `iHD` VAAPI driver.
+
 For Apple devices and AirPlay, the safest high-quality target is usually:
 
 ```text

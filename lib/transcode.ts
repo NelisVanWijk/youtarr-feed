@@ -322,6 +322,10 @@ export async function startTranscode(videoId: string): Promise<TranscodeStatus> 
   await mkdir(outputDirectory, { recursive: true });
 
   const child = spawn("ffmpeg", ffmpegArguments(localFile.filePath, outputDirectory), {
+    env: {
+      ...process.env,
+      LIBVA_DRIVER_NAME: process.env.LIBVA_DRIVER_NAME || "iHD",
+    },
     windowsHide: true,
   });
   let stderr = "";
