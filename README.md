@@ -55,12 +55,15 @@ The player shows the active source for downloaded videos:
 - `Direct file`: streaming from the read-only media mount.
 - `Via Youtarr`: local file was not found, so playback uses Youtarr's stream
   endpoint.
+- `Compatible stream`: Apple-friendly HLS generated server-side from the local
+  file, used only when enabled and needed for iPhone, iPad, Safari, or AirPlay.
 
 Video thumbnails also show a compact `Direct` or `Youtarr` badge for downloaded
 items, so you can see the expected playback path before opening the video.
 
 Direct local streaming does not change delete behavior. Deletes still go
 through Youtarr, so Youtarr remains the owner of the library.
+Deleting a download also removes its cached compatible transcode.
 
 The Local tab uses Youtarr's downloaded-video state as its source of truth. It
 shows all videos Youtarr reports as downloaded and lets you play or delete them
@@ -300,12 +303,16 @@ docker run -d \
   --name youtarr-feed \
   --restart unless-stopped \
   --add-host=host.docker.internal:host-gateway \
+  --device=/dev/dri:/dev/dri \
   -p 3090:3000 \
   -e YOUTARR_URL=http://host.docker.internal:3087 \
   -e YOUTARR_USERNAME=your-username \
   -e YOUTARR_PASSWORD=your-password \
   -e YOUTARR_FEED_DATA_DIR=/data \
   -e YOUTARR_MEDIA_DIR=/usr/src/app/data \
+  -e YOUTARR_TRANSCODE_ENABLED=true \
+  -e YOUTARR_TRANSCODE_ACCEL=vaapi \
+  -e YOUTARR_TRANSCODE_DEVICE=/dev/dri/renderD128 \
   -v ./data:/data \
   -v /path/to/youtarr/output:/usr/src/app/data:ro \
   ghcr.io/nelisvanwijk/youtarr-feed:latest
@@ -325,6 +332,12 @@ docker run -d \
 | `YOUTARR_FEED_DATA_DIR` | Recommended | Persistent app data directory. Defaults to `/data` in production. |
 | `YOUTARR_FEED_CACHE_TTL_SECONDS` | Optional | Server-side feed/local-video cache duration. Defaults to `300`. |
 | `YOUTARR_MEDIA_DIR` | Recommended | Read-only mount of the Youtarr output folder for direct streaming. |
+| `YOUTARR_TRANSCODE_ENABLED` | Optional | Set to `true` to enable Apple-compatible HLS transcoding. |
+| `YOUTARR_TRANSCODE_ACCEL` | Optional | Use `vaapi` for Intel Quick Sync, or `software`. Defaults to `vaapi` when a device is configured. |
+| `YOUTARR_TRANSCODE_DEVICE` | Optional | VAAPI render device, usually `/dev/dri/renderD128` on Unraid/Linux. |
+| `YOUTARR_TRANSCODE_DIR` | Optional | Persistent transcode cache directory. Defaults to `<data dir>/transcodes`. |
+| `YOUTARR_TRANSCODE_VIDEO_BITRATE` | Optional | Target video bitrate for compatible HLS. Defaults to `18000k`. |
+| `YOUTARR_TRANSCODE_AUDIO_BITRATE` | Optional | Target AAC audio bitrate. Defaults to `160k`. |
 | `PLEX_URL` | Optional | Plex server URL for refresh requests. |
 | `PLEX_TOKEN` | Optional | Plex token. |
 | `PLEX_LIBRARY_ID` | Optional | Numeric Plex library section ID. |
@@ -332,7 +345,28 @@ docker run -d \
 ## iPhone, AirPlay, And Codecs
 
 Direct local streaming can reduce buffering because it removes the Youtarr
-stream proxy from the playback path. It does not fix codec compatibility.
+stream proxy from the playback path. It does not fix codec compatibility by
+itself.
+
+When transcoding is enabled, Youtarr Feed checks the selected local video with
+`ffprobe` on Apple clients. If the file is not a simple H.264/AAC MP4/M4V/MOV,
+the app prepares an Apple-compatible HLS stream with `ffmpeg`. Other clients
+keep using direct playback, so transcoding is not used for Windows/Chrome-style
+playback.
+
+For Intel Quick Sync on Unraid, pass the render device into the container:
+
+```text
+Extra Parameters: --device=/dev/dri:/dev/dri
+```
+
+Recommended transcode variables:
+
+```env
+YOUTARR_TRANSCODE_ENABLED=true
+YOUTARR_TRANSCODE_ACCEL=vaapi
+YOUTARR_TRANSCODE_DEVICE=/dev/dri/renderD128
+```
 
 For Apple devices and AirPlay, the safest high-quality target is usually:
 

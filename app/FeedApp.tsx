@@ -46,6 +46,7 @@ import type {
 type View = "feed" | "continue" | "local" | "singles" | "channels";
 type Filter = "all" | "new" | "downloaded";
 type PlayerMode = "full" | "mini";
+type PlayerStreamMode = "direct" | "youtarr" | "compatible";
 type WebKitVideoElement = HTMLVideoElement & {
   webkitEnterFullscreen?: () => void;
   webkitPresentationMode?: string;
@@ -62,7 +63,24 @@ type StreamSourceInfo = {
     size?: number;
     compatible?: boolean;
   };
+  transcode?: {
+    enabled: boolean;
+    configured: boolean;
+    available: boolean;
+    ready: boolean;
+    running: boolean;
+    playlistUrl?: string;
+    error?: string;
+  };
   youtarrConfigured: boolean;
+};
+type TranscodeResponse = StreamSourceInfo["transcode"] & {
+  appleDecision?: {
+    suggested: boolean;
+    reason?: string;
+    videoCodec?: string;
+    audioCodec?: string;
+  };
 };
 type DownloadJob = {
   state: "queueing" | "queued" | "error";
@@ -471,7 +489,11 @@ export default function FeedApp() {
   const [selectedVideo, setSelectedVideo] = useState<FeedVideo | null>(null);
   const [playerMode, setPlayerMode] = useState<PlayerMode>("full");
   const [playerPlaying, setPlayerPlaying] = useState(false);
-  const [playerStreamFallback, setPlayerStreamFallback] = useState(false);
+  const [playerStreamMode, setPlayerStreamMode] = useState<PlayerStreamMode>("direct");
+  const [transcodeState, setTranscodeState] = useState<
+    "idle" | "checking" | "starting" | "running" | "ready" | "error"
+  >("idle");
+  const [transcodeError, setTranscodeError] = useState("");
   const [downloadJobs, setDownloadJobs] = useState<Record<string, DownloadJob>>({});
   const [deleteState, setDeleteState] = useState<"idle" | "deleting" | "error">(
     "idle"
@@ -499,6 +521,11 @@ export default function FeedApp() {
   const pauseIntentTimerRef = useRef<number | null>(null);
   const mode: AppMode = feed?.mode || "demo";
   const copy = translations[language];
+  const shouldUseInlineWatchPage = useCallback(() => {
+    if (standaloneMode) return true;
+    if (typeof navigator === "undefined") return false;
+    return /\b(iPhone|iPad|iPod)\b/i.test(navigator.userAgent);
+  }, [standaloneMode]);
 
   useEffect(() => {
     window.localStorage.setItem(languageStorageKey, language);
@@ -706,12 +733,13 @@ export default function FeedApp() {
       playerMode === "full" &&
       selectedVideo?.downloaded &&
       mode === "live" &&
-      playerRef.current
+      playerRef.current &&
+      !shouldUseInlineWatchPage()
     ) {
       updateMediaSession(selectedVideo);
       void requestNativeFullscreen(playerRef.current);
     }
-  }, [mode, playerMode, selectedVideo]);
+  }, [mode, playerMode, selectedVideo, shouldUseInlineWatchPage]);
 
   useEffect(() => {
     const refreshSourceLabels = () => {
@@ -777,7 +805,7 @@ export default function FeedApp() {
   }, [selectedVideo?.id]);
 
   useEffect(() => {
-    if (!playerStreamFallback || !playerRef.current) return;
+    if (playerStreamMode === "direct" || !playerRef.current) return;
     const player = playerRef.current;
     player.load();
     if (intendedPlaybackRef.current) {
@@ -785,7 +813,7 @@ export default function FeedApp() {
         setPlayerPlaying(false);
       });
     }
-  }, [playerStreamFallback]);
+  }, [playerStreamMode]);
 
   useEffect(() => {
     let stopped = false;
@@ -797,7 +825,7 @@ export default function FeedApp() {
       if (!selectedVideo?.downloaded || mode !== "live") return;
       try {
         const response = await fetch(
-          `/api/stream/${encodeURIComponent(selectedVideo.id)}/source`,
+          `/api/stream/${encodeURIComponent(selectedVideo.id)}/source?detail=1`,
           { cache: "no-store" }
         );
         if (!response.ok) return;
@@ -1012,6 +1040,114 @@ export default function FeedApp() {
     );
   }
 
+  function isApplePlaybackClient() {
+    if (typeof navigator === "undefined") return false;
+    return /\b(iPhone|iPad|iPod)\b/i.test(navigator.userAgent) || (
+      /\bMacintosh\b/i.test(navigator.userAgent) &&
+      /\bSafari\b/i.test(navigator.userAgent) &&
+      !/\b(Chrome|Chromium|Edg|OPR|Firefox)\b/i.test(navigator.userAgent)
+    );
+  }
+
+  function wait(milliseconds: number) {
+    return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+  }
+
+  async function pollTranscode(videoId: string) {
+    for (let attempt = 0; attempt < 90; attempt += 1) {
+      const response = await fetch(`/api/transcode/${encodeURIComponent(videoId)}`, {
+        cache: "no-store",
+      });
+      const data = (await response.json()) as TranscodeResponse;
+      setStreamSources((current) => ({
+        ...current,
+        [videoId]: {
+          ...(current[videoId] || {
+            source: "local" as const,
+            youtarrConfigured: true,
+          }),
+          transcode: data,
+        },
+      }));
+      if (selectedVideo?.id === videoId) {
+        setStreamSource((current) =>
+          current ? { ...current, transcode: data } : current
+        );
+      }
+      if (data.ready && data.playlistUrl) {
+        setTranscodeState("ready");
+        return data;
+      }
+      if (data.error && !data.running) {
+        throw new Error(data.error);
+      }
+      await wait(1500);
+    }
+    throw new Error(copy.player.transcodeTimeout);
+  }
+
+  async function startCompatibleStream(video: FeedVideo) {
+    setTranscodeError("");
+    setTranscodeState("starting");
+    setPlayerStreamMode("compatible");
+    try {
+      const response = await fetch(`/api/transcode/${encodeURIComponent(video.id)}`, {
+        method: "POST",
+      });
+      const data = (await response.json()) as TranscodeResponse;
+      if (!response.ok && data?.error) throw new Error(data.error);
+      if (data.ready && data.playlistUrl) {
+        setTranscodeState("ready");
+        return;
+      }
+      setTranscodeState("running");
+      await pollTranscode(video.id);
+    } catch (transcodeFailure) {
+      setTranscodeState("error");
+      setTranscodeError(
+        transcodeFailure instanceof Error
+          ? transcodeFailure.message
+          : copy.player.transcodeFailed
+      );
+      setPlayerStreamMode("youtarr");
+    }
+  }
+
+  async function chooseInitialStream(video: FeedVideo) {
+    setPlayerStreamMode("direct");
+    setTranscodeState("idle");
+    setTranscodeError("");
+
+    if (!isApplePlaybackClient()) return;
+    try {
+      setPlayerStreamMode("compatible");
+      setTranscodeState("checking");
+      const response = await fetch(`/api/transcode/${encodeURIComponent(video.id)}`, {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        setPlayerStreamMode("direct");
+        setTranscodeState("idle");
+        return;
+      }
+      const data = (await response.json()) as TranscodeResponse;
+      if (data.ready && data.playlistUrl && data.appleDecision?.suggested) {
+        setPlayerStreamMode("compatible");
+        setTranscodeState("ready");
+        return;
+      }
+      if (data.enabled && data.available && data.appleDecision?.suggested) {
+        await startCompatibleStream(video);
+        return;
+      }
+      setPlayerStreamMode("direct");
+      setTranscodeState("idle");
+    } catch {
+      setPlayerStreamMode("direct");
+      setTranscodeState("idle");
+    }
+  }
+
   async function openChannel(channelId: string) {
     const channel = feed?.channels.find((item) => item.id === channelId);
     if (!channel) return;
@@ -1056,12 +1192,16 @@ export default function FeedApp() {
             if (source.source === "local") {
               const downloadedVideo = { ...video, downloaded: true };
               markVideoDownloaded(downloadedVideo);
-              setPlayerStreamFallback(false);
+              const appleClient = isApplePlaybackClient();
+              setPlayerStreamMode(appleClient ? "compatible" : "direct");
+              setTranscodeState(appleClient ? "checking" : "idle");
+              setTranscodeError("");
               setSelectedVideo(downloadedVideo);
               setPlayerMode("full");
               setPlayerPlaying(false);
               setDeleteState("idle");
               setDeleteError("");
+              void chooseInitialStream(downloadedVideo);
               return;
             }
           }
@@ -1072,12 +1212,16 @@ export default function FeedApp() {
       void startDownload(video);
       return;
     }
-    setPlayerStreamFallback(false);
+    const appleClient = isApplePlaybackClient();
+    setPlayerStreamMode(appleClient ? "compatible" : "direct");
+    setTranscodeState(appleClient ? "checking" : "idle");
+    setTranscodeError("");
     setSelectedVideo(video);
     setPlayerMode("full");
     setPlayerPlaying(false);
     setDeleteState("idle");
     setDeleteError("");
+    void chooseInitialStream(video);
   }
 
   function closePlayer() {
@@ -1087,7 +1231,8 @@ export default function FeedApp() {
     }
     playerRef.current?.pause();
     intendedPlaybackRef.current = false;
-    setPlayerStreamFallback(false);
+    setPlayerStreamMode("direct");
+    setTranscodeState("idle");
     setPlayerPlaying(false);
     setSelectedVideo(null);
   }
@@ -1414,6 +1559,21 @@ export default function FeedApp() {
     status?.mode === "live" && activity && activity.state !== "idle"
       ? activity
       : null;
+  const selectedVideoId = selectedVideo
+    ? encodeURIComponent(selectedVideo.id)
+    : "";
+  const playerSource = selectedVideo
+    ? playerStreamMode === "compatible"
+      ? `/api/transcode/${selectedVideoId}/hls/index.m3u8`
+      : `/api/stream/${selectedVideoId}${
+          playerStreamMode === "youtarr" ? "?direct=0" : ""
+        }`
+    : "";
+  const transcodePreparing =
+    selectedVideo?.downloaded &&
+    playerStreamMode === "compatible" &&
+    transcodeState !== "ready";
+  const inlineWatchPage = selectedVideo ? shouldUseInlineWatchPage() : false;
 
   return (
     <div className="app-shell">
@@ -1926,7 +2086,9 @@ export default function FeedApp() {
           className={
             playerMode === "mini"
               ? "mini-player-shell"
-              : "modal-backdrop player-backdrop"
+              : `modal-backdrop player-backdrop ${
+                  inlineWatchPage ? "watch-page-backdrop" : ""
+                }`
           }
           role="presentation"
           onMouseDown={(event) => {
@@ -1941,7 +2103,9 @@ export default function FeedApp() {
         >
           <section
             className={
-              playerMode === "mini" ? "video-modal video-modal-mini" : "video-modal"
+              playerMode === "mini"
+                ? "video-modal video-modal-mini"
+                : `video-modal ${inlineWatchPage ? "video-modal-watch-page" : ""}`
             }
             role="dialog"
             aria-modal="true"
@@ -1979,98 +2143,116 @@ export default function FeedApp() {
               )}
             {selectedVideo.downloaded && mode === "live" ? (
               <>
-                <video
-                  ref={playerRef}
-                  className="player"
-                  controls={playerMode === "full"}
-                  autoPlay
-                  playsInline
-                  disableRemotePlayback={false}
-                  preload="metadata"
-                  poster={selectedVideo.thumbnail || undefined}
-                  src={`/api/stream/${encodeURIComponent(selectedVideo.id)}${
-                    playerStreamFallback ? "?direct=0" : ""
-                  }`}
-                  onLoadedMetadata={(event) => {
-                    event.currentTarget.setAttribute("x-webkit-airplay", "allow");
-                    event.currentTarget.setAttribute("webkit-playsinline", "true");
-                    updateMediaSession(selectedVideo);
-                    updateMediaSessionControls(event.currentTarget);
-                    resumePlayback(selectedVideo.id, event.currentTarget);
-                    if (playerMode === "full") {
-                      void requestNativeFullscreen(event.currentTarget);
+                {transcodePreparing ? (
+                  <div className="download-panel transcode-panel">
+                    <div className="download-orbit active">
+                      <FontAwesomeIcon icon={faRotateRight} aria-hidden="true" />
+                    </div>
+                    <span className="eyebrow">{copy.player.transcodeEyebrow}</span>
+                    <h2>{copy.player.transcodeTitle}</h2>
+                    <p>
+                      {transcodeState === "checking"
+                        ? copy.player.transcodeChecking
+                        : copy.player.transcodeBody}
+                    </p>
+                  </div>
+                ) : (
+                  <video
+                    ref={playerRef}
+                    className="player"
+                    controls={playerMode === "full"}
+                    autoPlay
+                    playsInline
+                    disableRemotePlayback={false}
+                    preload="metadata"
+                    poster={selectedVideo.thumbnail || undefined}
+                    src={playerSource}
+                    onLoadedMetadata={(event) => {
+                      event.currentTarget.setAttribute("x-webkit-airplay", "allow");
+                      event.currentTarget.setAttribute("webkit-playsinline", "true");
+                      updateMediaSession(selectedVideo);
+                      updateMediaSessionControls(event.currentTarget);
+                      resumePlayback(selectedVideo.id, event.currentTarget);
+                      if (playerMode === "full" && !inlineWatchPage) {
+                        void requestNativeFullscreen(event.currentTarget);
+                      }
+                    }}
+                    onPlay={(event) => {
+                      if (pauseIntentTimerRef.current) {
+                        window.clearTimeout(pauseIntentTimerRef.current);
+                        pauseIntentTimerRef.current = null;
+                      }
+                      intendedPlaybackRef.current = true;
+                      setPlayerPlaying(true);
+                      updateMediaSession(selectedVideo);
+                      updateMediaSessionControls(event.currentTarget);
+                      if ("mediaSession" in navigator) {
+                        navigator.mediaSession.playbackState = "playing";
+                      }
+                      if (playerMode === "full" && !inlineWatchPage) {
+                        void requestNativeFullscreen(event.currentTarget);
+                      }
+                    }}
+                    onTimeUpdate={(event) =>
+                      storeWatchProgress(
+                        selectedVideo.id,
+                        event.currentTarget.currentTime,
+                        event.currentTarget.duration
+                      )
                     }
-                  }}
-                  onPlay={(event) => {
-                    if (pauseIntentTimerRef.current) {
-                      window.clearTimeout(pauseIntentTimerRef.current);
-                      pauseIntentTimerRef.current = null;
-                    }
-                    intendedPlaybackRef.current = true;
-                    setPlayerPlaying(true);
-                    updateMediaSession(selectedVideo);
-                    updateMediaSessionControls(event.currentTarget);
-                    if ("mediaSession" in navigator) {
-                      navigator.mediaSession.playbackState = "playing";
-                    }
-                    if (playerMode === "full") {
-                      void requestNativeFullscreen(event.currentTarget);
-                    }
-                  }}
-                  onTimeUpdate={(event) =>
-                    storeWatchProgress(
-                      selectedVideo.id,
-                      event.currentTarget.currentTime,
-                      event.currentTarget.duration
-                    )
-                  }
-                  onPause={(event) => {
-                    if (pauseIntentTimerRef.current) {
-                      window.clearTimeout(pauseIntentTimerRef.current);
-                    }
-                    pauseIntentTimerRef.current = window.setTimeout(() => {
+                    onPause={(event) => {
+                      if (pauseIntentTimerRef.current) {
+                        window.clearTimeout(pauseIntentTimerRef.current);
+                      }
+                      pauseIntentTimerRef.current = window.setTimeout(() => {
+                        intendedPlaybackRef.current = false;
+                        pauseIntentTimerRef.current = null;
+                      }, 350);
+                      setPlayerPlaying(false);
+                      if ("mediaSession" in navigator) {
+                        navigator.mediaSession.playbackState = "paused";
+                      }
+                      storeWatchProgress(
+                        selectedVideo.id,
+                        event.currentTarget.currentTime,
+                        event.currentTarget.duration,
+                        true
+                      );
+                    }}
+                    onEnded={(event) => {
                       intendedPlaybackRef.current = false;
-                      pauseIntentTimerRef.current = null;
-                    }, 350);
-                    setPlayerPlaying(false);
-                    if ("mediaSession" in navigator) {
-                      navigator.mediaSession.playbackState = "paused";
-                    }
-                    storeWatchProgress(
-                      selectedVideo.id,
-                      event.currentTarget.currentTime,
-                      event.currentTarget.duration,
-                      true
-                    );
-                  }}
-                  onEnded={(event) => {
-                    intendedPlaybackRef.current = false;
-                    setPlayerPlaying(false);
-                    storeWatchProgress(
-                      selectedVideo.id,
-                      event.currentTarget.duration,
-                      event.currentTarget.duration,
-                      true
-                    );
-                  }}
-                  onError={(event) => {
-                    intendedPlaybackRef.current =
-                      intendedPlaybackRef.current || !event.currentTarget.paused;
-                    if (!playerStreamFallback) {
-                      const fallbackSource: StreamSourceInfo = {
-                        source: "youtarr",
-                        local: streamSource?.local,
-                        youtarrConfigured: streamSource?.youtarrConfigured ?? true,
-                      };
-                      setStreamSource(fallbackSource);
-                      setStreamSources((current) => ({
-                        ...current,
-                        [selectedVideo.id]: fallbackSource,
-                      }));
-                      setPlayerStreamFallback(true);
-                    }
-                  }}
-                />
+                      setPlayerPlaying(false);
+                      storeWatchProgress(
+                        selectedVideo.id,
+                        event.currentTarget.duration,
+                        event.currentTarget.duration,
+                        true
+                      );
+                    }}
+                    onError={(event) => {
+                      intendedPlaybackRef.current =
+                        intendedPlaybackRef.current || !event.currentTarget.paused;
+                      if (playerStreamMode === "direct" && isApplePlaybackClient()) {
+                        void startCompatibleStream(selectedVideo);
+                        return;
+                      }
+                      if (playerStreamMode === "direct") {
+                        const fallbackSource: StreamSourceInfo = {
+                          source: "youtarr",
+                          local: streamSource?.local,
+                          transcode: streamSource?.transcode,
+                          youtarrConfigured: streamSource?.youtarrConfigured ?? true,
+                        };
+                        setStreamSource(fallbackSource);
+                        setStreamSources((current) => ({
+                          ...current,
+                          [selectedVideo.id]: fallbackSource,
+                        }));
+                        setPlayerStreamMode("youtarr");
+                      }
+                    }}
+                  />
+                )}
                 {playerMode === "mini" && (
                   <div
                     className="mini-player-controls"
@@ -2122,15 +2304,25 @@ export default function FeedApp() {
               </button>
               <span>{relativeDate(selectedVideo.publishedAt, copy)}</span>
               {selectedVideo.downloaded && (
-                <p className={`stream-source stream-source-${streamSource?.source || "unknown"}`}>
+                <p
+                  className={`stream-source stream-source-${
+                    playerStreamMode === "compatible"
+                      ? "compatible"
+                      : streamSource?.source || "unknown"
+                  }`}
+                >
                   <strong>
-                    {streamSource?.source === "local"
+                    {playerStreamMode === "compatible"
+                      ? copy.player.sourceCompatible
+                      : streamSource?.source === "local"
                       ? copy.player.sourceDirect
                       : streamSource?.source === "youtarr"
                         ? copy.player.sourceYoutarr
                         : copy.player.sourceChecking}
                   </strong>
-                  {streamSource?.source === "local" && streamSource.local?.fileName
+                  {playerStreamMode === "compatible"
+                    ? copy.player.sourceCompatibleBody
+                    : streamSource?.source === "local" && streamSource.local?.fileName
                     ? copy.player.sourceDirectBody(streamSource.local.fileName)
                     : streamSource?.local?.configured === false
                       ? copy.player.sourceNoMount
@@ -2139,6 +2331,38 @@ export default function FeedApp() {
                         : copy.player.sourceCheckingBody}
                 </p>
               )}
+              {selectedVideo.downloaded &&
+                mode === "live" &&
+                streamSource?.transcode?.enabled &&
+                isApplePlaybackClient() && (
+                  <div className="stream-switch" aria-label={copy.player.streamMode}>
+                  <button
+                    className={playerStreamMode !== "compatible" ? "active" : ""}
+                    onClick={() => {
+                      setTranscodeError("");
+                      setPlayerStreamMode("direct");
+                    }}
+                  >
+                    {copy.player.useDefault}
+                  </button>
+                  <button
+                    className={playerStreamMode === "compatible" ? "active" : ""}
+                    onClick={() => void startCompatibleStream(selectedVideo)}
+                    disabled={
+                      transcodeState === "checking" ||
+                      transcodeState === "starting" ||
+                      transcodeState === "running"
+                    }
+                  >
+                    {transcodeState === "checking" ||
+                    transcodeState === "starting" ||
+                    transcodeState === "running"
+                      ? copy.player.transcoding
+                      : copy.player.useCompatible}
+                  </button>
+                  </div>
+                )}
+              {transcodeError && <small className="transcode-error">{transcodeError}</small>}
               {selectedVideo.downloaded && (
                 <div className="modal-actions">
                   <button

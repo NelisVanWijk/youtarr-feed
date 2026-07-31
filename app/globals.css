@@ -1121,6 +1121,84 @@ main {
   background: linear-gradient(to top, rgba(0, 0, 0, 0.86), transparent);
 }
 
+.watch-page-backdrop {
+  overflow: auto;
+  place-items: start center;
+  background: #0b0b0c;
+}
+
+.player-backdrop .video-modal-watch-page {
+  min-height: 100dvh;
+  overflow: auto;
+  background: #0b0b0c;
+}
+
+.player-backdrop .video-modal-watch-page .player {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  object-fit: contain;
+  background: #000;
+}
+
+.player-backdrop .video-modal-watch-page .download-panel {
+  min-height: auto;
+  aspect-ratio: 16 / 9;
+  padding: 28px 20px;
+  border-radius: 0;
+}
+
+.player-backdrop .video-modal-watch-page .modal-copy {
+  position: static;
+  padding: 18px 18px calc(28px + var(--safe-bottom));
+  background: #0b0b0c;
+}
+
+.video-modal-watch-page .modal-copy h2 {
+  font-size: 20px;
+  line-height: 1.22;
+}
+
+.transcode-panel .download-orbit {
+  margin-bottom: 14px;
+}
+
+.stream-switch {
+  margin-top: 12px;
+  display: inline-flex;
+  padding: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+}
+
+.stream-switch button {
+  height: 32px;
+  padding: 0 12px;
+  color: var(--muted);
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.stream-switch button.active {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.stream-switch button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.transcode-error {
+  margin-top: 8px;
+  display: block;
+  color: #ffb7b1;
+}
+
 .mini-player-shell {
   position: fixed;
   z-index: 90;
@@ -1326,6 +1404,11 @@ main {
 .stream-source-youtarr {
   background: rgba(255, 198, 92, 0.1);
   border-color: rgba(255, 198, 92, 0.26);
+}
+
+.stream-source-compatible {
+  background: rgba(92, 179, 255, 0.1);
+  border-color: rgba(92, 179, 255, 0.26);
 }
 
 .modal-actions {

@@ -18,7 +18,7 @@ function isValidVideoId(value: string) {
   return /^[A-Za-z0-9_-]{11}$/.test(value);
 }
 
-function isLikelyAppleClient(userAgent?: string | null) {
+export function isLikelyAppleClient(userAgent?: string | null) {
   if (!userAgent) return false;
   return /\b(iPhone|iPad|iPod)\b/i.test(userAgent) || (
     /\bMacintosh\b/i.test(userAgent) &&
@@ -72,6 +72,26 @@ async function findLocalVideoFile(videoId: string) {
   })[0] || null;
 }
 
+export async function getLocalMediaFile(videoId: string) {
+  if (!mediaDirectory || !isValidVideoId(videoId)) return null;
+
+  const filePath = await findLocalVideoFile(videoId);
+  if (!filePath) return null;
+
+  try {
+    const fileStat = await stat(filePath);
+    return {
+      filePath,
+      fileName: path.basename(filePath),
+      size: fileStat.size,
+      mtimeMs: fileStat.mtimeMs,
+      extension: path.extname(filePath).toLowerCase(),
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function getLocalMediaLookup(videoId: string, userAgent?: string | null) {
   if (!mediaDirectory) {
     return {
@@ -81,8 +101,8 @@ async function getLocalMediaLookup(videoId: string, userAgent?: string | null) {
     };
   }
 
-  const filePath = await findLocalVideoFile(videoId);
-  if (!filePath) {
+  const localFile = await getLocalMediaFile(videoId);
+  if (!localFile) {
     return {
       configured: true,
       available: false,
@@ -91,17 +111,16 @@ async function getLocalMediaLookup(videoId: string, userAgent?: string | null) {
   }
 
   try {
-    const fileStat = await stat(filePath);
-    const extension = path.extname(filePath).toLowerCase();
-    const appleCompatible = !isLikelyAppleClient(userAgent) || appleFriendlyExtensions.has(extension);
+    const appleCompatible = !isLikelyAppleClient(userAgent) ||
+      appleFriendlyExtensions.has(localFile.extension);
     return {
       configured: true,
       available: appleCompatible,
       source: appleCompatible ? "local" as const : "youtarr" as const,
-      filePath,
-      fileName: path.basename(filePath),
-      size: fileStat.size,
-      extension,
+      filePath: localFile.filePath,
+      fileName: localFile.fileName,
+      size: localFile.size,
+      extension: localFile.extension,
       compatible: appleCompatible,
     };
   } catch {

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getLocalMediaStatus } from "../../../../../lib/local-media";
+import { getTranscodeStatus } from "../../../../../lib/transcode";
 import { isYoutarrConfigured } from "../../../../../lib/youtarr";
 
 export const dynamic = "force-dynamic";
@@ -13,10 +14,14 @@ export async function GET(
     return NextResponse.json({ error: "Invalid video" }, { status: 400 });
   }
 
-  const local = await getLocalMediaStatus(id, request.headers.get("user-agent"));
+  const [local, transcode] = await Promise.all([
+    getLocalMediaStatus(id, request.headers.get("user-agent")),
+    getTranscodeStatus(id),
+  ]);
   return NextResponse.json({
     source: local.available ? "local" : "youtarr",
     local,
+    transcode,
     youtarrConfigured: isYoutarrConfigured(),
   });
 }
