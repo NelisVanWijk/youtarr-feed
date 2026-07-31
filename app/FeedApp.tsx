@@ -1,11 +1,25 @@
 "use client";
 
 import {
+  faCheck,
+  faChevronLeft,
+  faChevronRight,
+  faCirclePlay,
   faClockRotateLeft,
+  faClone,
+  faDownload,
+  faEllipsisVertical,
   faFolderOpen,
   faHouse,
+  faInbox,
   faList,
+  faMagnifyingGlass,
+  faMinus,
+  faMobileScreenButton,
+  faPause,
+  faPlay,
   faRotateRight,
+  faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -324,9 +338,7 @@ function VideoCard({
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}
           >
-            <span />
-            <span />
-            <span />
+            <FontAwesomeIcon icon={faEllipsisVertical} aria-hidden="true" />
           </button>
           {menuOpen && (
             <div className="video-menu">
@@ -1118,12 +1130,16 @@ export default function FeedApp() {
       <header className="topbar">
         <button className="brand" onClick={() => switchView("feed")}>
           <span className="brand-mark">
-            <i />
+            <FontAwesomeIcon icon={faCirclePlay} aria-hidden="true" />
           </span>
           <span>Youtarr</span>
         </button>
         <div className={`search-wrap ${searchOpen ? "search-open" : ""}`}>
-          <span className="search-icon" aria-hidden="true" />
+          <FontAwesomeIcon
+            className="search-icon"
+            icon={faMagnifyingGlass}
+            aria-hidden="true"
+          />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -1132,7 +1148,7 @@ export default function FeedApp() {
           />
           {query && (
             <button onClick={() => setQuery("")} aria-label="Zoekopdracht wissen">
-              ×
+              <FontAwesomeIcon icon={faXmark} aria-hidden="true" />
             </button>
           )}
         </div>
@@ -1142,7 +1158,11 @@ export default function FeedApp() {
             onClick={() => setSearchOpen((open) => !open)}
             aria-label="Zoeken"
           >
-            <span className="search-icon" />
+            <FontAwesomeIcon
+              className="search-icon"
+              icon={faMagnifyingGlass}
+              aria-hidden="true"
+            />
           </button>
           <button
             className={`round-button refresh-button ${refreshing ? "spinning" : ""}`}
@@ -1271,7 +1291,9 @@ export default function FeedApp() {
               </div>
             ) : (
               <div className="empty-state">
-                <span className="empty-mark">0</span>
+                <span className="empty-mark">
+                  <FontAwesomeIcon icon={faInbox} aria-hidden="true" />
+                </span>
                 <h2>Geen video’s gevonden</h2>
                 <p>Pas je filter of zoekopdracht aan.</p>
               </div>
@@ -1308,7 +1330,9 @@ export default function FeedApp() {
               </div>
             ) : (
               <div className="empty-state">
-                <span className="empty-mark">0</span>
+                <span className="empty-mark">
+                  <FontAwesomeIcon icon={faInbox} aria-hidden="true" />
+                </span>
                 <h2>Niets om verder te kijken</h2>
                 <p>Start een gedownloade video en je vindt hem hier terug.</p>
               </div>
@@ -1351,7 +1375,9 @@ export default function FeedApp() {
               </div>
             ) : (
               <div className="empty-state">
-                <span className="empty-mark">0</span>
+                <span className="empty-mark">
+                  <FontAwesomeIcon icon={faInbox} aria-hidden="true" />
+                </span>
                 <h2>Geen lokale video&apos;s</h2>
                 <p>Gedownloade video&apos;s verschijnen hier zodra Youtarr ze ziet.</p>
               </div>
@@ -1406,7 +1432,11 @@ export default function FeedApp() {
                           : "Downloaden bij openen"}
                       </small>
                     </span>
-                    <span className="chevron">›</span>
+                    <FontAwesomeIcon
+                      className="chevron"
+                      icon={faChevronRight}
+                      aria-hidden="true"
+                    />
                   </button>
                 ))}
               </div>
@@ -1423,7 +1453,7 @@ export default function FeedApp() {
                 setChannelVideos([]);
               }}
             >
-              <span>‹</span> Alle kanalen
+              <FontAwesomeIcon icon={faChevronLeft} aria-hidden="true" /> Alle kanalen
             </button>
             <section className="channel-hero">
               <ChannelAvatar channel={selectedChannel} size="large" />
@@ -1508,7 +1538,11 @@ export default function FeedApp() {
 
       <div className="orientation-guard" role="status" aria-live="polite">
         <div>
-          <span className="orientation-mark" aria-hidden="true" />
+          <FontAwesomeIcon
+            className="orientation-mark"
+            icon={faMobileScreenButton}
+            aria-hidden="true"
+          />
           <strong>Draai je iPhone terug</strong>
           <p>Youtarr Feed is vastgezet voor staand gebruik.</p>
         </div>
@@ -1548,7 +1582,10 @@ export default function FeedApp() {
               onClick={closePlayer}
               aria-label={playerMode === "mini" ? "Sluiten" : "Klein maken"}
             >
-              {playerMode === "mini" ? "x" : "-"}
+              <FontAwesomeIcon
+                icon={playerMode === "mini" ? faXmark : faMinus}
+                aria-hidden="true"
+              />
             </button>
             {playerMode === "full" &&
               standaloneMode &&
@@ -1564,7 +1601,7 @@ export default function FeedApp() {
                   }}
                   aria-label="Picture-in-picture"
                 >
-                  PiP
+                  <FontAwesomeIcon icon={faClone} aria-hidden="true" />
                 </button>
               )}
             {selectedVideo.downloaded && mode === "live" ? (
@@ -1655,14 +1692,9 @@ export default function FeedApp() {
                       aria-label={playerPlaying ? "Pauzeren" : "Afspelen"}
                     >
                       {playerPlaying ? (
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M8 6v12" />
-                          <path d="M16 6v12" />
-                        </svg>
+                        <FontAwesomeIcon icon={faPause} aria-hidden="true" />
                       ) : (
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="m9 6 9 6-9 6Z" />
-                        </svg>
+                        <FontAwesomeIcon icon={faPlay} aria-hidden="true" />
                       )}
                     </button>
                   </div>
@@ -1670,13 +1702,15 @@ export default function FeedApp() {
               </>
             ) : selectedVideo.downloaded ? (
               <div className="demo-player">
-                <span className="demo-play">▶</span>
+                <span className="demo-play">
+                  <FontAwesomeIcon icon={faPlay} aria-hidden="true" />
+                </span>
                 <p>In de gekoppelde versie speelt hier je lokale bestand.</p>
               </div>
             ) : (
               <div className="download-panel">
                 <div className="download-orbit">
-                  <span>↓</span>
+                  <FontAwesomeIcon icon={faDownload} aria-hidden="true" />
                 </div>
                 <span className="eyebrow">Nog niet lokaal</span>
                 <h2>
@@ -1753,10 +1787,10 @@ export default function FeedApp() {
               onClick={() => setSettingsOpen(false)}
               aria-label="Sluiten"
             >
-              ×
+              <FontAwesomeIcon icon={faXmark} aria-hidden="true" />
             </button>
             <span className={`connection-icon connection-${mode}`}>
-              <i />
+              <FontAwesomeIcon icon={faCheck} aria-hidden="true" />
             </span>
             <span className="eyebrow">Koppeling</span>
             <h2>

@@ -88,7 +88,6 @@ input:focus-visible {
 }
 
 .brand-mark {
-  position: relative;
   width: 33px;
   height: 24px;
   display: grid;
@@ -98,13 +97,10 @@ input:focus-visible {
   box-shadow: 0 7px 20px rgba(255, 74, 61, 0.18);
 }
 
-.brand-mark i {
-  width: 0;
-  height: 0;
-  margin-left: 2px;
-  border-top: 5px solid transparent;
-  border-bottom: 5px solid transparent;
-  border-left: 8px solid #fff;
+.brand-mark .svg-inline--fa {
+  width: 15px;
+  height: 15px;
+  color: #fff;
 }
 
 .search-wrap {
@@ -143,33 +139,20 @@ input:focus-visible {
   width: 26px;
   height: 26px;
   padding: 0;
+  display: grid;
+  place-items: center;
   background: transparent;
   color: var(--muted);
-  font-size: 23px;
+  font-size: 14px;
   line-height: 1;
 }
 
 .search-icon {
-  position: relative;
   width: 16px;
   height: 16px;
   flex: 0 0 auto;
   display: block;
-  border: 1.8px solid var(--muted);
-  border-radius: 50%;
-}
-
-.search-icon::after {
-  content: "";
-  position: absolute;
-  width: 7px;
-  height: 1.8px;
-  right: -5px;
-  bottom: -3px;
-  background: var(--muted);
-  border-radius: 2px;
-  transform: rotate(45deg);
-  transform-origin: left center;
+  color: var(--muted);
 }
 
 .top-actions {
@@ -695,20 +678,17 @@ main {
   height: 30px;
   display: grid;
   place-content: center;
-  gap: 3px;
   border-radius: 6px;
+  color: var(--muted);
 }
 
 .more-button:hover {
   background: var(--surface-raised);
 }
 
-.more-button span {
-  width: 3px;
-  height: 3px;
-  display: block;
-  background: var(--muted);
-  border-radius: 50%;
+.more-button .svg-inline--fa {
+  width: 13px;
+  height: 13px;
 }
 
 .video-menu-wrap {
@@ -841,8 +821,7 @@ main {
 
 .chevron {
   color: var(--quiet);
-  font-size: 27px;
-  font-weight: 300;
+  font-size: 13px;
 }
 
 .back-button {
@@ -858,9 +837,9 @@ main {
   font-weight: 650;
 }
 
-.back-button span {
-  margin-top: -2px;
-  font-size: 23px;
+.back-button .svg-inline--fa {
+  width: 11px;
+  height: 11px;
 }
 
 .channel-hero {
@@ -926,7 +905,7 @@ main {
   border: 1px solid var(--line);
   border-radius: 50%;
   color: var(--quiet);
-  font-size: 18px;
+  font-size: 22px;
 }
 
 .empty-state h2 {
@@ -1070,26 +1049,14 @@ main {
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 50%;
   color: #fff;
-  font-size: 22px;
+  font-size: 14px;
   line-height: 1;
   backdrop-filter: blur(8px);
 }
 
-.modal-close {
-  font-size: 0;
-}
-
-.modal-close::before {
-  font-size: 21px;
-  line-height: 1;
-}
-
-.modal-close-minimize::before {
-  content: "-";
-}
-
-.modal-close-x::before {
-  content: "x";
+.modal-close .svg-inline--fa {
+  width: 14px;
+  height: 14px;
 }
 
 .modal-pip {
@@ -1097,9 +1064,9 @@ main {
   z-index: 5;
   top: 12px;
   right: 54px;
-  min-width: 46px;
+  width: 34px;
   height: 34px;
-  padding: 0 10px;
+  padding: 0;
   display: grid;
   place-items: center;
   background: rgba(11, 11, 12, 0.74);
@@ -1110,6 +1077,11 @@ main {
   font-weight: 800;
   line-height: 1;
   backdrop-filter: blur(8px);
+}
+
+.modal-pip .svg-inline--fa {
+  width: 14px;
+  height: 14px;
 }
 
 .player {
@@ -1194,19 +1166,9 @@ main {
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.36);
 }
 
-.mini-play-button svg {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.mini-play-button svg path[d*="Z"] {
-  fill: currentColor;
-  stroke: none;
+.mini-play-button .svg-inline--fa {
+  width: 18px;
+  height: 18px;
 }
 
 .orientation-guard {
@@ -1214,24 +1176,9 @@ main {
 }
 
 .orientation-mark {
-  position: relative;
-  width: 38px;
-  height: 54px;
-  display: block;
-  border: 2px solid currentColor;
-  border-radius: 10px;
-}
-
-.orientation-mark::after {
-  content: "";
-  position: absolute;
-  bottom: 5px;
-  left: 50%;
-  width: 4px;
-  height: 4px;
-  background: currentColor;
-  border-radius: 50%;
-  transform: translateX(-50%);
+  width: 42px;
+  height: 42px;
+  color: currentColor;
 }
 
 .demo-player,
@@ -1253,10 +1200,15 @@ main {
   height: 74px;
   display: grid;
   place-items: center;
-  padding-left: 5px;
   background: var(--accent);
   border-radius: 50%;
   box-shadow: 0 18px 55px rgba(255, 74, 61, 0.24);
+}
+
+.demo-play .svg-inline--fa {
+  width: 24px;
+  height: 24px;
+  margin-left: 3px;
 }
 
 .demo-player p,
@@ -1285,6 +1237,11 @@ main {
   border-radius: 50%;
   color: #ff796f;
   font-size: 29px;
+}
+
+.download-orbit .svg-inline--fa {
+  width: 25px;
+  height: 25px;
 }
 
 .download-orbit.active {
@@ -1426,12 +1383,9 @@ main {
   border-radius: 50%;
 }
 
-.connection-icon i {
-  width: 19px;
-  height: 10px;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: rotate(45deg) translate(-2px, -2px);
+.connection-icon .svg-inline--fa {
+  width: 22px;
+  height: 22px;
 }
 
 .connection-live {
