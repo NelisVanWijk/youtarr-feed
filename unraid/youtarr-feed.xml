@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/NelisVanWijk/youtarr-feed/issues</Support>
   <Project>https://github.com/NelisVanWijk/youtarr-feed</Project>
-  <Overview>Mobiele abonnementenfeed voor Youtarr. Bekijk kanalen apart, speel lokale video's af, start ontbrekende downloads en synchroniseer kijkvoortgang server-side.</Overview>
+  <Overview>Mobile-first subscription feed for Youtarr. Browse channels, play local videos, start missing downloads, save single video links, and sync watch progress server-side.</Overview>
   <Category>MediaApp:Video:</Category>
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/NelisVanWijk/youtarr-feed/main/unraid/youtarr-feed.xml</TemplateURL>
@@ -20,23 +20,23 @@
   <DateInstalled/>
   <DonateText/>
   <DonateLink/>
-  <Requires>Een bereikbare Youtarr-installatie. Youtarr-gebruikersnaam en wachtwoord zijn nodig voor de abonnementenfeed, tenzij je een sessietoken gebruikt.</Requires>
+  <Requires>A reachable Youtarr instance. A Youtarr username and password are required for the subscription feed unless you use a session token.</Requires>
 
-  <Config Name="WebUI Port" Target="3000" Default="3090" Mode="tcp" Description="Poort waarop Youtarr Feed via je Unraid-server bereikbaar is." Type="Port" Display="always" Required="true" Mask="false">3090</Config>
-  <Config Name="Youtarr URL" Target="YOUTARR_URL" Default="http://host.docker.internal:3087" Mode="" Description="Intern adres van Youtarr, bereikbaar vanuit deze container." Type="Variable" Display="always" Required="true" Mask="false">http://host.docker.internal:3087</Config>
-  <Config Name="Youtarr Username" Target="YOUTARR_USERNAME" Default="" Mode="" Description="Gebruikersnaam van Youtarr. Niet nodig wanneer je een sessietoken gebruikt." Type="Variable" Display="always" Required="false" Mask="false"/>
-  <Config Name="Youtarr Password" Target="YOUTARR_PASSWORD" Default="" Mode="" Description="Wachtwoord van Youtarr. Blijft alleen als afgeschermde containerinstelling op Unraid." Type="Variable" Display="always" Required="false" Mask="true"/>
-  <Config Name="Youtarr API Key" Target="YOUTARR_API_KEY" Default="" Mode="" Description="Optionele Youtarr API-key voor downloadopdrachten. Voor de feed blijven inloggegevens of een sessietoken nodig." Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="YouTube API Key" Target="YOUTUBE_API_KEY" Default="" Mode="" Description="Optioneel fallback veld voor exacte YouTube publishedAt-tijden in Youtarr Feed. Zet de YouTube API-key liever eerst in Youtarr zelf; gebruik dit alleen als Youtarr datum-only waarden blijft teruggeven." Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="Youtarr Session Token" Target="YOUTARR_SESSION_TOKEN" Default="" Mode="" Description="Alternatief voor gebruikersnaam en wachtwoord. Let op: een sessie kan verlopen." Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="Youtarr Authentication Disabled" Target="YOUTARR_AUTH_DISABLED" Default="false" Mode="" Description="Alleen op true zetten als authenticatie in jouw Youtarr-installatie bewust is uitgeschakeld." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
-  <Config Name="App Data" Target="/data" Default="/mnt/user/appdata/youtarr-feed" Mode="rw" Description="Persistente opslag voor server-side kijkvoortgang en Verder kijken." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/youtarr-feed</Config>
-  <Config Name="Data Directory" Target="YOUTARR_FEED_DATA_DIR" Default="/data" Mode="" Description="Interne containerlocatie voor de watchstate-database. Laat op /data staan." Type="Variable" Display="advanced" Required="true" Mask="false">/data</Config>
-  <Config Name="Feed Cache TTL" Target="YOUTARR_FEED_CACHE_TTL_SECONDS" Default="300" Mode="" Description="Aantal seconden dat feed en lokale-video overzichten server-side gecachet worden. Standaard 300 voor snelle app-starts zonder te lang achterlopende data." Type="Variable" Display="advanced" Required="false" Mask="false">300</Config>
-  <Config Name="Youtarr Media Path" Target="/usr/src/app/data" Default="/mnt/user/Media/Youtarr" Mode="ro" Description="Dezelfde hostmap als Youtarrs output/downloadmap. Mount read-only zodat Youtarr Feed bestanden direct kan streamen voor stabieler afspelen/AirPlay." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/Media/Youtarr</Config>
-  <Config Name="Media Directory" Target="YOUTARR_MEDIA_DIR" Default="/usr/src/app/data" Mode="" Description="Interne containerlocatie van de read-only Youtarr-media mount. Laat gelijk aan het containerpad hierboven." Type="Variable" Display="advanced" Required="false" Mask="false">/usr/src/app/data</Config>
+  <Config Name="WebUI Port" Target="3000" Default="3090" Mode="tcp" Description="Port where Youtarr Feed is reachable through your Unraid server." Type="Port" Display="always" Required="true" Mask="false">3090</Config>
+  <Config Name="Youtarr URL" Target="YOUTARR_URL" Default="http://host.docker.internal:3087" Mode="" Description="Internal Youtarr address reachable from this container." Type="Variable" Display="always" Required="true" Mask="false">http://host.docker.internal:3087</Config>
+  <Config Name="Youtarr Username" Target="YOUTARR_USERNAME" Default="" Mode="" Description="Youtarr username. Not needed when using a session token." Type="Variable" Display="always" Required="false" Mask="false"/>
+  <Config Name="Youtarr Password" Target="YOUTARR_PASSWORD" Default="" Mode="" Description="Youtarr password. Kept only as a protected server-side container setting on Unraid." Type="Variable" Display="always" Required="false" Mask="true"/>
+  <Config Name="Youtarr API Key" Target="YOUTARR_API_KEY" Default="" Mode="" Description="Optional Youtarr API key for download commands. Feed access still needs login credentials or a session token." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="YouTube API Key" Target="YOUTUBE_API_KEY" Default="" Mode="" Description="Optional fallback for exact YouTube publishedAt timestamps in Youtarr Feed. Prefer setting this key in Youtarr itself first; use this only if Youtarr still returns date-only values." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Youtarr Session Token" Target="YOUTARR_SESSION_TOKEN" Default="" Mode="" Description="Alternative to username and password. Sessions can expire." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Youtarr Authentication Disabled" Target="YOUTARR_AUTH_DISABLED" Default="false" Mode="" Description="Set to true only if authentication is intentionally disabled in your Youtarr installation." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="App Data" Target="/data" Default="/mnt/user/appdata/youtarr-feed" Mode="rw" Description="Persistent storage for server-side watch progress, Continue Watching, feed cache, and single videos." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/youtarr-feed</Config>
+  <Config Name="Data Directory" Target="YOUTARR_FEED_DATA_DIR" Default="/data" Mode="" Description="Internal container location for persistent app data. Keep this set to /data." Type="Variable" Display="advanced" Required="true" Mask="false">/data</Config>
+  <Config Name="Feed Cache TTL" Target="YOUTARR_FEED_CACHE_TTL_SECONDS" Default="300" Mode="" Description="Number of seconds feed and local-video overviews are cached server-side. Default is 300 for fast app starts without data staying stale for too long." Type="Variable" Display="advanced" Required="false" Mask="false">300</Config>
+  <Config Name="Youtarr Media Path" Target="/usr/src/app/data" Default="/mnt/user/Media/Youtarr" Mode="ro" Description="Same host folder as Youtarr's output/download folder. Mount read-only so Youtarr Feed can stream files directly for more stable playback and AirPlay." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/Media/Youtarr</Config>
+  <Config Name="Media Directory" Target="YOUTARR_MEDIA_DIR" Default="/usr/src/app/data" Mode="" Description="Internal container location of the read-only Youtarr media mount. Keep this equal to the container path above." Type="Variable" Display="advanced" Required="false" Mask="false">/usr/src/app/data</Config>
 
-  <Config Name="Plex URL" Target="PLEX_URL" Default="http://host.docker.internal:32400" Mode="" Description="Optioneel. Intern adres van Plex voor een bibliotheekscan nadat een download klaar is." Type="Variable" Display="advanced" Required="false" Mask="false"/>
-  <Config Name="Plex Token" Target="PLEX_TOKEN" Default="" Mode="" Description="Optioneel Plex-token. Wordt alleen server-side gebruikt en nooit naar je iPhone gestuurd." Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="Plex Library ID" Target="PLEX_LIBRARY_ID" Default="" Mode="" Description="Optioneel numeriek ID van je Youtarr-bibliotheek in Plex." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Plex URL" Target="PLEX_URL" Default="http://host.docker.internal:32400" Mode="" Description="Optional. Internal Plex address for a library scan after a download completes." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Plex Token" Target="PLEX_TOKEN" Default="" Mode="" Description="Optional Plex token. Used server-side only and never sent to your phone." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Plex Library ID" Target="PLEX_LIBRARY_ID" Default="" Mode="" Description="Optional numeric ID of your Youtarr library in Plex." Type="Variable" Display="advanced" Required="false" Mask="false"/>
 </Container>

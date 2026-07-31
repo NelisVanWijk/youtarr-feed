@@ -13,13 +13,13 @@ struct LocalVideosScreen: View {
 
     var body: some View {
         VideoListScreen(
-            title: "Lokaal",
-            subtitle: "Alles wat Youtarr als gedownload ziet",
+            title: "Local",
+            subtitle: "Everything Youtarr sees as downloaded",
             videos: videos,
             query: $query,
             selectedVideo: $selectedVideo,
-            emptyTitle: "Geen lokale video's",
-            emptyMessage: "Gedownloade servervideo's verschijnen hier zodra Youtarr ze ziet."
+            emptyTitle: "No local videos",
+            emptyMessage: "Downloaded server videos appear here once Youtarr sees them."
         )
         .task {
             await model.refreshLocal()

@@ -11,6 +11,6 @@ services:
       - "3090:3000"
     volumes:
       - ./data:/data
-      # Gebruik hier dezelfde hostmap als Youtarr, read-only.
-      # Pas de hostpath aan voor jouw server.
+      # Use the same host folder as Youtarr, read-only.
+      # Adjust the host path for your server.
       - /mnt/user/Media/Youtarr:/usr/src/app/data:ro

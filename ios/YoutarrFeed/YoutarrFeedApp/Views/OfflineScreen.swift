@@ -29,9 +29,9 @@ struct OfflineScreen: View {
             Section("Offline") {
                 if offlineLibrary.videos.isEmpty {
                     ContentUnavailableView(
-                        "Geen offline video's",
+                        "No offline videos",
                         systemImage: "iphone.slash",
-                        description: Text("Download een servervideo offline om hem zonder verbinding te kijken.")
+                        description: Text("Download a server video offline to watch it without a connection.")
                     )
                 } else {
                     ForEach(offlineLibrary.videos) { offline in
@@ -42,7 +42,7 @@ struct OfflineScreen: View {
                             Button(role: .destructive) {
                                 offlineLibrary.delete(offline)
                             } label: {
-                                Label("Verwijder", systemImage: "trash")
+                                Label("Delete", systemImage: "trash")
                             }
                         }
                     }
@@ -60,9 +60,9 @@ struct OfflineScreen: View {
         case .running:
             return "\(Int(download.progress * 100))%"
         case .finished:
-            return "Klaar"
+            return "Done"
         case .failed:
-            return "Mislukt"
+            return "Failed"
         }
     }
 }

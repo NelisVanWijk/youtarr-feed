@@ -13,7 +13,7 @@ export async function GET() {
     return NextResponse.json({ mode: "live", channels });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Kanalen laden mislukte" },
+      { error: error instanceof Error ? error.message : "Could not load channels" },
       { status: 502 }
     );
   }

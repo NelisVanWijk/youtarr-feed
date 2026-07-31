@@ -37,7 +37,7 @@ export async function GET(request: Request) {
         error:
           error instanceof Error
             ? error.message
-            : "Lokale video's laden mislukte",
+            : "Could not load local videos",
       },
       { status: 502 }
     );

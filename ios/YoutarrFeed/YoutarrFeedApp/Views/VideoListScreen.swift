@@ -20,8 +20,8 @@ struct VideoListScreen<Header: View>: View {
         videos: [FeedVideo],
         query: Binding<String>,
         selectedVideo: Binding<FeedVideo?>,
-        emptyTitle: String = "Geen video's",
-        emptyMessage: String = "Er is niets gevonden met deze filter.",
+        emptyTitle: String = "No videos",
+        emptyMessage: String = "Nothing was found with this filter.",
         @ViewBuilder header: () -> Header
     ) {
         self.title = title
@@ -91,7 +91,7 @@ struct VideoListScreen<Header: View>: View {
             .padding(.bottom, 24)
         }
         .navigationTitle(title)
-        .searchable(text: $query, prompt: "Zoeken")
+        .searchable(text: $query, prompt: "Search")
         .refreshable {
             await model.refreshAll()
         }
@@ -108,8 +108,8 @@ extension VideoListScreen where Header == EmptyView {
         videos: [FeedVideo],
         query: Binding<String>,
         selectedVideo: Binding<FeedVideo?>,
-        emptyTitle: String = "Geen video's",
-        emptyMessage: String = "Er is niets gevonden met deze filter."
+        emptyTitle: String = "No videos",
+        emptyMessage: String = "Nothing was found with this filter."
     ) {
         self.init(
             title: title,
@@ -167,7 +167,7 @@ struct VideoCard: View {
                             if video.downloaded {
                                 SourceBadge(source: source)
                             } else {
-                                Text("Nog ophalen")
+                                Text("Not downloaded")
                                     .badgeStyle(background: .orange)
                             }
                             if isOffline {
@@ -219,17 +219,17 @@ struct VideoCard: View {
                 Menu {
                     if video.downloaded {
                         Button(action: onPlay) {
-                            Label("Afspelen", systemImage: "play.fill")
+                            Label("Play", systemImage: "play.fill")
                         }
                         Button(action: onOfflineDownload) {
                             Label("Download offline", systemImage: "iphone.and.arrow.down")
                         }
                         Button(role: .destructive, action: onDelete) {
-                            Label("Serverdownload verwijderen", systemImage: "trash")
+                            Label("Delete server download", systemImage: "trash")
                         }
                     } else {
                         Button(action: onServerDownload) {
-                            Label("Download naar server", systemImage: "arrow.down.circle")
+                            Label("Download to server", systemImage: "arrow.down.circle")
                         }
                     }
                 } label: {
@@ -255,7 +255,7 @@ struct SourceBadge: View {
             Text("Youtarr")
                 .badgeStyle(background: .blue)
         } else {
-            Text("Lokaal...")
+            Text("Local...")
                 .badgeStyle(background: .gray)
         }
     }

@@ -21,7 +21,7 @@ export async function GET() {
         error:
           error instanceof Error
             ? error.message
-            : "Losse video's laden mislukte",
+            : "Could not load single videos",
       },
       { status: 500 }
     );
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
         error:
           error instanceof Error
             ? error.message
-            : "Losse video toevoegen mislukte",
+            : "Could not add single video",
       },
       { status: 400 }
     );
@@ -66,7 +66,7 @@ export async function DELETE(request: Request) {
         error:
           error instanceof Error
             ? error.message
-            : "Losse video verwijderen mislukte",
+            : "Could not remove single video",
       },
       { status: 400 }
     );

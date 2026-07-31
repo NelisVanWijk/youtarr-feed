@@ -32,6 +32,6 @@ export async function refreshPlexLibrary() {
   );
 
   if (!response.ok) {
-    throw new Error(`Plex-bibliotheekscan mislukte (${response.status})`);
+    throw new Error(`Plex library scan failed (${response.status})`);
   }
 }

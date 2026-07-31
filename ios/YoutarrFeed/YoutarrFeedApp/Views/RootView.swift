@@ -17,14 +17,14 @@ struct RootView: View {
                 ContinueScreen()
             }
             .tabItem {
-                Label("Verder", systemImage: "clock.arrow.circlepath")
+                Label("Continue", systemImage: "clock.arrow.circlepath")
             }
 
             NavigationStack {
                 LocalVideosScreen()
             }
             .tabItem {
-                Label("Lokaal", systemImage: "externaldrive")
+                Label("Local", systemImage: "externaldrive")
             }
 
             NavigationStack {
@@ -38,7 +38,7 @@ struct RootView: View {
                 ChannelsScreen()
             }
             .tabItem {
-                Label("Kanalen", systemImage: "rectangle.stack")
+                Label("Channels", systemImage: "rectangle.stack")
             }
         }
         .task {

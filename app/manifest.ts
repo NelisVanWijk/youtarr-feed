@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Youtarr Feed",
     short_name: "Youtarr",
-    description: "Je eigen abonnementenfeed, lokaal afgespeeld via Youtarr.",
+    description: "A mobile-first subscription feed and local playback app for Youtarr.",
     start_url: "/",
     display: "standalone",
     background_color: "#0c0c0d",

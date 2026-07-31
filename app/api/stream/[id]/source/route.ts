@@ -10,7 +10,7 @@ export async function GET(
 ) {
   const { id } = await context.params;
   if (!/^[A-Za-z0-9_-]{11}$/.test(id)) {
-    return NextResponse.json({ error: "Ongeldige video" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid video" }, { status: 400 });
   }
 
   const local = await getLocalMediaStatus(id);

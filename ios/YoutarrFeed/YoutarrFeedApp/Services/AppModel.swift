@@ -121,7 +121,7 @@ final class AppModel: ObservableObject {
         guard let api else { return }
         do {
             try await api.queueServerDownload(videoId: video.id)
-            message = "Download gestart in Youtarr"
+            message = "Download started in Youtarr"
             await refreshActivity()
         } catch {
             message = error.localizedDescription

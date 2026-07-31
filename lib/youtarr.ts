@@ -106,13 +106,13 @@ async function login() {
   if (!response.ok) {
     throw new Error(
       response.status === 401
-        ? "Youtarr heeft de inloggegevens geweigerd"
-        : `Youtarr-inloggen mislukte (${response.status})`
+        ? "Youtarr rejected the login credentials"
+        : `Youtarr login failed (${response.status})`
     );
   }
 
   const data = (await response.json()) as { token?: string; expires?: string };
-  if (!data.token) throw new Error("Youtarr gaf geen sessie terug");
+  if (!data.token) throw new Error("Youtarr did not return a session");
   cachedToken = data.token;
   tokenExpiresAt = data.expires
     ? new Date(data.expires).getTime()
@@ -125,7 +125,7 @@ async function requestYoutarr(
   init: RequestInit = {},
   retry = true
 ): Promise<Response> {
-  if (!configuredUrl) throw new Error("YOUTARR_URL ontbreekt");
+  if (!configuredUrl) throw new Error("YOUTARR_URL is missing");
   const token = await login();
   const headers = new Headers(init.headers);
   if (token) headers.set("x-access-token", token);
@@ -150,7 +150,7 @@ async function requestYoutarr(
 async function getJson<T>(path: string): Promise<T> {
   const response = await requestYoutarr(path);
   if (!response.ok) {
-    throw new Error(`Youtarr-aanvraag mislukte (${response.status})`);
+    throw new Error(`Youtarr request failed (${response.status})`);
   }
   return (await response.json()) as T;
 }
@@ -159,7 +159,7 @@ function toChannel(channel: YoutarrChannel): Channel {
   const id = channel.channel_id || "";
   return {
     id,
-    name: channel.uploader || "Naamloos kanaal",
+    name: channel.uploader || "Untitled channel",
     url: channel.url || "",
     avatar: id ? `/api/channel-avatar/${encodeURIComponent(id)}` : "",
     autoDownload: (channel.auto_download_enabled_tabs || "")
@@ -179,7 +179,7 @@ function toVideo(video: YoutarrVideo, channel: Channel): FeedVideo | null {
     channelId: channel.id,
     channelName: channel.name,
     channelAvatar: channel.avatar,
-    title: video.title || "Video zonder titel",
+    title: video.title || "Untitled video",
     thumbnail:
       video.thumbnail && !video.thumbnail.startsWith("/")
         ? video.thumbnail
@@ -390,7 +390,7 @@ export async function getFeed(): Promise<{
 export async function getVideosForChannel(channelId: string, page = 1) {
   const channels = await getChannels();
   const channel = channels.find((item) => item.id === channelId);
-  if (!channel) throw new Error("Kanaal niet gevonden");
+  if (!channel) throw new Error("Channel not found");
   const videos = await fetchChannelVideos(channel, page, 36);
   return { channel, videos };
 }
@@ -419,7 +419,7 @@ export async function getDownloadedVideos(): Promise<{
           }))
         );
       } else {
-        warnings.push(`${batch[resultIndex].name} kon lokale video's niet laden`);
+        warnings.push(`${batch[resultIndex].name} local videos could not be loaded`);
       }
     });
   }
@@ -435,7 +435,7 @@ export async function queueDownload(
   options: { allowRedownload?: boolean; channelId?: string } = {}
 ) {
   if (!/^[A-Za-z0-9_-]{11}$/.test(youtubeId)) {
-    throw new Error("Ongeldig video-ID");
+    throw new Error("Invalid video ID");
   }
   const url = `https://www.youtube.com/watch?v=${youtubeId}`;
   const body =
@@ -480,14 +480,14 @@ export async function queueDownload(
     message?: string;
   };
   if (!response.ok || data.success === false || data.status === "error") {
-    throw new Error(data.error || `Download starten mislukte (${response.status})`);
+    throw new Error(data.error || `Could not start download (${response.status})`);
   }
   return data;
 }
 
 export async function deleteDownload(youtubeId: string) {
   if (!/^[A-Za-z0-9_-]{11}$/.test(youtubeId)) {
-    throw new Error("Ongeldig video-ID");
+    throw new Error("Invalid video ID");
   }
   const response = await requestYoutarr("/api/videos", {
     method: "DELETE",
@@ -500,14 +500,14 @@ export async function deleteDownload(youtubeId: string) {
     message?: string;
   };
   if (!response.ok || data.success === false) {
-    throw new Error(data.error || data.message || `Verwijderen mislukte (${response.status})`);
+    throw new Error(data.error || data.message || `Could not delete download (${response.status})`);
   }
   return data;
 }
 
 export async function addChannel(url: string) {
   const normalized = url.trim();
-  if (!normalized) throw new Error("Kanaal-URL ontbreekt");
+  if (!normalized) throw new Error("Channel URL is required");
 
   const infoResponse = await requestYoutarr("/addchannelinfo", {
     method: "POST",
@@ -520,10 +520,10 @@ export async function addChannel(url: string) {
     channelInfo?: YoutarrChannelInfo;
   };
   if (!infoResponse.ok || infoData.status !== "success" || !infoData.channelInfo) {
-    throw new Error(infoData.message || `Kanaal toevoegen mislukte (${infoResponse.status})`);
+    throw new Error(infoData.message || `Could not add channel (${infoResponse.status})`);
   }
   if (infoData.channelInfo.enabled) {
-    throw new Error("Dit kanaal staat al in Youtarr");
+    throw new Error("This channel is already in Youtarr");
   }
 
   const channelId = infoData.channelInfo.channel_id || infoData.channelInfo.id || "";
@@ -539,7 +539,7 @@ export async function addChannel(url: string) {
     message?: string;
   };
   if (!updateResponse.ok || updateData.status !== "success") {
-    throw new Error(updateData.message || `Kanaal opslaan mislukte (${updateResponse.status})`);
+    throw new Error(updateData.message || `Could not save channel (${updateResponse.status})`);
   }
 
   return {
@@ -563,7 +563,7 @@ function summarizeActivity(snapshot: YoutarrActivitySnapshot): DownloadActivity 
   const state = progress.state || (snapshot.terminal ? "idle" : "active");
 
   if (!activity || (snapshot.terminal && !finalSummary && state === "idle")) {
-    return { state: "idle", label: "Geen actieve download", percent: 0 };
+    return { state: "idle", label: "No active download", percent: 0 };
   }
 
   if (finalSummary || state === "complete") {
@@ -599,7 +599,7 @@ function summarizeActivity(snapshot: YoutarrActivitySnapshot): DownloadActivity 
 export async function getDownloadActivity(): Promise<DownloadActivity> {
   const response = await requestYoutarr("/api/jobs/current-activity");
   if (!response.ok) {
-    throw new Error(`Voortgang ophalen mislukte (${response.status})`);
+    throw new Error(`Could not load progress (${response.status})`);
   }
   return summarizeActivity((await response.json()) as YoutarrActivitySnapshot);
 }
@@ -614,7 +614,7 @@ export async function getStream(youtubeId: string, range?: string | null) {
 }
 
 export async function getChannelAvatar(channelId: string) {
-  if (!configuredUrl) throw new Error("YOUTARR_URL ontbreekt");
+  if (!configuredUrl) throw new Error("YOUTARR_URL is missing");
   return fetch(
     `${configuredUrl}/images/channelthumb-${encodeURIComponent(channelId)}.jpg`,
     { cache: "no-store" }

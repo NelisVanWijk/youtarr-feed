@@ -2,9 +2,9 @@ import SwiftUI
 
 struct FeedScreen: View {
     enum Filter: String, CaseIterable, Identifiable {
-        case all = "Alles"
-        case new = "Nog ophalen"
-        case downloaded = "Gedownload"
+        case all = "All"
+        case new = "Not downloaded"
+        case downloaded = "Downloaded"
 
         var id: String { rawValue }
     }
@@ -62,7 +62,7 @@ struct FeedScreen: View {
 
     private var subtitle: String {
         if let status = model.status {
-            return status.connected ? "Verbonden met \(status.server ?? model.normalizedServerURL)" : "Voorbeeldmodus"
+            return status.connected ? "Connected to \(status.server ?? model.normalizedServerURL)" : "Demo mode"
         }
         return model.normalizedServerURL
     }

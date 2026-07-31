@@ -88,7 +88,7 @@ struct APIClient {
         }
         guard 200..<300 ~= http.statusCode else {
             let error = try? JSONDecoder.youtarr.decode(APIErrorResponse.self, from: data)
-            throw APIClientError.server(error?.error ?? "Server gaf HTTP \(http.statusCode)")
+            throw APIClientError.server(error?.error ?? "Server returned HTTP \(http.statusCode)")
         }
         if T.self == EmptyResponse.self {
             return EmptyResponse() as! T
@@ -114,9 +114,9 @@ enum APIClientError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidResponse:
-            return "Geen geldige server-response"
+            return "Invalid server response"
         case .invalidBaseURL:
-            return "Server URL is ongeldig"
+            return "Server URL is invalid"
         case .server(let message):
             return message
         }

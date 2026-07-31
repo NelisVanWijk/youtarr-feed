@@ -10,7 +10,7 @@ export async function GET() {
   return NextResponse.json({
     mode: config.configured ? "live" : "demo",
     connected: config.configured,
-    message: config.configured ? "Verbonden met Youtarr" : "Voorbeeldmodus",
+    message: config.configured ? "Connected to Youtarr" : "Demo mode",
     server: config.server,
     plexConfigured: plex.configured,
     plexServer: plex.server,

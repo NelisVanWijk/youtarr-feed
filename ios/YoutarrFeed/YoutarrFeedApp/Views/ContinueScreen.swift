@@ -21,13 +21,13 @@ struct ContinueScreen: View {
 
     var body: some View {
         VideoListScreen(
-            title: "Verder kijken",
-            subtitle: "Gesynchroniseerde kijkvoortgang vanaf je server",
+            title: "Continue Watching",
+            subtitle: "Synced watch progress from your server",
             videos: videos,
             query: $query,
             selectedVideo: $selectedVideo,
-            emptyTitle: "Niets om verder te kijken",
-            emptyMessage: "Start een gedownloade video en hij komt hier terug."
+            emptyTitle: "Nothing to continue",
+            emptyMessage: "Start a downloaded video and it will appear here."
         )
     }
 }

@@ -25,6 +25,13 @@ import {
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import {
+  defaultLanguage,
+  isLanguage,
+  languageOptions,
+  translations,
+} from "../lib/i18n";
+import type { AppCopy, Language } from "../lib/i18n";
 import type {
   AppMode,
   Channel,
@@ -63,6 +70,7 @@ type DownloadJob = {
 };
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
+const languageStorageKey = "youtarr-feed-language";
 
 function NavIcon({ view }: { view: View }) {
   const icon =
@@ -101,26 +109,45 @@ function formatDuration(seconds: number) {
     : `${minutes}:${String(remaining).padStart(2, "0")}`;
 }
 
-function relativeDate(value: string | null) {
-  if (!value) return "Onbekende datum";
+function relativeDate(value: string | null, copy: AppCopy) {
+  if (!value) return copy.relative.unknown;
   const difference = Date.now() - new Date(value).getTime();
+  const minutes = Math.max(1, Math.floor(difference / 60_000));
+  if (minutes < 2) return copy.relative.justNow;
+  if (minutes < 60) {
+    return `${minutes} ${
+      minutes === 1 ? copy.relative.minute : copy.relative.minutes
+    } ${copy.relative.ago}`;
+  }
   const hours = Math.max(1, Math.floor(difference / 3_600_000));
-  if (hours < 24) return `${hours} uur geleden`;
+  if (hours < 24) {
+    return `${hours} ${
+      hours === 1 ? copy.relative.hour : copy.relative.hours
+    } ${copy.relative.ago}`;
+  }
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days} ${days === 1 ? "dag" : "dagen"} geleden`;
+  if (days < 7) {
+    return `${days} ${
+      days === 1 ? copy.relative.day : copy.relative.days
+    } ${copy.relative.ago}`;
+  }
   const weeks = Math.floor(days / 7);
-  if (weeks < 5) return `${weeks} ${weeks === 1 ? "week" : "weken"} geleden`;
-  return new Intl.DateTimeFormat("nl-NL", {
+  if (weeks < 5) {
+    return `${weeks} ${
+      weeks === 1 ? copy.relative.week : copy.relative.weeks
+    } ${copy.relative.ago}`;
+  }
+  return new Intl.DateTimeFormat(copy.locale, {
     day: "numeric",
     month: "short",
     year: "numeric",
   }).format(new Date(value));
 }
 
-function formatEta(seconds?: number) {
+function formatEta(seconds: number | undefined, copy: AppCopy) {
   if (!seconds) return "";
   const minutes = Math.max(1, Math.round(seconds / 60));
-  return `${minutes} min resterend`;
+  return copy.etaRemaining(minutes);
 }
 
 function updateMediaSession(video: FeedVideo) {
@@ -205,24 +232,26 @@ function Thumbnail({
   progress,
   streamSource,
   downloadJob,
+  copy,
 }: {
   video: FeedVideo;
   index: number;
   progress?: number;
   streamSource?: StreamSourceInfo | null;
   downloadJob?: DownloadJob;
+  copy: AppCopy;
 }) {
   const [failed, setFailed] = useState(false);
   const localLabel =
     streamSource?.source === "local"
-      ? "Direct"
+      ? copy.common.direct
       : streamSource?.source === "youtarr"
-        ? "Youtarr"
-        : "Lokaal...";
+        ? copy.common.youtarr
+        : copy.common.checkingLocal;
   return (
     <div className={`thumbnail thumbnail-${palette[index % palette.length]}`}>
       {video.thumbnail && !failed ? (
-        // De bron wisselt per video; optimalisatie gebeurt al bij YouTube/Youtarr.
+        // The source varies per video; optimization is already handled by YouTube/Youtarr.
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={video.thumbnail}
@@ -254,19 +283,19 @@ function Thumbnail({
       ) : (
         <span className={`cloud-badge ${downloadJob ? `cloud-badge-${downloadJob.state}` : ""}`}>
           {downloadJob?.state === "queueing"
-            ? "Aanvragen"
+            ? copy.thumbnail.queueing
             : downloadJob?.state === "queued"
-              ? "Bezig"
+              ? copy.thumbnail.queued
               : downloadJob?.state === "error"
-                ? "Mislukt"
+                ? copy.thumbnail.error
                 : video.missing
-                  ? "Opnieuw ophalen"
-                  : "Nog ophalen"}
+                  ? copy.thumbnail.redownload
+                  : copy.thumbnail.missing}
         </span>
       )}
       {!video.downloaded &&
         (downloadJob?.state === "queueing" || downloadJob?.state === "queued") && (
-          <span className="download-thumb-overlay" aria-label="Download bezig">
+          <span className="download-thumb-overlay" aria-label={copy.thumbnail.downloadingAria}>
             <span />
           </span>
         )}
@@ -290,6 +319,7 @@ function VideoCard({
   onChannel,
   onDelete,
   onRemoveFromList,
+  copy,
 }: {
   video: FeedVideo;
   index: number;
@@ -300,6 +330,7 @@ function VideoCard({
   onChannel?: (channelId: string) => void;
   onDelete: (video: FeedVideo) => void;
   onRemoveFromList?: (video: FeedVideo) => void;
+  copy: AppCopy;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const channel = {
@@ -312,7 +343,7 @@ function VideoCard({
       <button
         className="thumbnail-button"
         onClick={() => onOpen(video)}
-        aria-label={`${video.title} openen`}
+        aria-label={video.title}
       >
         <Thumbnail
           video={video}
@@ -320,6 +351,7 @@ function VideoCard({
           progress={progress}
           streamSource={streamSource}
           downloadJob={downloadJob}
+          copy={copy}
         />
       </button>
       <div className="video-details">
@@ -327,20 +359,20 @@ function VideoCard({
           className="avatar-button"
           onClick={() => onChannel?.(video.channelId)}
           disabled={!onChannel}
-          aria-label={`${video.channelName} openen`}
+          aria-label={video.channelName}
         >
           <ChannelAvatar channel={channel} size="small" />
         </button>
         <button className="video-copy" onClick={() => onOpen(video)}>
           <strong>{video.title}</strong>
           <span>
-            {video.channelName} · {relativeDate(video.publishedAt)}
+            {video.channelName} · {relativeDate(video.publishedAt, copy)}
           </span>
         </button>
         <div className="video-menu-wrap">
           <button
             className="more-button"
-            aria-label="Meer opties"
+            aria-label={copy.menu.more}
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((open) => !open)}
           >
@@ -355,14 +387,14 @@ function VideoCard({
                 }}
               >
                 {video.downloaded
-                  ? "Afspelen"
+                  ? copy.common.play
                   : downloadJob?.state === "error"
-                    ? "Opnieuw proberen"
+                    ? copy.menu.retryDownload
                     : downloadJob
-                      ? "Download loopt"
+                      ? copy.menu.downloadRunning
                       : video.missing
-                        ? "Opnieuw ophalen"
-                        : "Ophalen"}
+                        ? copy.menu.redownload
+                        : copy.menu.fetch}
               </button>
               {video.downloaded && (
                 <button
@@ -372,7 +404,7 @@ function VideoCard({
                     onDelete(video);
                   }}
                 >
-                  Download verwijderen
+                  {copy.common.deleteDownload}
                 </button>
               )}
               {onRemoveFromList && (
@@ -383,7 +415,7 @@ function VideoCard({
                     onRemoveFromList(video);
                   }}
                 >
-                  Uit losse video&apos;s verwijderen
+                  {copy.common.removeFromSingles}
                 </button>
               )}
             </div>
@@ -394,9 +426,9 @@ function VideoCard({
   );
 }
 
-function LoadingGrid() {
+function LoadingGrid({ copy }: { copy: AppCopy }) {
   return (
-    <div className="video-grid" aria-label="Feed laden">
+    <div className="video-grid" aria-label={copy.common.loadingFeed}>
       {Array.from({ length: 8 }).map((_, index) => (
         <div className="video-card loading-card" key={index}>
           <div className="loading-thumb" />
@@ -414,6 +446,11 @@ function LoadingGrid() {
 }
 
 export default function FeedApp() {
+  const [language, setLanguage] = useState<Language>(() => {
+    if (typeof window === "undefined") return defaultLanguage;
+    const storedLanguage = window.localStorage.getItem(languageStorageKey);
+    return isLanguage(storedLanguage) ? storedLanguage : defaultLanguage;
+  });
   const [view, setView] = useState<View>("feed");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -459,6 +496,12 @@ export default function FeedApp() {
   const intendedPlaybackRef = useRef(false);
   const pauseIntentTimerRef = useRef<number | null>(null);
   const mode: AppMode = feed?.mode || "demo";
+  const copy = translations[language];
+
+  useEffect(() => {
+    window.localStorage.setItem(languageStorageKey, language);
+    document.documentElement.lang = language;
+  }, [language]);
 
   const loadFeed = useCallback(async (quiet = false, refresh = false) => {
     if (quiet) setRefreshing(true);
@@ -473,18 +516,18 @@ export default function FeedApp() {
         error?: string;
       };
       const statusData = (await statusResponse.json()) as FeedStatus;
-      if (!feedResponse.ok) throw new Error(feedData.error || "Feed laden mislukte");
+      if (!feedResponse.ok) throw new Error(feedData.error || copy.errors.loadFeed);
       setFeed(feedData);
       setStatus(statusData);
     } catch (loadError) {
       setError(
-        loadError instanceof Error ? loadError.message : "Feed laden mislukte"
+        loadError instanceof Error ? loadError.message : copy.errors.loadFeed
       );
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [copy.errors.loadFeed]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadFeed(), 0);
@@ -494,6 +537,8 @@ export default function FeedApp() {
   useEffect(() => {
     const timer = window.setTimeout(() => void loadSingleVideos(true), 0);
     return () => window.clearTimeout(timer);
+    // loadSingleVideos is intentionally local to this component and this is a one-time boot load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -520,7 +565,7 @@ export default function FeedApp() {
         const data = (await response.json()) as { progress?: WatchProgressMap };
         if (!stopped) setWatchProgress(data.progress || {});
       } catch {
-        // Kijkvoortgang mag de feed nooit blokkeren.
+        // Watch progress should never block the feed.
       }
     }
     void loadWatchProgress();
@@ -541,7 +586,7 @@ export default function FeedApp() {
         const data = (await response.json()) as DownloadActivity;
         if (!stopped) setActivity(data);
       } catch {
-        // De volgende poll probeert het opnieuw.
+        // The next poll tries again.
       }
     }
     void loadActivity();
@@ -590,7 +635,7 @@ export default function FeedApp() {
               }
             });
           } catch {
-            // De volgende poll probeert het opnieuw.
+            // The next poll tries again.
           }
         })
       );
@@ -609,7 +654,7 @@ export default function FeedApp() {
             });
           }
         } catch {
-          // De volgende poll probeert het opnieuw.
+          // The next poll tries again.
         }
       }
 
@@ -636,6 +681,8 @@ export default function FeedApp() {
       stopped = true;
       window.clearInterval(timer);
     };
+    // Local loaders are intentionally local to this component; queued jobs drive polling.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [downloadJobs, status?.mode, status?.plexConfigured, view]);
 
   useEffect(() => {
@@ -645,7 +692,7 @@ export default function FeedApp() {
     if (view === "singles") {
       void loadSingleVideos(singleVideos.length > 0);
     }
-    // loadLocalVideos is intentionally local to this component; view changes drive refreshes.
+    // Local loaders are intentionally local to this component; view changes drive refreshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
 
@@ -678,7 +725,7 @@ export default function FeedApp() {
         window.setTimeout(() => {
           if (intendedPlaybackRef.current && !player.ended) {
             void player.play().catch(() => {
-              // iOS kan hervatten weigeren; dan blijft de mini-speler netjes gepauzeerd.
+              // iOS may reject resume; the mini player remains paused.
             });
           }
         }, 120);
@@ -726,7 +773,7 @@ export default function FeedApp() {
         const data = (await response.json()) as StreamSourceInfo;
         if (!stopped) setStreamSource(data);
       } catch {
-        // Broninfo is alleen diagnostisch; afspelen mag hier niet op stuklopen.
+        // Source info is diagnostic only; playback should not depend on it.
       }
     }
 
@@ -867,13 +914,13 @@ export default function FeedApp() {
         videos?: FeedVideo[];
         error?: string;
       };
-      if (!response.ok) throw new Error(data.error || "Lokale video's laden mislukte");
+      if (!response.ok) throw new Error(data.error || copy.errors.loadLocal);
       setLocalVideos(data.videos || []);
     } catch (localError) {
       setError(
         localError instanceof Error
           ? localError.message
-          : "Lokale video's laden mislukte"
+          : copy.errors.loadLocal
       );
     } finally {
       setLocalLoading(false);
@@ -890,14 +937,14 @@ export default function FeedApp() {
         error?: string;
       };
       if (!response.ok) {
-        throw new Error(data.error || "Losse video's laden mislukte");
+        throw new Error(data.error || copy.errors.loadSingles);
       }
       setSingleVideos(data.videos || []);
     } catch (singleError) {
       setError(
         singleError instanceof Error
           ? singleError.message
-          : "Losse video's laden mislukte"
+          : copy.errors.loadSingles
       );
     } finally {
       setSingleLoading(false);
@@ -939,13 +986,13 @@ export default function FeedApp() {
         videos?: FeedVideo[];
         error?: string;
       };
-      if (!response.ok) throw new Error(data.error || "Kanaal laden mislukte");
+      if (!response.ok) throw new Error(data.error || copy.errors.loadChannel);
       setChannelVideos(data.videos || []);
     } catch (channelError) {
       setError(
         channelError instanceof Error
           ? channelError.message
-          : "Kanaal laden mislukte"
+          : copy.errors.loadChannel
       );
     } finally {
       setChannelLoading(false);
@@ -1001,7 +1048,7 @@ export default function FeedApp() {
         await player.requestFullscreen();
       }
     } catch {
-      // iOS accepteert fullscreen alleen wanneer Safari de gesture toestaat.
+      // iOS accepts fullscreen only when Safari allows the gesture.
     }
   }
 
@@ -1028,7 +1075,7 @@ export default function FeedApp() {
         ).requestPictureInPicture();
       }
     } catch {
-      // iOS/Safari bepaalt zelf of PiP in standalone PWA's beschikbaar is.
+      // iOS/Safari decides whether PiP is available in standalone PWAs.
     }
   }
 
@@ -1053,7 +1100,7 @@ export default function FeedApp() {
         error?: string;
         demo?: boolean;
       };
-      if (!response.ok) throw new Error(data.error || "Download starten mislukte");
+      if (!response.ok) throw new Error(data.error || copy.errors.startDownload);
       setDownloadJobs((current) => ({
         ...current,
         [video.id]: { state: "queued", channelId: video.channelId },
@@ -1072,7 +1119,7 @@ export default function FeedApp() {
       const message =
         downloadFailure instanceof Error
           ? downloadFailure.message
-          : "Download starten mislukte";
+          : copy.errors.startDownload;
       setDownloadJobs((current) => ({
         ...current,
         [video.id]: { state: "error", channelId: video.channelId, error: message },
@@ -1152,7 +1199,7 @@ export default function FeedApp() {
         body: JSON.stringify({ id: video.id }),
       });
       const data = (await response.json()) as { error?: string; demo?: boolean };
-      if (!response.ok) throw new Error(data.error || "Verwijderen mislukte");
+      if (!response.ok) throw new Error(data.error || copy.errors.deleteDownload);
       if (selectedVideo?.id === video.id) {
         setSelectedVideo(null);
       }
@@ -1180,7 +1227,7 @@ export default function FeedApp() {
       setDeleteError(
         deleteFailure instanceof Error
           ? deleteFailure.message
-          : "Verwijderen mislukte"
+          : copy.errors.deleteDownload
       );
     }
   }
@@ -1201,13 +1248,13 @@ export default function FeedApp() {
         error?: string;
         channel?: { name?: string; restored?: boolean };
       };
-      if (!response.ok) throw new Error(data.error || "Kanaal toevoegen mislukte");
+      if (!response.ok) throw new Error(data.error || copy.errors.addChannel);
       setChannelUrl("");
       setAddChannelState("added");
       setAddChannelMessage(
         data.channel?.restored
-          ? `${data.channel.name || "Kanaal"} is hersteld`
-          : `${data.channel?.name || "Kanaal"} is toegevoegd`
+          ? copy.channels.restored(data.channel.name || copy.channels.title)
+          : copy.channels.added(data.channel?.name || copy.channels.title)
       );
       void loadFeed(true, true);
     } catch (addFailure) {
@@ -1215,7 +1262,7 @@ export default function FeedApp() {
       setAddChannelMessage(
         addFailure instanceof Error
           ? addFailure.message
-          : "Kanaal toevoegen mislukte"
+          : copy.errors.addChannel
       );
     }
   }
@@ -1237,18 +1284,18 @@ export default function FeedApp() {
         video?: FeedVideo;
       };
       if (!response.ok) {
-        throw new Error(data.error || "Losse video toevoegen mislukte");
+        throw new Error(data.error || copy.errors.addSingle);
       }
       setSingleVideoUrl("");
       setSingleVideoState("added");
-      setSingleVideoMessage(`${data.video?.title || "Video"} is toegevoegd`);
+      setSingleVideoMessage(copy.singles.added(data.video?.title || "Video"));
       void loadSingleVideos(true);
     } catch (addFailure) {
       setSingleVideoState("error");
       setSingleVideoMessage(
         addFailure instanceof Error
           ? addFailure.message
-          : "Losse video toevoegen mislukte"
+          : copy.errors.addSingle
       );
     }
   }
@@ -1265,7 +1312,7 @@ export default function FeedApp() {
         error?: string;
       };
       if (!response.ok) {
-        throw new Error(data.error || "Losse video verwijderen mislukte");
+        throw new Error(data.error || copy.errors.removeSingle);
       }
       setSingleVideos(data.videos || []);
       setWatchProgress((current) => {
@@ -1280,7 +1327,7 @@ export default function FeedApp() {
       setError(
         removeFailure instanceof Error
           ? removeFailure.message
-          : "Losse video verwijderen mislukte"
+          : copy.errors.removeSingle
       );
     }
   }
@@ -1316,11 +1363,11 @@ export default function FeedApp() {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Zoeken in je feed"
-            aria-label="Zoeken in je feed"
+            placeholder={copy.search.placeholder}
+            aria-label={copy.search.aria}
           />
           {query && (
-            <button onClick={() => setQuery("")} aria-label="Zoekopdracht wissen">
+            <button onClick={() => setQuery("")} aria-label={copy.search.clear}>
               <FontAwesomeIcon icon={faXmark} aria-hidden="true" />
             </button>
           )}
@@ -1329,7 +1376,7 @@ export default function FeedApp() {
           <button
             className="round-button mobile-search"
             onClick={() => setSearchOpen((open) => !open)}
-            aria-label="Zoeken"
+            aria-label={copy.search.button}
           >
             <FontAwesomeIcon
               className="search-icon"
@@ -1340,14 +1387,14 @@ export default function FeedApp() {
           <button
             className={`round-button refresh-button ${refreshing ? "spinning" : ""}`}
             onClick={() => void loadFeed(true, true)}
-            aria-label="Feed verversen"
+            aria-label={copy.common.refresh}
           >
             <FontAwesomeIcon icon={faRotateRight} aria-hidden="true" />
           </button>
           <button
             className="profile-button"
             onClick={() => setSettingsOpen(true)}
-            aria-label="Koppeling en instellingen"
+            aria-label={copy.settings.buttonAria}
           >
             NF
           </button>
@@ -1355,48 +1402,48 @@ export default function FeedApp() {
       </header>
 
       <aside className="sidebar">
-        <nav aria-label="Hoofdnavigatie">
+        <nav aria-label={copy.nav.feed}>
           <button
             className={view === "feed" ? "active" : ""}
             onClick={() => switchView("feed")}
           >
             <NavIcon view="feed" />
-            <span>Feed</span>
+            <span>{copy.nav.feed}</span>
           </button>
           <button
             className={view === "continue" ? "active" : ""}
             onClick={() => switchView("continue")}
           >
             <NavIcon view="continue" />
-            <span>Verder kijken</span>
+            <span>{copy.nav.continueFull}</span>
           </button>
           <button
             className={view === "local" ? "active" : ""}
             onClick={() => switchView("local")}
           >
             <NavIcon view="local" />
-            <span>Lokaal</span>
+            <span>{copy.nav.local}</span>
           </button>
           <button
             className={view === "singles" ? "active" : ""}
             onClick={() => switchView("singles")}
           >
             <NavIcon view="singles" />
-            <span>Losse video&apos;s</span>
+            <span>{copy.nav.singles}</span>
           </button>
           <button
             className={view === "channels" ? "active" : ""}
             onClick={() => switchView("channels")}
           >
             <NavIcon view="channels" />
-            <span>Kanalen</span>
+            <span>{copy.nav.channels}</span>
           </button>
         </nav>
         <div className="sidebar-status">
           <span className={`status-dot status-${mode}`} />
           <div>
-            <strong>{status?.connected ? "Verbonden" : "Voorbeeld"}</strong>
-            <small>{status?.server || "Nog niet gekoppeld"}</small>
+            <strong>{status?.connected ? copy.common.connected : copy.common.demo}</strong>
+            <small>{status?.server || copy.common.notConfigured}</small>
           </div>
         </div>
       </aside>
@@ -1405,7 +1452,7 @@ export default function FeedApp() {
         {error && (
           <div className="error-banner">
             <span>{error}</span>
-            <button onClick={() => void loadFeed()}>Opnieuw proberen</button>
+            <button onClick={() => void loadFeed()}>{copy.common.retry}</button>
           </div>
         )}
 
@@ -1413,9 +1460,9 @@ export default function FeedApp() {
           <section className={`activity-strip activity-${activeActivity.state}`}>
             <div>
               <strong>{activeActivity.label}</strong>
-              <span>{formatEta(activeActivity.etaSeconds) || "Youtarr werkt op de achtergrond"}</span>
+              <span>{formatEta(activeActivity.etaSeconds, copy) || copy.activityFallback}</span>
             </div>
-            <div className="activity-meter" aria-label="Downloadvoortgang">
+            <div className="activity-meter" aria-label={copy.thumbnail.downloadingAria}>
               <span style={{ width: `${activeActivity.percent}%` }} />
             </div>
           </section>
@@ -1427,20 +1474,20 @@ export default function FeedApp() {
               <div>
                 <span className="eyebrow">
                   <span className={`status-dot status-${mode}`} />
-                  {mode === "live" ? "Bijgewerkt vanuit Youtarr" : "Voorbeeldmodus"}
+                  {mode === "live" ? copy.feed.eyebrowLive : copy.feed.eyebrowDemo}
                 </span>
-                <h1>Je abonnementen</h1>
-                <p>Alles van je kanalen, nieuwste video eerst.</p>
+                <h1>{copy.feed.title}</h1>
+                <p>{copy.feed.subtitle}</p>
               </div>
               <button className="settings-link" onClick={() => setSettingsOpen(true)}>
-                Koppeling
+                {copy.common.settings}
               </button>
             </section>
-            <div className="filter-row" role="group" aria-label="Video’s filteren">
+            <div className="filter-row" role="group" aria-label={copy.feed.title}>
               {[
-                ["all", "Alles"],
-                ["new", "Nog ophalen"],
-                ["downloaded", "Gedownload"],
+                ["all", copy.feed.all],
+                ["new", copy.feed.new],
+                ["downloaded", copy.feed.downloaded],
               ].map(([value, label]) => (
                 <button
                   key={value}
@@ -1452,7 +1499,7 @@ export default function FeedApp() {
               ))}
             </div>
             {loading ? (
-              <LoadingGrid />
+              <LoadingGrid copy={copy} />
             ) : visibleVideos.length ? (
               <div className="video-grid">
                 {visibleVideos.map((video, index) => (
@@ -1466,6 +1513,7 @@ export default function FeedApp() {
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
+                    copy={copy}
                   />
                 ))}
               </div>
@@ -1474,8 +1522,8 @@ export default function FeedApp() {
                 <span className="empty-mark">
                   <FontAwesomeIcon icon={faInbox} aria-hidden="true" />
                 </span>
-                <h2>Geen video’s gevonden</h2>
-                <p>Pas je filter of zoekopdracht aan.</p>
+                <h2>{copy.feed.emptyTitle}</h2>
+                <p>{copy.feed.emptyBody}</p>
               </div>
             )}
           </>
@@ -1485,13 +1533,13 @@ export default function FeedApp() {
           <>
             <section className="page-heading">
               <div>
-                <span className="eyebrow">Gesynchroniseerd</span>
-                <h1>Verder kijken</h1>
-                <p>Video&apos;s waar je op deze server al aan begonnen bent.</p>
+                <span className="eyebrow">{copy.continue.eyebrow}</span>
+                <h1>{copy.continue.title}</h1>
+                <p>{copy.continue.subtitle}</p>
               </div>
             </section>
             {loading ? (
-              <LoadingGrid />
+              <LoadingGrid copy={copy} />
             ) : continueVideos.length ? (
               <div className="video-grid">
                 {continueVideos.map((video, index) => (
@@ -1505,6 +1553,7 @@ export default function FeedApp() {
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
+                    copy={copy}
                   />
                 ))}
               </div>
@@ -1513,8 +1562,8 @@ export default function FeedApp() {
                 <span className="empty-mark">
                   <FontAwesomeIcon icon={faInbox} aria-hidden="true" />
                 </span>
-                <h2>Niets om verder te kijken</h2>
-                <p>Start een gedownloade video en je vindt hem hier terug.</p>
+                <h2>{copy.continue.emptyTitle}</h2>
+                <p>{copy.continue.emptyBody}</p>
               </div>
             )}
           </>
@@ -1524,19 +1573,19 @@ export default function FeedApp() {
           <>
             <section className="page-heading">
               <div>
-                <span className="eyebrow">Gedownload</span>
-                <h1>Lokale video&apos;s</h1>
-                <p>Alles wat Youtarr als lokaal gedownload ziet, met delete-opties.</p>
+                <span className="eyebrow">{copy.local.eyebrow}</span>
+                <h1>{copy.local.title}</h1>
+                <p>{copy.local.subtitle}</p>
               </div>
               <button
                 className="settings-link"
                 onClick={() => void loadLocalVideos(true, true)}
               >
-                Verversen
+                {copy.common.refresh}
               </button>
             </section>
             {localLoading ? (
-              <LoadingGrid />
+              <LoadingGrid copy={copy} />
             ) : filteredLocalVideos.length ? (
               <div className="video-grid">
                 {filteredLocalVideos.map((video, index) => (
@@ -1550,6 +1599,7 @@ export default function FeedApp() {
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
+                    copy={copy}
                   />
                 ))}
               </div>
@@ -1558,8 +1608,8 @@ export default function FeedApp() {
                 <span className="empty-mark">
                   <FontAwesomeIcon icon={faInbox} aria-hidden="true" />
                 </span>
-                <h2>Geen lokale video&apos;s</h2>
-                <p>Gedownloade video&apos;s verschijnen hier zodra Youtarr ze ziet.</p>
+                <h2>{copy.local.emptyTitle}</h2>
+                <p>{copy.local.emptyBody}</p>
               </div>
             )}
           </>
@@ -1569,29 +1619,29 @@ export default function FeedApp() {
           <>
             <section className="page-heading">
               <div>
-                <span className="eyebrow">Eenmalige links</span>
-                <h1>Losse video&apos;s</h1>
-                <p>Voeg een YouTube-link toe zonder het kanaal te volgen.</p>
+                <span className="eyebrow">{copy.singles.eyebrow}</span>
+                <h1>{copy.singles.title}</h1>
+                <p>{copy.singles.subtitle}</p>
               </div>
               <button
                 className="settings-link"
                 onClick={() => void loadSingleVideos(true)}
               >
-                Verversen
+                {copy.common.refresh}
               </button>
             </section>
             <form className="add-video-form" onSubmit={submitSingleVideo}>
               <input
                 value={singleVideoUrl}
                 onChange={(event) => setSingleVideoUrl(event.target.value)}
-                placeholder="YouTube-video URL, Shorts-link of video-ID"
-                aria-label="YouTube-video URL, Shorts-link of video-ID"
+                placeholder={copy.singles.placeholder}
+                aria-label={copy.singles.aria}
               />
               <button
                 className="primary-button"
                 disabled={singleVideoState === "adding"}
               >
-                {singleVideoState === "adding" ? "Bezig" : "Toevoegen"}
+                {singleVideoState === "adding" ? copy.common.adding : copy.common.add}
               </button>
               {singleVideoMessage && (
                 <span className={`form-message form-${singleVideoState}`}>
@@ -1600,7 +1650,7 @@ export default function FeedApp() {
               )}
             </form>
             {singleLoading ? (
-              <LoadingGrid />
+              <LoadingGrid copy={copy} />
             ) : filteredSingleVideos.length ? (
               <div className="video-grid">
                 {filteredSingleVideos.map((video, index) => (
@@ -1614,6 +1664,7 @@ export default function FeedApp() {
                     onOpen={openVideo}
                     onDelete={(item) => void removeDownload(item)}
                     onRemoveFromList={(item) => void removeSingleVideo(item)}
+                    copy={copy}
                   />
                 ))}
               </div>
@@ -1622,8 +1673,8 @@ export default function FeedApp() {
                 <span className="empty-mark">
                   <FontAwesomeIcon icon={faInbox} aria-hidden="true" />
                 </span>
-                <h2>Nog geen losse video&apos;s</h2>
-                <p>Plak hierboven een YouTube-link om hem hier vast te zetten.</p>
+                <h2>{copy.singles.emptyTitle}</h2>
+                <p>{copy.singles.emptyBody}</p>
               </div>
             )}
           </>
@@ -1633,23 +1684,23 @@ export default function FeedApp() {
           <>
             <section className="page-heading">
               <div>
-                <span className="eyebrow">Jouw bibliotheek</span>
-                <h1>Kanalen</h1>
-                <p>{feed?.channels.length || 0} actieve abonnementen</p>
+                <span className="eyebrow">{copy.channels.eyebrow}</span>
+                <h1>{copy.channels.title}</h1>
+                <p>{copy.channels.subscriptions(feed?.channels.length || 0)}</p>
               </div>
             </section>
             <form className="add-channel-form" onSubmit={submitChannel}>
               <input
                 value={channelUrl}
                 onChange={(event) => setChannelUrl(event.target.value)}
-                placeholder="YouTube-kanaal URL of handle"
-                aria-label="YouTube-kanaal URL of handle"
+                placeholder={copy.channels.placeholder}
+                aria-label={copy.channels.aria}
               />
               <button
                 className="primary-button"
                 disabled={addChannelState === "adding" || mode !== "live"}
               >
-                {addChannelState === "adding" ? "Bezig" : "Toevoegen"}
+                {addChannelState === "adding" ? copy.common.adding : copy.common.add}
               </button>
               {addChannelMessage && (
                 <span className={`form-message form-${addChannelState}`}>
@@ -1658,7 +1709,7 @@ export default function FeedApp() {
               )}
             </form>
             {loading ? (
-              <LoadingGrid />
+              <LoadingGrid copy={copy} />
             ) : (
               <div className="channel-grid">
                 {(feed?.channels || []).map((channel) => (
@@ -1672,8 +1723,8 @@ export default function FeedApp() {
                       <strong>{channel.name}</strong>
                       <small>
                         {channel.autoDownload
-                          ? "Automatisch downloaden"
-                          : "Downloaden bij openen"}
+                          ? copy.channels.autoDownload
+                          : copy.channels.downloadOnOpen}
                       </small>
                     </span>
                     <FontAwesomeIcon
@@ -1697,25 +1748,25 @@ export default function FeedApp() {
                 setChannelVideos([]);
               }}
             >
-              <FontAwesomeIcon icon={faChevronLeft} aria-hidden="true" /> Alle kanalen
+              <FontAwesomeIcon icon={faChevronLeft} aria-hidden="true" /> {copy.channels.back}
             </button>
             <section className="channel-hero">
               <ChannelAvatar channel={selectedChannel} size="large" />
               <div>
-                <span className="eyebrow">Kanaal</span>
+                <span className="eyebrow">{copy.channels.channelEyebrow}</span>
                 <h1>{selectedChannel.name}</h1>
                 <p>
                   {selectedChannel.autoDownload
-                    ? "Nieuwe video’s worden automatisch opgehaald"
-                    : "Tik op een video om hem op te halen"}
+                    ? copy.channels.autoDownloadHint
+                    : copy.channels.manualDownloadHint}
                 </p>
               </div>
             </section>
-            <div className="filter-row" role="group" aria-label="Video’s filteren">
+            <div className="filter-row" role="group" aria-label={copy.feed.title}>
               {[
-                ["all", "Alles"],
-                ["new", "Nog ophalen"],
-                ["downloaded", "Gedownload"],
+                ["all", copy.feed.all],
+                ["new", copy.feed.new],
+                ["downloaded", copy.feed.downloaded],
               ].map(([value, label]) => (
                 <button
                   key={value}
@@ -1727,7 +1778,7 @@ export default function FeedApp() {
               ))}
             </div>
             {channelLoading ? (
-              <LoadingGrid />
+              <LoadingGrid copy={copy} />
             ) : (
               <div className="video-grid">
                 {visibleVideos.map((video, index) => (
@@ -1741,6 +1792,7 @@ export default function FeedApp() {
                     onOpen={openVideo}
                     onChannel={() => undefined}
                     onDelete={(item) => void removeDownload(item)}
+                    copy={copy}
                   />
                 ))}
               </div>
@@ -1749,41 +1801,41 @@ export default function FeedApp() {
         )}
       </main>
 
-      <nav className="bottom-nav" aria-label="Hoofdnavigatie">
+      <nav className="bottom-nav" aria-label={copy.nav.feed}>
         <button
           className={view === "feed" ? "active" : ""}
           onClick={() => switchView("feed")}
         >
           <NavIcon view="feed" />
-          <small>Feed</small>
+          <small>{copy.nav.feed}</small>
         </button>
         <button
           className={view === "continue" ? "active" : ""}
           onClick={() => switchView("continue")}
         >
           <NavIcon view="continue" />
-          <small>Verder</small>
+          <small>{copy.nav.continue}</small>
         </button>
         <button
           className={view === "local" ? "active" : ""}
           onClick={() => switchView("local")}
         >
           <NavIcon view="local" />
-          <small>Lokaal</small>
+          <small>{copy.nav.local}</small>
         </button>
         <button
           className={view === "singles" ? "active" : ""}
           onClick={() => switchView("singles")}
         >
           <NavIcon view="singles" />
-          <small>Los</small>
+          <small>{copy.nav.singlesShort}</small>
         </button>
         <button
           className={view === "channels" ? "active" : ""}
           onClick={() => switchView("channels")}
         >
           <NavIcon view="channels" />
-          <small>Kanalen</small>
+          <small>{copy.nav.channels}</small>
         </button>
       </nav>
 
@@ -1794,8 +1846,8 @@ export default function FeedApp() {
             icon={faMobileScreenButton}
             aria-hidden="true"
           />
-          <strong>Draai je iPhone terug</strong>
-          <p>Youtarr Feed is vastgezet voor staand gebruik.</p>
+          <strong>{copy.orientation.title}</strong>
+          <p>{copy.orientation.body}</p>
         </div>
       </div>
 
@@ -1831,7 +1883,7 @@ export default function FeedApp() {
               }`}
               onMouseDown={(event) => event.stopPropagation()}
               onClick={closePlayer}
-              aria-label={playerMode === "mini" ? "Sluiten" : "Klein maken"}
+              aria-label={playerMode === "mini" ? copy.common.close : copy.common.minimize}
             >
               <FontAwesomeIcon
                 icon={playerMode === "mini" ? faXmark : faMinus}
@@ -1850,7 +1902,7 @@ export default function FeedApp() {
                       void requestManualPictureInPicture(playerRef.current);
                     }
                   }}
-                  aria-label="Picture-in-picture"
+                  aria-label={copy.player.pip}
                 >
                   <FontAwesomeIcon icon={faClone} aria-hidden="true" />
                 </button>
@@ -1940,7 +1992,7 @@ export default function FeedApp() {
                     <button
                       className="mini-play-button"
                       onClick={toggleMiniPlayback}
-                      aria-label={playerPlaying ? "Pauzeren" : "Afspelen"}
+                      aria-label={playerPlaying ? copy.common.pause : copy.common.play}
                     >
                       {playerPlaying ? (
                         <FontAwesomeIcon icon={faPause} aria-hidden="true" />
@@ -1956,20 +2008,16 @@ export default function FeedApp() {
                 <span className="demo-play">
                   <FontAwesomeIcon icon={faPlay} aria-hidden="true" />
                 </span>
-                <p>In de gekoppelde versie speelt hier je lokale bestand.</p>
+                <p>{copy.player.demoBody}</p>
               </div>
             ) : (
               <div className="download-panel">
                 <div className="download-orbit">
                   <FontAwesomeIcon icon={faDownload} aria-hidden="true" />
                 </div>
-                <span className="eyebrow">Nog niet lokaal</span>
-                <h2>
-                  Deze video is nog niet klaar om af te spelen.
-                </h2>
-                <p>
-                  Sluit dit scherm en start de download opnieuw vanaf de thumbnail.
-                </p>
+                <span className="eyebrow">{copy.player.notLocalEyebrow}</span>
+                <h2>{copy.player.notLocalTitle}</h2>
+                <p>{copy.player.notLocalBody}</p>
               </div>
             )}
             <div className="modal-copy">
@@ -1983,23 +2031,23 @@ export default function FeedApp() {
               >
                 {selectedVideo.channelName}
               </button>
-              <span>{relativeDate(selectedVideo.publishedAt)}</span>
+              <span>{relativeDate(selectedVideo.publishedAt, copy)}</span>
               {selectedVideo.downloaded && (
                 <p className={`stream-source stream-source-${streamSource?.source || "unknown"}`}>
                   <strong>
                     {streamSource?.source === "local"
-                      ? "Direct bestand"
+                      ? copy.player.sourceDirect
                       : streamSource?.source === "youtarr"
-                        ? "Via Youtarr"
-                        : "Bron controleren"}
+                        ? copy.player.sourceYoutarr
+                        : copy.player.sourceChecking}
                   </strong>
                   {streamSource?.source === "local" && streamSource.local?.fileName
-                    ? `Read-only mount: ${streamSource.local.fileName}`
+                    ? copy.player.sourceDirectBody(streamSource.local.fileName)
                     : streamSource?.local?.configured === false
-                      ? "Geen media-mount ingesteld; fallback naar Youtarr."
+                      ? copy.player.sourceNoMount
                       : streamSource?.source === "youtarr"
-                        ? "Lokaal bestand niet gevonden; stream fallback."
-                        : "Even kijken welk stream-pad wordt gebruikt."}
+                        ? copy.player.sourceFallback
+                        : copy.player.sourceCheckingBody}
                 </p>
               )}
               {selectedVideo.downloaded && (
@@ -2009,7 +2057,7 @@ export default function FeedApp() {
                     onClick={() => void removeDownload(selectedVideo)}
                     disabled={deleteState === "deleting"}
                   >
-                    {deleteState === "deleting" ? "Verwijderen" : "Download verwijderen"}
+                    {deleteState === "deleting" ? copy.player.deleting : copy.common.deleteDownload}
                   </button>
                   {deleteState === "error" && <small>{deleteError}</small>}
                 </div>
@@ -2031,49 +2079,63 @@ export default function FeedApp() {
             className="settings-modal"
             role="dialog"
             aria-modal="true"
-            aria-label="Youtarr-koppeling"
+            aria-label={copy.settings.aria}
           >
             <button
               className="modal-close"
               onClick={() => setSettingsOpen(false)}
-              aria-label="Sluiten"
+              aria-label={copy.common.close}
             >
               <FontAwesomeIcon icon={faXmark} aria-hidden="true" />
             </button>
             <span className={`connection-icon connection-${mode}`}>
               <FontAwesomeIcon icon={faCheck} aria-hidden="true" />
             </span>
-            <span className="eyebrow">Koppeling</span>
+            <span className="eyebrow">{copy.settings.eyebrow}</span>
             <h2>
               {status?.connected
-                ? "Youtarr is verbonden"
-                : "De interface staat in voorbeeldmodus"}
+                ? copy.settings.connectedTitle
+                : copy.settings.demoTitle}
             </h2>
             <p>
               {status?.connected
-                ? `De feed gebruikt ${status.server || "je Youtarr-server"} en ververst automatisch je abonnementen.`
-                : "Zodra de servergegevens zijn ingevuld, worden deze voorbeeldvideo’s vervangen door jouw eigen abonnementen."}
+                ? copy.settings.connectedBody(status.server || "Youtarr")
+                : copy.settings.demoBody}
             </p>
             <div className="settings-facts">
               <div>
-                <span>Feed</span>
-                <strong>Youtarr-kanalen</strong>
+                <span>{copy.settings.feedLabel}</span>
+                <strong>{copy.settings.feedValue}</strong>
               </div>
               <div>
-                <span>Plex</span>
+                <span>{copy.settings.plexLabel}</span>
                 <strong>
                   {status?.plexConfigured
-                    ? "Scan na download"
-                    : "Via Youtarr geregeld"}
+                    ? copy.settings.plexEnabled
+                    : copy.settings.plexDisabled}
                 </strong>
               </div>
               <div>
-                <span>Ontbrekende video</span>
-                <strong>Direct downloaden</strong>
+                <span>{copy.settings.downloadLabel}</span>
+                <strong>{copy.settings.downloadValue}</strong>
+              </div>
+              <div>
+                <span>{copy.settings.languageLabel}</span>
+                <strong className="language-switcher">
+                  {languageOptions.map((option) => (
+                    <button
+                      key={option.code}
+                      className={language === option.code ? "active" : ""}
+                      onClick={() => setLanguage(option.code)}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </strong>
               </div>
             </div>
             <button className="primary-button" onClick={() => setSettingsOpen(false)}>
-              Begrepen
+              {copy.common.done}
             </button>
           </section>
         </div>

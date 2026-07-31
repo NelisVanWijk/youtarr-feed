@@ -18,7 +18,7 @@ export async function POST() {
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? error.message : "Plex verversen mislukte",
+          error instanceof Error ? error.message : "Could not refresh Plex",
       },
       { status: 502 }
     );

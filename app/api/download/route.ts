@@ -11,14 +11,14 @@ export async function POST(request: Request) {
     channelId?: string;
   };
   if (!body.id || !/^[A-Za-z0-9_-]{11}$/.test(body.id)) {
-    return NextResponse.json({ error: "Ongeldige video" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid video" }, { status: 400 });
   }
 
   if (!isYoutarrConfigured()) {
     return NextResponse.json({
       success: true,
       demo: true,
-      message: "Voorbeelddownload gestart",
+      message: "Demo download started",
     });
   }
 
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          error instanceof Error ? error.message : "Download starten mislukte",
+          error instanceof Error ? error.message : "Could not start download",
       },
       { status: 502 }
     );

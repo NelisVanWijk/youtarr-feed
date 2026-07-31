@@ -22,6 +22,8 @@ token, API key, and optional Plex token are never sent to the browser.
 - Server-side feed cache stored in `/data/feed-cache.json` for faster first opens.
 - Continue Watching tab synced across browsers/devices.
 - Local downloads tab with all videos Youtarr currently marks as downloaded.
+- Single Videos tab for one-off YouTube links without subscribing to a channel.
+- Language module with English as the default UI language and Dutch as an option.
 - Optional Plex library refresh after a download completes.
 - Optional direct local file streaming from the mounted Youtarr media folder.
 - Stable feed sorting when Youtarr returns date-only publish values.
@@ -50,7 +52,7 @@ it falls back to Youtarr.
 
 The player shows the active source for downloaded videos:
 
-- `Direct bestand`: streaming from the read-only media mount.
+- `Direct file`: streaming from the read-only media mount.
 - `Via Youtarr`: local file was not found, so playback uses Youtarr's stream
   endpoint.
 
@@ -93,13 +95,15 @@ directory:
 ```text
 /data/feed-cache.json
 /data/local-videos-cache.json
+/data/single-videos.json
 ```
 
 When a cache entry is older than the TTL, the app returns the old result
 immediately and refreshes it in the background. The cache is not discarded just
 because it is older than the TTL, so opening the app hours later can still show
 the last known feed quickly as long as `/data` is persistent. Manual refreshes,
-deletes, downloads, and channel adds invalidate or bypass the cache.
+deletes, downloads, channel adds, and single-video changes invalidate or bypass
+the relevant data.
 
 Set `YOUTARR_FEED_CACHE_TTL_SECONDS` to tune this. Higher values make first open
 faster for longer, lower values keep the feed closer to Youtarr on every open.
@@ -164,15 +168,16 @@ Media Directory:
   /usr/src/app/data
 ```
 
-The App Data path is important. Watch progress is stored there and survives
-container updates:
+The App Data path is important. Watch progress, cached feed data, and single
+video links are stored there and survive container updates:
 
 ```text
 /mnt/user/appdata/youtarr-feed/watch-progress.json
+/mnt/user/appdata/youtarr-feed/single-videos.json
 ```
 
-If watch progress disappears after updates, check that `/data` is mapped to a
-persistent host path.
+If watch progress or single videos disappear after updates, check that `/data`
+is mapped to a persistent host path.
 
 ### Youtarr Permissions On Unraid
 

@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Youtarr Feed",
-  description: "Je eigen abonnementenfeed, lokaal afgespeeld via Youtarr.",
+  description: "A mobile-first subscription feed and local playback app for Youtarr.",
   applicationName: "Youtarr Feed",
   manifest: "/manifest.webmanifest",
   icons: {
@@ -32,7 +32,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="nl">
+    <html lang="en">
       <head>
         <link rel="preconnect" href="https://i.ytimg.com" />
       </head>

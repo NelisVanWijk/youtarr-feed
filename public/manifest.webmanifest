@@ -1,8 +1,8 @@
 {
   "name": "Youtarr Feed",
   "short_name": "Youtarr",
-  "description": "Je eigen abonnementenfeed, lokaal afgespeeld via Youtarr.",
-  "lang": "nl",
+  "description": "A mobile-first subscription feed and local playback app for Youtarr.",
+  "lang": "en",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

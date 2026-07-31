@@ -23,7 +23,7 @@ function fetchFrom(worker, path, init) {
   );
 }
 
-test("renders the Dutch Youtarr subscription shell", async () => {
+test("renders the English Youtarr subscription shell", async () => {
   const worker = await createWorker();
   const response = await fetchFrom(worker, "/");
 
@@ -31,12 +31,12 @@ test("renders the Dutch Youtarr subscription shell", async () => {
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<html[^>]*lang="nl"/i);
+  assert.match(html, /<html[^>]*lang="en"/i);
   assert.match(html, /<title>Youtarr Feed<\/title>/i);
-  assert.match(html, /Je abonnementen/);
-  assert.match(html, /Kanalen/);
-  assert.match(html, /Losse video/);
-  assert.match(html, /Nog ophalen/);
+  assert.match(html, /Your Subscriptions/);
+  assert.match(html, /Channels/);
+  assert.match(html, /Single Videos/);
+  assert.match(html, /Not downloaded/);
 });
 
 test("serves the demo feed before Youtarr is configured", async () => {
@@ -89,7 +89,7 @@ test("validates downloads and simulates them in demo mode", async () => {
   assert.deepEqual(await valid.json(), {
     success: true,
     demo: true,
-    message: "Voorbeelddownload gestart",
+    message: "Demo download started",
   });
 });
 
@@ -99,7 +99,7 @@ test("reports idle activity before Youtarr is configured", async () => {
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     state: "idle",
-    label: "Geen actieve download",
+    label: "No active download",
     percent: 0,
   });
 });
@@ -126,7 +126,7 @@ test("requires a live Youtarr connection before adding channels", async () => {
     body: JSON.stringify({ url: "https://www.youtube.com/@openai" }),
   });
   assert.equal(response.status, 400);
-  assert.match((await response.json()).error, /Youtarr gekoppeld/);
+  assert.match((await response.json()).error, /connected Youtarr/);
 });
 
 test("stores single YouTube videos server-side", async () => {

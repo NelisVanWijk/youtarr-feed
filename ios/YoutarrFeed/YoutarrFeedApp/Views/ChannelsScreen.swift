@@ -14,9 +14,9 @@ struct ChannelsScreen: View {
         List {
             if channels.isEmpty {
                 ContentUnavailableView(
-                    "Geen kanalen",
+                    "No channels",
                     systemImage: "rectangle.stack.badge.minus",
-                    description: Text("Kanalen verschijnen hier zodra de server gekoppeld is.")
+                    description: Text("Channels appear here once the server is connected.")
                 )
             } else {
                 ForEach(channels) { channel in
@@ -28,8 +28,8 @@ struct ChannelsScreen: View {
                 }
             }
         }
-        .navigationTitle("Kanalen")
-        .searchable(text: $query, prompt: "Kanaal zoeken")
+        .navigationTitle("Channels")
+        .searchable(text: $query, prompt: "Search channels")
         .refreshable {
             await model.refreshAll()
         }
@@ -52,12 +52,12 @@ struct ChannelDetailScreen: View {
     var body: some View {
         VideoListScreen(
             title: channel.name,
-            subtitle: channel.autoDownload ? "Automatisch downloaden staat aan" : "Tik op een video om hem op te halen",
+            subtitle: channel.autoDownload ? "Automatic downloads are enabled" : "Tap a video to fetch it",
             videos: videos,
             query: $query,
             selectedVideo: $selectedVideo,
-            emptyTitle: "Geen video's",
-            emptyMessage: "Dit kanaal heeft nog geen geladen video's."
+            emptyTitle: "No videos",
+            emptyMessage: "This channel has no loaded videos yet."
         )
         .task {
             await model.loadChannel(channel)
@@ -86,7 +86,7 @@ struct ChannelRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(channel.name)
                     .font(.headline)
-                Text(channel.autoDownload ? "Automatisch downloaden" : "Handmatig ophalen")
+                Text(channel.autoDownload ? "Automatic downloads" : "Manual download")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

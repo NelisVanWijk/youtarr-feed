@@ -20,7 +20,7 @@ export async function GET(
   if (!isYoutarrConfigured()) {
     const channel = demoChannels.find((item) => item.id === id);
     if (!channel) {
-      return NextResponse.json({ error: "Kanaal niet gevonden" }, { status: 404 });
+      return NextResponse.json({ error: "Channel not found" }, { status: 404 });
     }
     return NextResponse.json({
       mode: "demo",
@@ -34,7 +34,7 @@ export async function GET(
     return NextResponse.json({ mode: "live", ...result });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Kanaal laden mislukte" },
+      { error: error instanceof Error ? error.message : "Could not load channel" },
       { status: 502 }
     );
   }

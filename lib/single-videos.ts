@@ -45,9 +45,9 @@ function singleChannelId(videoId: string) {
 function fallbackVideo(videoId: string): StoredSingleVideo {
   return {
     id: videoId,
-    title: `Losse video ${videoId}`,
+    title: `Single video ${videoId}`,
     thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-    channelName: "Losse video",
+    channelName: "Single video",
     channelAvatar: "",
     publishedAt: null,
     duration: 0,
@@ -211,7 +211,7 @@ export async function readSingleVideos(): Promise<FeedVideo[]> {
 export function addSingleVideo(input: string): Promise<FeedVideo> {
   const videoId = extractYouTubeVideoId(input);
   if (!videoId) {
-    return Promise.reject(new Error("Geen geldige YouTube-video gevonden"));
+    return Promise.reject(new Error("No valid YouTube video found"));
   }
 
   writeQueue = writeQueue.then(async () => {
@@ -235,7 +235,7 @@ export function addSingleVideo(input: string): Promise<FeedVideo> {
 
 export function removeSingleVideo(videoId: string): Promise<FeedVideo[]> {
   if (!isValidVideoId(videoId)) {
-    return Promise.reject(new Error("Ongeldig video-ID"));
+    return Promise.reject(new Error("Invalid video ID"));
   }
 
   writeQueue = writeQueue.then(async () => {

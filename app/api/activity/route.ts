@@ -7,7 +7,7 @@ export async function GET() {
   if (!isYoutarrConfigured()) {
     return NextResponse.json({
       state: "idle",
-      label: "Geen actieve download",
+      label: "No active download",
       percent: 0,
     });
   }
@@ -16,7 +16,7 @@ export async function GET() {
     return NextResponse.json(await getDownloadActivity());
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Voortgang ophalen mislukte" },
+      { error: error instanceof Error ? error.message : "Could not load progress" },
       { status: 502 }
     );
   }

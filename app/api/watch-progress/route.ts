@@ -12,7 +12,7 @@ export async function GET() {
     return NextResponse.json({ progress: await readWatchProgress() });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Kijkvoortgang laden mislukte" },
+      { error: error instanceof Error ? error.message : "Could not load watch progress" },
       { status: 500 }
     );
   }
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Kijkvoortgang opslaan mislukte" },
+      { error: error instanceof Error ? error.message : "Could not save watch progress" },
       { status: 400 }
     );
   }
@@ -46,7 +46,7 @@ export async function DELETE(request: Request) {
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Kijkvoortgang wissen mislukte" },
+      { error: error instanceof Error ? error.message : "Could not clear watch progress" },
       { status: 400 }
     );
   }

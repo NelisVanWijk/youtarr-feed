@@ -1429,6 +1429,27 @@ main {
   font-weight: 650;
 }
 
+.language-switcher {
+  display: inline-flex;
+  overflow: hidden;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.language-switcher button {
+  padding: 6px 9px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.language-switcher button.active {
+  background: #f1f0eb;
+  color: #171719;
+}
+
 .primary-button {
   padding: 11px 17px;
   background: var(--accent);

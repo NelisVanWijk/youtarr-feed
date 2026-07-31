@@ -31,7 +31,7 @@ final class OfflineDownloadManager: NSObject, ObservableObject, URLSessionDownlo
                 title: video.title,
                 progress: 1,
                 state: .finished,
-                message: "Staat al offline"
+                message: "Already offline"
             )
             return
         }
@@ -91,7 +91,7 @@ final class OfflineDownloadManager: NSObject, ObservableObject, URLSessionDownlo
             Task { @MainActor in
                 do {
                     try OfflineLibrary.shared.add(video: video, downloadedFile: temporary)
-                    finish(videoId: videoId, message: "Offline opgeslagen")
+                    finish(videoId: videoId, message: "Saved offline")
                 } catch {
                     fail(videoId: videoId, message: error.localizedDescription)
                 }

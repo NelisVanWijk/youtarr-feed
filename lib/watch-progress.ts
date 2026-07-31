@@ -52,7 +52,7 @@ export function updateWatchProgress(
 ): Promise<WatchProgressMap> {
   const normalized = normalizeEntry({ ...entry, updatedAt: Date.now() });
   if (!normalized) {
-    return Promise.reject(new Error("Ongeldige kijkvoortgang"));
+    return Promise.reject(new Error("Invalid watch progress"));
   }
 
   writeQueue = writeQueue.then(async () => {
@@ -74,7 +74,7 @@ export function updateWatchProgress(
 
 export function clearWatchProgress(videoId: string): Promise<WatchProgressMap> {
   if (!isValidVideoId(videoId)) {
-    return Promise.reject(new Error("Ongeldig video-ID"));
+    return Promise.reject(new Error("Invalid video ID"));
   }
 
   writeQueue = writeQueue.then(async () => {

@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { id?: string };
   if (!body.id || !/^[A-Za-z0-9_-]{11}$/.test(body.id)) {
-    return NextResponse.json({ error: "Ongeldige video" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid video" }, { status: 400 });
   }
 
   if (!isYoutarrConfigured()) {
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Verwijderen mislukte" },
+      { error: error instanceof Error ? error.message : "Could not delete download" },
       { status: 502 }
     );
   }

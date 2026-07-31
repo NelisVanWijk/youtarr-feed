@@ -10,7 +10,7 @@ export async function GET(
 ) {
   const { id } = await context.params;
   if (!/^[A-Za-z0-9_-]{11}$/.test(id)) {
-    return NextResponse.json({ error: "Ongeldige video" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid video" }, { status: 400 });
   }
   const range = request.headers.get("range");
 
@@ -20,7 +20,7 @@ export async function GET(
 
     if (!isYoutarrConfigured()) {
       return NextResponse.json(
-        { error: "Afspelen is niet beschikbaar in de voorbeeldmodus" },
+        { error: "Playback is not available in demo mode" },
         { status: 404 }
       );
     }
@@ -49,7 +49,7 @@ export async function GET(
     });
   } catch (error) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Afspelen mislukte" },
+      { error: error instanceof Error ? error.message : "Playback failed" },
       { status: 502 }
     );
   }

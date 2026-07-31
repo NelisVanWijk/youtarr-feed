@@ -14,34 +14,34 @@ struct SettingsScreen: View {
                     .keyboardType(.URL)
                     .autocorrectionDisabled()
 
-                Button("Opslaan en verversen") {
+                Button("Save and refresh") {
                     model.serverURL = draftURL
                     Task { await model.refreshAll() }
                 }
 
                 if let status = model.status {
-                    LabeledContent("Status", value: status.connected ? "Verbonden" : "Niet verbonden")
+                    LabeledContent("Status", value: status.connected ? "Connected" : "Not connected")
                     if let server = status.server {
                         LabeledContent("Backend", value: server)
                     }
-                    LabeledContent("Modus", value: status.mode.rawValue)
+                    LabeledContent("Mode", value: status.mode.rawValue)
                 }
             }
 
-            Section("Opslag") {
-                LabeledContent("Offline video's", value: "\(offlineLibrary.videos.count)")
-                Button("Server opnieuw laden") {
+            Section("Storage") {
+                LabeledContent("Offline videos", value: "\(offlineLibrary.videos.count)")
+                Button("Reload server") {
                     Task { await model.refreshAll() }
                 }
             }
 
-            Section("Gebruik op iPhone") {
-                Text("Gebruik hier het IP-adres of domein van je Unraid/server. `localhost` werkt alleen in de simulator op je Mac.")
+            Section("Using iPhone") {
+                Text("Use the IP address or domain of your Unraid/server here. `localhost` only works in the simulator on your Mac.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
-        .navigationTitle("Instellingen")
+        .navigationTitle("Settings")
         .onAppear {
             draftURL = model.serverURL
         }
