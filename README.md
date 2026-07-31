@@ -332,13 +332,15 @@ docker run -d \
 | `YOUTARR_FEED_DATA_DIR` | Recommended | Persistent app data directory. Defaults to `/data` in production. |
 | `YOUTARR_FEED_CACHE_TTL_SECONDS` | Optional | Server-side feed/local-video cache duration. Defaults to `300`. |
 | `YOUTARR_MEDIA_DIR` | Recommended | Read-only mount of the Youtarr output folder for direct streaming. |
-| `YOUTARR_TRANSCODE_ENABLED` | Optional | Set to `true` to enable Apple-compatible HLS transcoding. |
+| `YOUTARR_TRANSCODE_ENABLED` | Optional | Set to `true` to enable Apple-compatible transcoding. |
 | `YOUTARR_TRANSCODE_ACCEL` | Optional | Use `vaapi` for Intel Quick Sync, or `software`. Defaults to `vaapi` when a device is configured. |
 | `YOUTARR_TRANSCODE_DEVICE` | Optional | VAAPI render device, usually `/dev/dri/renderD128` on Unraid/Linux. |
-| `YOUTARR_TRANSCODE_DIR` | Optional | Temporary transcode working directory. Defaults to `<data dir>/transcodes`. |
-| `YOUTARR_TRANSCODE_PLAYBACK_MODE` | Optional | Use `vod` to avoid Apple's Live Broadcast label, or `fast` to start while HLS is still growing. Defaults to `vod`. |
-| `YOUTARR_TRANSCODE_VIDEO_BITRATE` | Optional | Target video bitrate for compatible HLS. Defaults to `18000k`. |
-| `YOUTARR_TRANSCODE_VAAPI_QUALITY` | Optional | VAAPI CQP quality value. Lower is higher quality. Defaults to `24`. |
+| `YOUTARR_TRANSCODE_DIR` | Optional | Compatible-file cache and temporary transcode working directory. Defaults to `<data dir>/transcodes`. |
+| `YOUTARR_TRANSCODE_OUTPUT_MODE` | Optional | Use `file` to create reusable compatible MP4 files, or `hls` for the older temporary HLS mode. Defaults to `file`. |
+| `YOUTARR_TRANSCODE_MIN_HEIGHT` | Optional | Only transcode videos at this height or higher. Defaults to `1440`, so 1440p and 4K are prepared while 1080p is skipped. Set `0` to allow all resolutions. |
+| `YOUTARR_TRANSCODE_PLAYBACK_MODE` | Optional | HLS-only. Use `vod` to avoid Apple's Live Broadcast label, or `fast` to start while HLS is still growing. Defaults to `vod`. |
+| `YOUTARR_TRANSCODE_VIDEO_BITRATE` | Optional | Target video bitrate for compatible output when software transcoding is used. Defaults to `18000k`. |
+| `YOUTARR_TRANSCODE_VAAPI_QUALITY` | Optional | VAAPI CQP quality value. Lower is higher quality. Defaults to `20`. |
 | `YOUTARR_TRANSCODE_AUDIO_BITRATE` | Optional | Target AAC audio bitrate. Defaults to `160k`. |
 | `PLEX_URL` | Optional | Plex server URL for refresh requests. |
 | `PLEX_TOKEN` | Optional | Plex token. |
@@ -350,28 +352,26 @@ Direct local streaming can reduce buffering because it removes the Youtarr
 stream proxy from the playback path. It does not fix codec compatibility by
 itself.
 
-When transcoding is enabled, Youtarr Feed checks the selected local video with
-`ffprobe` on Apple clients. If the file is not a simple H.264/AAC MP4/M4V/MOV,
-the app prepares an Apple-compatible HLS stream with `ffmpeg`. Other clients
-keep using direct playback, so transcoding is not used for Windows/Chrome-style
-playback.
+When transcoding is enabled, Youtarr Feed checks local video files with
+`ffprobe`. By default it only prepares compatible versions for 1440p and 4K
+files, because those are the files most likely to be VP9, AV1, HEVC, or otherwise
+awkward for Apple playback.
 
-Compatible playback is started manually from the watch page, or automatically
-only after direct Apple playback fails. By default, compatible playback uses
-`YOUTARR_TRANSCODE_PLAYBACK_MODE=vod`: the app shows an in-player spinner until
-ffmpeg has written a complete finite HLS playlist, which avoids Apple's "Live
-Broadcast" treatment. When playback resumes from saved watch progress,
-transcoding starts near that saved position instead of from the beginning of the
-video.
+The default `YOUTARR_TRANSCODE_OUTPUT_MODE=file` creates a reusable
+Apple-compatible `compatible.mp4` cache file with `ffmpeg`. When a newly queued
+download finishes while the web app is open, Youtarr Feed starts that compatible
+file in the background. For existing downloaded videos, use the three-dot menu
+and choose **Prepare compatible file**.
 
-If you prefer the fastest possible startup and do not mind Apple's player
-calling the temporary stream live, set `YOUTARR_TRANSCODE_PLAYBACK_MODE=fast`.
-That mode starts as soon as the first playlist and media segment are available.
+Apple clients prefer the compatible MP4 when it exists. Other clients keep using
+the original direct file, so Windows/Chrome-style playback does not use the
+compatible copy. Watch progress is still stored against the original video and
+duration. Compatible files are removed when the download is deleted.
 
-Watch progress is still stored against the original video and duration, so
-switching between direct playback and compatible playback keeps Continue
-Watching in sync. Temporary transcode files are removed when compatible playback
-is stopped, when the page is closed, or when the download is deleted.
+The older HLS mode is still available with `YOUTARR_TRANSCODE_OUTPUT_MODE=hls`.
+In that mode, `YOUTARR_TRANSCODE_PLAYBACK_MODE=vod` avoids Apple's "Live
+Broadcast" label by waiting for a finite playlist, while `fast` starts as soon
+as the first segment exists.
 
 For Intel Quick Sync on Unraid, pass the render device into the container:
 
@@ -385,8 +385,9 @@ Recommended transcode variables:
 YOUTARR_TRANSCODE_ENABLED=true
 YOUTARR_TRANSCODE_ACCEL=vaapi
 YOUTARR_TRANSCODE_DEVICE=/dev/dri/renderD128
-YOUTARR_TRANSCODE_PLAYBACK_MODE=vod
-YOUTARR_TRANSCODE_VAAPI_QUALITY=24
+YOUTARR_TRANSCODE_OUTPUT_MODE=file
+YOUTARR_TRANSCODE_MIN_HEIGHT=1440
+YOUTARR_TRANSCODE_VAAPI_QUALITY=20
 ```
 
 After updating the container, VAAPI can be checked from inside the container:

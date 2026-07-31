@@ -78,6 +78,7 @@ export const translations = {
       downloadRunning: "Download running",
       fetch: "Download",
       redownload: "Re-download",
+      prepareCompatible: "Prepare compatible file",
     },
     errors: {
       loadFeed: "Could not load feed",
@@ -258,6 +259,7 @@ export const translations = {
       downloadRunning: "Download loopt",
       fetch: "Ophalen",
       redownload: "Opnieuw ophalen",
+      prepareCompatible: "Compatible bestand maken",
     },
     errors: {
       loadFeed: "Feed laden mislukte",

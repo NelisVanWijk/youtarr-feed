@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getLocalMediaResponse } from "../../../../lib/local-media";
+import {
+  getLocalMediaResponse,
+  isLikelyAppleClient,
+} from "../../../../lib/local-media";
+import { getTranscodeMediaResponse } from "../../../../lib/transcode";
 import { getStream, isYoutarrConfigured } from "../../../../lib/youtarr";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +21,11 @@ export async function GET(
 
   try {
     if (direct) {
+      if (isLikelyAppleClient(request.headers.get("user-agent"))) {
+        const compatibleResponse = await getTranscodeMediaResponse(id, range);
+        if (compatibleResponse) return compatibleResponse;
+      }
+
       const localResponse = await getLocalMediaResponse(
         id,
         range,

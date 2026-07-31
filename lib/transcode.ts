@@ -21,6 +21,7 @@ type TranscodeMetadata = {
   sourceSize: number;
   sourceMtimeMs: number;
   startTime: number;
+  outputMode: "file" | "hls";
   completedAt: number;
 };
 
@@ -32,7 +33,9 @@ export type TranscodeStatus = {
   complete: boolean;
   running: boolean;
   startTime: number;
+  outputMode: "file" | "hls";
   playbackMode: "vod" | "fast";
+  mediaUrl?: string;
   playlistUrl?: string;
   error?: string;
 };
@@ -42,6 +45,8 @@ export type AppleTranscodeDecision = {
   reason?: string;
   videoCodec?: string;
   audioCodec?: string;
+  width?: number;
+  height?: number;
 };
 
 const transcodeJobs = new Map<string, TranscodeJob>();
@@ -56,11 +61,19 @@ const transcodeVideoBitrate =
 const transcodeAudioBitrate =
   process.env.YOUTARR_TRANSCODE_AUDIO_BITRATE?.trim() || "160k";
 const transcodeVaapiQuality =
-  process.env.YOUTARR_TRANSCODE_VAAPI_QUALITY?.trim() || "24";
+  process.env.YOUTARR_TRANSCODE_VAAPI_QUALITY?.trim() || "20";
+const transcodeOutputMode =
+  process.env.YOUTARR_TRANSCODE_OUTPUT_MODE?.trim().toLowerCase() === "hls"
+    ? "hls"
+    : "file";
 const transcodePlaybackMode =
   process.env.YOUTARR_TRANSCODE_PLAYBACK_MODE?.trim().toLowerCase() === "fast"
     ? "fast"
     : "vod";
+const transcodeMinimumHeight = Math.max(
+  0,
+  Number(process.env.YOUTARR_TRANSCODE_MIN_HEIGHT || "1440") || 1440
+);
 const hlsFilePattern = /^(index\.m3u8|segment_\d{5}\.ts)$/;
 
 function runProcess(command: string, args: string[], timeoutMs = 12000) {
@@ -107,8 +120,16 @@ function playlistPath(videoId: string) {
   return path.join(transcodeDirectory(videoId), "index.m3u8");
 }
 
+function compatibleFilePath(videoId: string) {
+  return path.join(transcodeDirectory(videoId), "compatible.mp4");
+}
+
 function playlistUrl(videoId: string) {
   return `/api/transcode/${encodeURIComponent(videoId)}/hls/index.m3u8`;
+}
+
+function mediaUrl(videoId: string) {
+  return `/api/transcode/${encodeURIComponent(videoId)}/file`;
 }
 
 function normalizeStartTime(value?: number) {
@@ -129,13 +150,18 @@ async function isReady(videoId: string, startTime?: number) {
   try {
     const localFile = await getLocalMediaFile(videoId);
     if (!localFile) return false;
-    const [playlistStat, metadata] = await Promise.all([
-      stat(playlistPath(videoId)),
+    const [outputStat, metadata] = await Promise.all([
+      stat(
+        transcodeOutputMode === "file"
+          ? compatibleFilePath(videoId)
+          : playlistPath(videoId)
+      ),
       readMetadata(videoId),
     ]);
     return Boolean(
-      playlistStat.isFile() &&
+      outputStat.isFile() &&
         metadata &&
+        metadata.outputMode === transcodeOutputMode &&
         metadata.sourcePath === localFile.filePath &&
         metadata.sourceSize === localFile.size &&
         metadata.sourceMtimeMs === localFile.mtimeMs &&
@@ -157,6 +183,44 @@ async function hasPlayableHls(videoId: string) {
   }
 }
 
+async function probeMedia(filePath: string) {
+  const result = await runProcess("ffprobe", [
+    "-v",
+    "error",
+    "-show_entries",
+    "stream=codec_type,codec_name,pix_fmt,width,height",
+    "-of",
+    "json",
+    filePath,
+  ]);
+  if (result.code !== 0) return null;
+
+  const parsed = JSON.parse(result.stdout) as {
+    streams?: Array<{
+      codec_type?: string;
+      codec_name?: string;
+      pix_fmt?: string;
+      width?: number;
+      height?: number;
+    }>;
+  };
+  const video = parsed.streams?.find((stream) => stream.codec_type === "video");
+  const audio = parsed.streams?.find((stream) => stream.codec_type === "audio");
+  return {
+    videoCodec: video?.codec_name?.toLowerCase(),
+    audioCodec: audio?.codec_name?.toLowerCase(),
+    pixelFormat: video?.pix_fmt?.toLowerCase(),
+    width: Number(video?.width) || undefined,
+    height: Number(video?.height) || undefined,
+  };
+}
+
+async function isTranscodeEligible(filePath: string) {
+  if (transcodeMinimumHeight <= 0) return true;
+  const probe = await probeMedia(filePath);
+  return Boolean(probe?.height && probe.height >= transcodeMinimumHeight);
+}
+
 function ffmpegArguments(inputPath: string, outputDirectory: string, startTime: number) {
   const segmentPath = path.join(outputDirectory, "segment_%05d.ts");
   const inputArgs = [
@@ -171,18 +235,28 @@ function ffmpegArguments(inputPath: string, outputDirectory: string, startTime: 
     "2",
     "-b:a",
     transcodeAudioBitrate,
-    "-f",
-    "hls",
-    "-hls_time",
-    "4",
-    "-hls_list_size",
-    "0",
-    ...(transcodePlaybackMode === "vod"
-      ? ["-hls_playlist_type", "vod"]
-      : ["-hls_flags", "independent_segments"]),
-    "-hls_segment_filename",
-    segmentPath,
-    path.join(outputDirectory, "index.m3u8"),
+    ...(transcodeOutputMode === "file"
+      ? [
+          "-movflags",
+          "+faststart",
+          "-f",
+          "mp4",
+          path.join(outputDirectory, "compatible.mp4"),
+        ]
+      : [
+          "-f",
+          "hls",
+          "-hls_time",
+          "4",
+          "-hls_list_size",
+          "0",
+          ...(transcodePlaybackMode === "vod"
+            ? ["-hls_playlist_type", "vod"]
+            : ["-hls_flags", "independent_segments"]),
+          "-hls_segment_filename",
+          segmentPath,
+          path.join(outputDirectory, "index.m3u8"),
+        ]),
   ];
 
   if (transcodeAccel === "vaapi" && transcodeDevice) {
@@ -240,6 +314,7 @@ export async function getTranscodeStatus(videoId: string): Promise<TranscodeStat
       complete: false,
       running: false,
       startTime: 0,
+      outputMode: transcodeOutputMode,
       playbackMode: transcodePlaybackMode,
       error: "Invalid video",
     };
@@ -252,6 +327,7 @@ export async function getTranscodeStatus(videoId: string): Promise<TranscodeStat
   const complete = transcodeEnabled && await isReady(videoId);
   const playable = complete ||
     Boolean(
+      transcodeOutputMode === "hls" &&
       transcodePlaybackMode === "fast" &&
         job?.state === "running" &&
         await hasPlayableHls(videoId)
@@ -264,10 +340,40 @@ export async function getTranscodeStatus(videoId: string): Promise<TranscodeStat
     complete,
     running: job?.state === "running",
     startTime,
+    outputMode: transcodeOutputMode,
     playbackMode: transcodePlaybackMode,
-    playlistUrl: playable ? playlistUrl(videoId) : undefined,
+    mediaUrl: complete && transcodeOutputMode === "file" ? mediaUrl(videoId) : undefined,
+    playlistUrl: playable && transcodeOutputMode === "hls" ? playlistUrl(videoId) : undefined,
     error: job?.state === "error" ? job.error : undefined,
   };
+}
+
+function parseRange(range: string | null, fileSize: number) {
+  if (!range) return null;
+  const match = /^bytes=(\d*)-(\d*)$/.exec(range);
+  if (!match) return "invalid" as const;
+
+  const [, startValue, endValue] = match;
+  let start = startValue ? Number(startValue) : 0;
+  let end = endValue ? Number(endValue) : fileSize - 1;
+
+  if (!startValue && endValue) {
+    const suffixLength = Number(endValue);
+    start = Math.max(fileSize - suffixLength, 0);
+    end = fileSize - 1;
+  }
+
+  if (
+    !Number.isInteger(start) ||
+    !Number.isInteger(end) ||
+    start < 0 ||
+    end < start ||
+    start >= fileSize
+  ) {
+    return "invalid" as const;
+  }
+
+  return { start, end: Math.min(end, fileSize - 1) };
 }
 
 export async function getAppleTranscodeDecision(
@@ -280,43 +386,44 @@ export async function getAppleTranscodeDecision(
 
   const localFile = await getLocalMediaFile(videoId);
   if (!localFile) return { suggested: false };
+  const probe = await probeMedia(localFile.filePath);
+  if (!probe) return { suggested: false, reason: "probe" };
+  if (
+    transcodeMinimumHeight > 0 &&
+    (!probe.height || probe.height < transcodeMinimumHeight)
+  ) {
+    return {
+      suggested: false,
+      reason: "resolution",
+      videoCodec: probe.videoCodec,
+      audioCodec: probe.audioCodec,
+      width: probe.width,
+      height: probe.height,
+    };
+  }
   if (![".mp4", ".m4v", ".mov"].includes(localFile.extension)) {
-    return { suggested: true, reason: "container" };
+    return {
+      suggested: true,
+      reason: "container",
+      videoCodec: probe.videoCodec,
+      audioCodec: probe.audioCodec,
+      width: probe.width,
+      height: probe.height,
+    };
   }
 
   try {
-    const result = await runProcess("ffprobe", [
-      "-v",
-      "error",
-      "-show_entries",
-      "stream=codec_type,codec_name,pix_fmt",
-      "-of",
-      "json",
-      localFile.filePath,
-    ]);
-    if (result.code !== 0) return { suggested: false, reason: "probe" };
-
-    const parsed = JSON.parse(result.stdout) as {
-      streams?: Array<{
-        codec_type?: string;
-        codec_name?: string;
-        pix_fmt?: string;
-      }>;
-    };
-    const video = parsed.streams?.find((stream) => stream.codec_type === "video");
-    const audio = parsed.streams?.find((stream) => stream.codec_type === "audio");
-    const videoCodec = video?.codec_name?.toLowerCase();
-    const audioCodec = audio?.codec_name?.toLowerCase();
-    const pixelFormat = video?.pix_fmt?.toLowerCase();
-    const videoSafe = videoCodec === "h264" &&
-      (!pixelFormat || ["yuv420p", "yuvj420p"].includes(pixelFormat));
-    const audioSafe = !audioCodec || audioCodec === "aac";
+    const videoSafe = probe.videoCodec === "h264" &&
+      (!probe.pixelFormat || ["yuv420p", "yuvj420p"].includes(probe.pixelFormat));
+    const audioSafe = !probe.audioCodec || probe.audioCodec === "aac";
 
     return {
       suggested: !(videoSafe && audioSafe),
       reason: videoSafe && audioSafe ? undefined : "codec",
-      videoCodec,
-      audioCodec,
+      videoCodec: probe.videoCodec,
+      audioCodec: probe.audioCodec,
+      width: probe.width,
+      height: probe.height,
     };
   } catch {
     return { suggested: false, reason: "probe" };
@@ -327,7 +434,9 @@ export async function startTranscode(
   videoId: string,
   requestedStartTime?: number
 ): Promise<TranscodeStatus> {
-  const startTime = normalizeStartTime(requestedStartTime);
+  const startTime = transcodeOutputMode === "file"
+    ? 0
+    : normalizeStartTime(requestedStartTime);
   if (!transcodeEnabled) {
     return {
       enabled: false,
@@ -337,6 +446,7 @@ export async function startTranscode(
       complete: false,
       running: false,
       startTime,
+      outputMode: transcodeOutputMode,
       playbackMode: transcodePlaybackMode,
       error: "Transcoding is disabled",
     };
@@ -350,6 +460,7 @@ export async function startTranscode(
       complete: false,
       running: false,
       startTime,
+      outputMode: transcodeOutputMode,
       playbackMode: transcodePlaybackMode,
       error: "Invalid video",
     };
@@ -368,8 +479,23 @@ export async function startTranscode(
       complete: false,
       running: false,
       startTime,
+      outputMode: transcodeOutputMode,
       playbackMode: transcodePlaybackMode,
       error: "Local media file not found",
+    };
+  }
+  if (!(await isTranscodeEligible(localFile.filePath))) {
+    return {
+      enabled: true,
+      configured: Boolean(transcodeRoot),
+      available: true,
+      ready: false,
+      complete: false,
+      running: false,
+      startTime,
+      outputMode: transcodeOutputMode,
+      playbackMode: transcodePlaybackMode,
+      error: `Compatible transcoding is limited to ${transcodeMinimumHeight}p and higher`,
     };
   }
 
@@ -426,6 +552,7 @@ export async function startTranscode(
           sourceSize: currentFile.size,
           sourceMtimeMs: currentFile.mtimeMs,
           startTime,
+          outputMode: transcodeOutputMode,
           completedAt: Date.now(),
         };
         await writeFile(metadataPath(videoId), JSON.stringify(metadata, null, 2), "utf8");
@@ -469,6 +596,58 @@ export async function getTranscodeHlsResponse(videoId: string, fileName: string)
     return new Response(
       Readable.toWeb(createReadStream(filePath)) as ReadableStream,
       { headers }
+    );
+  } catch {
+    return null;
+  }
+}
+
+export async function getTranscodeMediaResponse(videoId: string, range: string | null) {
+  if (!transcodeEnabled || transcodeOutputMode !== "file" || !isValidVideoId(videoId)) {
+    return null;
+  }
+  if (!(await isReady(videoId))) return null;
+
+  const filePath = compatibleFilePath(videoId);
+  try {
+    const fileStat = await stat(filePath);
+    if (!fileStat.isFile()) return null;
+
+    const parsedRange = parseRange(range, fileStat.size);
+    const headers = new Headers({
+      "Accept-Ranges": "bytes",
+      "Content-Disposition": "inline",
+      "Content-Type": "video/mp4",
+      "Cache-Control": "no-store",
+      "X-Content-Type-Options": "nosniff",
+    });
+
+    if (parsedRange === "invalid") {
+      headers.set("Content-Range", `bytes */${fileStat.size}`);
+      return new Response(null, { status: 416, headers });
+    }
+
+    if (parsedRange) {
+      headers.set("Content-Length", String(parsedRange.end - parsedRange.start + 1));
+      headers.set(
+        "Content-Range",
+        `bytes ${parsedRange.start}-${parsedRange.end}/${fileStat.size}`
+      );
+      return new Response(
+        Readable.toWeb(
+          createReadStream(filePath, {
+            start: parsedRange.start,
+            end: parsedRange.end,
+          })
+        ) as ReadableStream,
+        { status: 206, headers }
+      );
+    }
+
+    headers.set("Content-Length", String(fileStat.size));
+    return new Response(
+      Readable.toWeb(createReadStream(filePath)) as ReadableStream,
+      { status: 200, headers }
     );
   } catch {
     return null;

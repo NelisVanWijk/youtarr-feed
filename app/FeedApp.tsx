@@ -73,7 +73,9 @@ type StreamSourceInfo = {
     complete: boolean;
     running: boolean;
     startTime: number;
+    outputMode: "file" | "hls";
     playbackMode: "vod" | "fast";
+    mediaUrl?: string;
     playlistUrl?: string;
     error?: string;
   };
@@ -351,6 +353,7 @@ function VideoCard({
   onChannel,
   onDelete,
   onRemoveFromList,
+  onPrepareCompatible,
   copy,
 }: {
   video: FeedVideo;
@@ -362,6 +365,7 @@ function VideoCard({
   onChannel?: (channelId: string) => void;
   onDelete: (video: FeedVideo) => void;
   onRemoveFromList?: (video: FeedVideo) => void;
+  onPrepareCompatible?: (video: FeedVideo) => void;
   copy: AppCopy;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -429,15 +433,27 @@ function VideoCard({
                         : copy.menu.fetch}
               </button>
               {video.downloaded && (
-                <button
-                  className="danger-menu-item"
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onDelete(video);
-                  }}
-                >
-                  {copy.common.deleteDownload}
-                </button>
+                <>
+                  {onPrepareCompatible && (
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onPrepareCompatible(video);
+                      }}
+                    >
+                      {copy.menu.prepareCompatible}
+                    </button>
+                  )}
+                  <button
+                    className="danger-menu-item"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      onDelete(video);
+                    }}
+                  >
+                    {copy.common.deleteDownload}
+                  </button>
+                </>
               )}
               {onRemoveFromList && (
                 <button
@@ -533,7 +549,10 @@ export default function FeedApp() {
   const playerRef = useRef<HTMLVideoElement | null>(null);
   const intendedPlaybackRef = useRef(false);
   const pauseIntentTimerRef = useRef<number | null>(null);
-  const activeCompatibleVideoIdRef = useRef<string | null>(null);
+  const activeCompatibleRef = useRef<{
+    videoId: string;
+    outputMode: "file" | "hls";
+  } | null>(null);
   const mode: AppMode = feed?.mode || "demo";
   const copy = translations[language];
   const shouldUseInlineWatchPage = useCallback(() => true, []);
@@ -808,14 +827,21 @@ export default function FeedApp() {
   }, [mode, selectedVideo]);
 
   useEffect(() => {
-    activeCompatibleVideoIdRef.current =
-      selectedVideo && playerStreamMode === "compatible" ? selectedVideo.id : null;
-  }, [playerStreamMode, selectedVideo]);
+    activeCompatibleRef.current =
+      selectedVideo && playerStreamMode === "compatible"
+        ? {
+            videoId: selectedVideo.id,
+            outputMode: streamSource?.transcode?.outputMode || "file",
+          }
+        : null;
+  }, [playerStreamMode, selectedVideo, streamSource?.transcode?.outputMode]);
 
   useEffect(() => {
     function cleanupActiveCompatibleStream() {
-      const videoId = activeCompatibleVideoIdRef.current;
-      if (videoId) void stopCompatibleStream(videoId, true);
+      const activeCompatible = activeCompatibleRef.current;
+      if (activeCompatible?.outputMode === "hls") {
+        void stopCompatibleStream(activeCompatible.videoId, true);
+      }
     }
 
     window.addEventListener("pagehide", cleanupActiveCompatibleStream);
@@ -1067,6 +1093,9 @@ export default function FeedApp() {
     setSelectedVideo((current) =>
       current?.id === updated.id ? { ...current, ...updated } : current
     );
+    if (mode === "live") {
+      void prepareCompatibleDownload(updated.id);
+    }
   }
 
   function isApplePlaybackClient() {
@@ -1099,7 +1128,7 @@ export default function FeedApp() {
           current ? { ...current, transcode: data } : current
         );
       }
-      if (data.ready && data.playlistUrl) {
+      if (data.ready && (data.mediaUrl || data.playlistUrl)) {
         setTranscodeStartTime(data.startTime || 0);
         setTranscodeState("ready");
         return data;
@@ -1117,6 +1146,30 @@ export default function FeedApp() {
       method: "DELETE",
       keepalive,
     }).catch(() => undefined);
+  }
+
+  async function prepareCompatibleDownload(videoId: string) {
+    try {
+      const response = await fetch(`/api/transcode/${encodeURIComponent(videoId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startTime: 0 }),
+      });
+      if (!response.ok) return;
+      const data = (await response.json()) as TranscodeResponse;
+      setStreamSources((current) => ({
+        ...current,
+        [videoId]: {
+          ...(current[videoId] || {
+            source: "local" as const,
+            youtarrConfigured: true,
+          }),
+          transcode: data,
+        },
+      }));
+    } catch {
+      // Background compatible-file preparation should never block downloads.
+    }
   }
 
   async function startCompatibleStream(video: FeedVideo) {
@@ -1142,7 +1195,7 @@ export default function FeedApp() {
       const data = (await response.json()) as TranscodeResponse;
       if (!response.ok && data?.error) throw new Error(data.error);
       setTranscodeStartTime(data.startTime || 0);
-      if (data.ready && data.playlistUrl) {
+      if (data.ready && (data.mediaUrl || data.playlistUrl)) {
         setTranscodeState("ready");
         return;
       }
@@ -1176,9 +1229,13 @@ export default function FeedApp() {
         return;
       }
       const data = (await response.json()) as TranscodeResponse;
-      if (data.ready && data.playlistUrl && data.appleDecision?.suggested) {
+      setStreamSource((current) =>
+        current ? { ...current, transcode: data } : current
+      );
+      if (data.ready && (data.mediaUrl || data.playlistUrl) && data.appleDecision?.suggested) {
+        setPlayerStreamMode("compatible");
         setTranscodeStartTime(data.startTime || 0);
-        setTranscodeState("idle");
+        setTranscodeState("ready");
         return;
       }
       setPlayerStreamMode("direct");
@@ -1272,7 +1329,11 @@ export default function FeedApp() {
       setPlayerMode("mini");
       return;
     }
-    if (selectedVideo && playerStreamMode === "compatible") {
+    if (
+      selectedVideo &&
+      playerStreamMode === "compatible" &&
+      streamSource?.transcode?.outputMode === "hls"
+    ) {
       void stopCompatibleStream(selectedVideo.id);
     }
     playerRef.current?.pause();
@@ -1644,9 +1705,13 @@ export default function FeedApp() {
   const selectedVideoId = selectedVideo
     ? encodeURIComponent(selectedVideo.id)
     : "";
+  const compatiblePlayerSource =
+    streamSource?.transcode?.mediaUrl ||
+    streamSource?.transcode?.playlistUrl ||
+    `/api/transcode/${selectedVideoId}/hls/index.m3u8`;
   const playerSource = selectedVideo
     ? playerStreamMode === "compatible" && transcodeState === "ready"
-      ? `/api/transcode/${selectedVideoId}/hls/index.m3u8`
+      ? compatiblePlayerSource
       : `/api/stream/${selectedVideoId}${
           playerStreamMode === "youtarr" ? "?direct=0" : ""
         }`
@@ -1825,6 +1890,7 @@ export default function FeedApp() {
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
+                    onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     copy={copy}
                   />
                 ))}
@@ -1865,6 +1931,7 @@ export default function FeedApp() {
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
+                    onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     copy={copy}
                   />
                 ))}
@@ -1911,6 +1978,7 @@ export default function FeedApp() {
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
+                    onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     copy={copy}
                   />
                 ))}
@@ -1975,6 +2043,7 @@ export default function FeedApp() {
                     downloadJob={downloadJobs[video.id]}
                     onOpen={openVideo}
                     onDelete={(item) => void removeDownload(item)}
+                    onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     onRemoveFromList={(item) => void removeSingleVideo(item)}
                     copy={copy}
                   />
@@ -2104,6 +2173,7 @@ export default function FeedApp() {
                     onOpen={openVideo}
                     onChannel={() => undefined}
                     onDelete={(item) => void removeDownload(item)}
+                    onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     copy={copy}
                   />
                 ))}
@@ -2407,7 +2477,11 @@ export default function FeedApp() {
                       className={playerStreamMode !== "compatible" ? "active" : ""}
                       onClick={() => {
                         setTranscodeError("");
-                        if (selectedVideo && playerStreamMode === "compatible") {
+                        if (
+                          selectedVideo &&
+                          playerStreamMode === "compatible" &&
+                          streamSource?.transcode?.outputMode === "hls"
+                        ) {
                           void stopCompatibleStream(selectedVideo.id);
                         }
                         setPlayerStreamMode("direct");
