@@ -13,10 +13,17 @@ export async function GET(
     return NextResponse.json({ error: "Invalid video" }, { status: 400 });
   }
   const range = request.headers.get("range");
+  const direct = new URL(request.url).searchParams.get("direct") !== "0";
 
   try {
-    const localResponse = await getLocalMediaResponse(id, range);
-    if (localResponse) return localResponse;
+    if (direct) {
+      const localResponse = await getLocalMediaResponse(
+        id,
+        range,
+        request.headers.get("user-agent")
+      );
+      if (localResponse) return localResponse;
+    }
 
     if (!isYoutarrConfigured()) {
       return NextResponse.json(

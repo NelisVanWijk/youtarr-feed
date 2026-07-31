@@ -60,6 +60,7 @@ type StreamSourceInfo = {
     fileName?: string;
     extension?: string;
     size?: number;
+    compatible?: boolean;
   };
   youtarrConfigured: boolean;
 };
@@ -470,6 +471,7 @@ export default function FeedApp() {
   const [selectedVideo, setSelectedVideo] = useState<FeedVideo | null>(null);
   const [playerMode, setPlayerMode] = useState<PlayerMode>("full");
   const [playerPlaying, setPlayerPlaying] = useState(false);
+  const [playerStreamFallback, setPlayerStreamFallback] = useState(false);
   const [downloadJobs, setDownloadJobs] = useState<Record<string, DownloadJob>>({});
   const [deleteState, setDeleteState] = useState<"idle" | "deleting" | "error">(
     "idle"
@@ -712,6 +714,21 @@ export default function FeedApp() {
   }, [mode, playerMode, selectedVideo]);
 
   useEffect(() => {
+    const refreshSourceLabels = () => {
+      if (document.visibilityState !== "visible") return;
+      setStreamSources({});
+      setStreamSource(null);
+    };
+
+    document.addEventListener("visibilitychange", refreshSourceLabels);
+    window.addEventListener("focus", refreshSourceLabels);
+    return () => {
+      document.removeEventListener("visibilitychange", refreshSourceLabels);
+      window.removeEventListener("focus", refreshSourceLabels);
+    };
+  }, []);
+
+  useEffect(() => {
     const player = playerRef.current;
     if (!player || !selectedVideo?.downloaded || mode !== "live") {
       return;
@@ -758,6 +775,17 @@ export default function FeedApp() {
       pauseIntentTimerRef.current = null;
     }
   }, [selectedVideo?.id]);
+
+  useEffect(() => {
+    if (!playerStreamFallback || !playerRef.current) return;
+    const player = playerRef.current;
+    player.load();
+    if (intendedPlaybackRef.current) {
+      void player.play().catch(() => {
+        setPlayerPlaying(false);
+      });
+    }
+  }, [playerStreamFallback]);
 
   useEffect(() => {
     let stopped = false;
@@ -970,6 +998,15 @@ export default function FeedApp() {
     setChannelVideos((current) => updateList(current));
     setLocalVideos((current) => updateList(current));
     setSingleVideos((current) => updateList(current));
+    setStreamSources((current) => {
+      if (!current[updated.id]) return current;
+      const next = { ...current };
+      delete next[updated.id];
+      return next;
+    });
+    if (selectedVideo?.id === updated.id) {
+      setStreamSource(null);
+    }
     setSelectedVideo((current) =>
       current?.id === updated.id ? { ...current, ...updated } : current
     );
@@ -1019,6 +1056,7 @@ export default function FeedApp() {
             if (source.source === "local") {
               const downloadedVideo = { ...video, downloaded: true };
               markVideoDownloaded(downloadedVideo);
+              setPlayerStreamFallback(false);
               setSelectedVideo(downloadedVideo);
               setPlayerMode("full");
               setPlayerPlaying(false);
@@ -1034,6 +1072,7 @@ export default function FeedApp() {
       void startDownload(video);
       return;
     }
+    setPlayerStreamFallback(false);
     setSelectedVideo(video);
     setPlayerMode("full");
     setPlayerPlaying(false);
@@ -1048,6 +1087,7 @@ export default function FeedApp() {
     }
     playerRef.current?.pause();
     intendedPlaybackRef.current = false;
+    setPlayerStreamFallback(false);
     setPlayerPlaying(false);
     setSelectedVideo(null);
   }
@@ -1948,7 +1988,9 @@ export default function FeedApp() {
                   disableRemotePlayback={false}
                   preload="metadata"
                   poster={selectedVideo.thumbnail || undefined}
-                  src={`/api/stream/${encodeURIComponent(selectedVideo.id)}`}
+                  src={`/api/stream/${encodeURIComponent(selectedVideo.id)}${
+                    playerStreamFallback ? "?direct=0" : ""
+                  }`}
                   onLoadedMetadata={(event) => {
                     event.currentTarget.setAttribute("x-webkit-airplay", "allow");
                     event.currentTarget.setAttribute("webkit-playsinline", "true");
@@ -2010,6 +2052,23 @@ export default function FeedApp() {
                       event.currentTarget.duration,
                       true
                     );
+                  }}
+                  onError={(event) => {
+                    intendedPlaybackRef.current =
+                      intendedPlaybackRef.current || !event.currentTarget.paused;
+                    if (!playerStreamFallback) {
+                      const fallbackSource: StreamSourceInfo = {
+                        source: "youtarr",
+                        local: streamSource?.local,
+                        youtarrConfigured: streamSource?.youtarrConfigured ?? true,
+                      };
+                      setStreamSource(fallbackSource);
+                      setStreamSources((current) => ({
+                        ...current,
+                        [selectedVideo.id]: fallbackSource,
+                      }));
+                      setPlayerStreamFallback(true);
+                    }
                   }}
                 />
                 {playerMode === "mini" && (

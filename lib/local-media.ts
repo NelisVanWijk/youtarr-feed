@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 
 const mediaDirectory = process.env.YOUTARR_MEDIA_DIR?.trim() || "";
 const allowedExtensions = new Set([".mp4", ".m4v", ".mov", ".webm", ".mkv"]);
+const appleFriendlyExtensions = new Set([".mp4", ".m4v", ".mov"]);
 const mimeTypes = new Map([
   [".mp4", "video/mp4"],
   [".m4v", "video/mp4"],
@@ -17,6 +18,15 @@ function isValidVideoId(value: string) {
   return /^[A-Za-z0-9_-]{11}$/.test(value);
 }
 
+function isLikelyAppleClient(userAgent?: string | null) {
+  if (!userAgent) return false;
+  return /\b(iPhone|iPad|iPod)\b/i.test(userAgent) || (
+    /\bMacintosh\b/i.test(userAgent) &&
+    /\bSafari\b/i.test(userAgent) &&
+    !/\b(Chrome|Chromium|Edg|OPR|Firefox)\b/i.test(userAgent)
+  );
+}
+
 function isInsideMediaDirectory(filePath: string) {
   const relative = path.relative(mediaDirectory, filePath);
   return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
@@ -26,6 +36,7 @@ async function findLocalVideoFile(videoId: string) {
   if (!mediaDirectory || !isValidVideoId(videoId)) return null;
 
   const stack = [mediaDirectory];
+  const matches: string[] = [];
   while (stack.length > 0) {
     const directory = stack.pop();
     if (!directory) continue;
@@ -44,17 +55,24 @@ async function findLocalVideoFile(videoId: string) {
         const extension = path.extname(entry.name).toLowerCase();
         if (!allowedExtensions.has(extension)) continue;
         if (!isInsideMediaDirectory(entryPath)) continue;
-        return entryPath;
+        matches.push(entryPath);
       }
     } catch {
       continue;
     }
   }
 
-  return null;
+  return matches.sort((left, right) => {
+    const leftExtension = path.extname(left).toLowerCase();
+    const rightExtension = path.extname(right).toLowerCase();
+    const leftFriendly = appleFriendlyExtensions.has(leftExtension) ? 0 : 1;
+    const rightFriendly = appleFriendlyExtensions.has(rightExtension) ? 0 : 1;
+    if (leftFriendly !== rightFriendly) return leftFriendly - rightFriendly;
+    return left.localeCompare(right);
+  })[0] || null;
 }
 
-async function getLocalMediaLookup(videoId: string) {
+async function getLocalMediaLookup(videoId: string, userAgent?: string | null) {
   if (!mediaDirectory) {
     return {
       configured: false,
@@ -74,14 +92,17 @@ async function getLocalMediaLookup(videoId: string) {
 
   try {
     const fileStat = await stat(filePath);
+    const extension = path.extname(filePath).toLowerCase();
+    const appleCompatible = !isLikelyAppleClient(userAgent) || appleFriendlyExtensions.has(extension);
     return {
       configured: true,
-      available: true,
-      source: "local" as const,
+      available: appleCompatible,
+      source: appleCompatible ? "local" as const : "youtarr" as const,
       filePath,
       fileName: path.basename(filePath),
       size: fileStat.size,
-      extension: path.extname(filePath).toLowerCase(),
+      extension,
+      compatible: appleCompatible,
     };
   } catch {
     return {
@@ -92,8 +113,8 @@ async function getLocalMediaLookup(videoId: string) {
   }
 }
 
-export async function getLocalMediaStatus(videoId: string) {
-  const status = await getLocalMediaLookup(videoId);
+export async function getLocalMediaStatus(videoId: string, userAgent?: string | null) {
+  const status = await getLocalMediaLookup(videoId, userAgent);
   if ("filePath" in status) {
     delete status.filePath;
   }
@@ -128,8 +149,12 @@ function parseRange(range: string | null, fileSize: number) {
   return { start, end: Math.min(end, fileSize - 1) };
 }
 
-export async function getLocalMediaResponse(videoId: string, range: string | null) {
-  const status = await getLocalMediaLookup(videoId);
+export async function getLocalMediaResponse(
+  videoId: string,
+  range: string | null,
+  userAgent?: string | null
+) {
+  const status = await getLocalMediaLookup(videoId, userAgent);
   if (!status.available) return null;
 
   const filePath = status.filePath;
