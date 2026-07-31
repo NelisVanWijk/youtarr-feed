@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { appDataPath, removeAppDataFile, writeJsonAtomic } from "./app-data";
+import { appDataPath, writeJsonAtomic } from "./app-data";
 import type { Channel, FeedVideo } from "./types";
 
 export type VideoListPayload = {
@@ -111,8 +111,14 @@ export async function getCachedVideoList(
 export async function invalidateVideoListCache(...keys: CacheKey[]) {
   await Promise.all(
     keys.map(async (key) => {
-      delete memoryCache[key];
-      await removeAppDataFile(cacheFiles[key]);
+      const cached = await readCache(key);
+      if (!cached) {
+        delete memoryCache[key];
+        return;
+      }
+      const staleCache = { ...cached, savedAt: 0 };
+      memoryCache[key] = staleCache;
+      await writeJsonAtomic(cacheFiles[key], staleCache);
     })
   );
 }

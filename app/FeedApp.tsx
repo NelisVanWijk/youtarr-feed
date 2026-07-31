@@ -519,6 +519,9 @@ export default function FeedApp() {
       if (!feedResponse.ok) throw new Error(feedData.error || copy.errors.loadFeed);
       setFeed(feedData);
       setStatus(statusData);
+      if (!refresh && feedResponse.headers.get("X-Youtarr-Feed-Cache") === "stale") {
+        window.setTimeout(() => void loadFeed(true, true), 500);
+      }
     } catch (loadError) {
       setError(
         loadError instanceof Error ? loadError.message : copy.errors.loadFeed
@@ -916,6 +919,9 @@ export default function FeedApp() {
       };
       if (!response.ok) throw new Error(data.error || copy.errors.loadLocal);
       setLocalVideos(data.videos || []);
+      if (!refresh && response.headers.get("X-Youtarr-Feed-Cache") === "stale") {
+        window.setTimeout(() => void loadLocalVideos(true, true), 500);
+      }
     } catch (localError) {
       setError(
         localError instanceof Error
@@ -999,8 +1005,32 @@ export default function FeedApp() {
     }
   }
 
-  function openVideo(video: FeedVideo) {
+  async function openVideo(video: FeedVideo) {
     if (!video.downloaded) {
+      if (mode === "live") {
+        try {
+          const response = await fetch(
+            `/api/stream/${encodeURIComponent(video.id)}/source`,
+            { cache: "no-store" }
+          );
+          if (response.ok) {
+            const source = (await response.json()) as StreamSourceInfo;
+            setStreamSources((current) => ({ ...current, [video.id]: source }));
+            if (source.source === "local") {
+              const downloadedVideo = { ...video, downloaded: true };
+              markVideoDownloaded(downloadedVideo);
+              setSelectedVideo(downloadedVideo);
+              setPlayerMode("full");
+              setPlayerPlaying(false);
+              setDeleteState("idle");
+              setDeleteError("");
+              return;
+            }
+          }
+        } catch {
+          // Fall through to the regular download path.
+        }
+      }
       void startDownload(video);
       return;
     }
