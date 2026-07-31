@@ -198,8 +198,8 @@ input:focus-visible {
 }
 
 .refresh-button svg {
-  width: 19px;
-  height: 19px;
+  width: 20px;
+  height: 20px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -268,11 +268,18 @@ input:focus-visible {
   color: var(--text);
 }
 
+.nav-icon-frame {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 24px;
+}
+
 .nav-icon {
   width: 21px;
   height: 21px;
   display: block;
-  flex: 0 0 21px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.85;
@@ -1712,12 +1719,11 @@ main {
     position: relative;
     width: 58px;
     height: 52px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    place-items: center;
-    justify-content: center;
-    gap: 3px;
+    display: grid;
+    grid-template-rows: 25px 12px;
+    align-content: center;
+    justify-items: center;
+    row-gap: 3px;
     background: transparent;
     color: var(--quiet);
     border-radius: 12px;
@@ -1744,14 +1750,21 @@ main {
   }
 
   .bottom-nav small {
+    height: 12px;
+    display: block;
     font-size: 10px;
     font-weight: 700;
     line-height: 1;
   }
 
+  .bottom-nav .nav-icon-frame {
+    width: 24px;
+    height: 24px;
+  }
+
   .bottom-nav .nav-icon {
-    width: 22px;
-    height: 22px;
+    width: 21px;
+    height: 21px;
     stroke-width: 1.95;
   }
 

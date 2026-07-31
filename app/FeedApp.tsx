@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import type {
   AppMode,
   Channel,
@@ -42,42 +42,49 @@ type DownloadJob = {
 const palette = ["coral", "blue", "lime", "violet", "gold"];
 
 function NavIcon({ view }: { view: View }) {
+  let paths: ReactNode;
   if (view === "feed") {
-    return (
-      <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 10.6 12 4l8 6.6" />
-        <path d="M6.5 9.5V20h11V9.5" />
-        <path d="M10 20v-5h4v5" />
-      </svg>
+    paths = (
+      <>
+        <path d="M3.8 10.8 12 4.2l8.2 6.6" />
+        <path d="M6.4 9.8v10h11.2v-10" />
+        <path d="M10 19.8v-5.1h4v5.1" />
+      </>
     );
-  }
-  if (view === "continue") {
-    return (
-      <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4 12a8 8 0 1 1 2.35 5.65" />
-        <path d="M4 18v-5h5" />
-        <path d="m10.5 8.8 5 3.2-5 3.2Z" />
-      </svg>
+  } else if (view === "continue") {
+    paths = (
+      <>
+        <path d="M4.5 12a7.7 7.7 0 1 1 2.25 5.45" />
+        <path d="M4.5 18v-5h5" />
+        <path d="m10.6 8.9 5 3.1-5 3.1Z" />
+      </>
     );
-  }
-  if (view === "local") {
-    return (
-      <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M4.5 7.5h6l1.7 2h7.3v8.8a1.7 1.7 0 0 1-1.7 1.7H6.2a1.7 1.7 0 0 1-1.7-1.7Z" />
-        <path d="M12 11.5v5" />
-        <path d="m9.8 14.5 2.2 2.2 2.2-2.2" />
-      </svg>
+  } else if (view === "local") {
+    paths = (
+      <>
+        <path d="M4.4 7.7h6.1l1.7 2h7.4v8.5a1.7 1.7 0 0 1-1.7 1.7H6.1a1.7 1.7 0 0 1-1.7-1.7Z" />
+        <path d="M12 11.7v5" />
+        <path d="m9.8 14.6 2.2 2.2 2.2-2.2" />
+      </>
+    );
+  } else {
+    paths = (
+      <>
+        <path d="M7 7.4h11" />
+        <path d="M7 12h11" />
+        <path d="M7 16.6h8" />
+        <circle cx="4.2" cy="7.4" r="0.9" />
+        <circle cx="4.2" cy="12" r="0.9" />
+        <circle cx="4.2" cy="16.6" r="0.9" />
+      </>
     );
   }
   return (
-    <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M6.5 7.5h11" />
-      <path d="M6.5 12h11" />
-      <path d="M6.5 16.5h7" />
-      <circle cx="4" cy="7.5" r="0.8" />
-      <circle cx="4" cy="12" r="0.8" />
-      <circle cx="4" cy="16.5" r="0.8" />
-    </svg>
+    <span className="nav-icon-frame">
+      <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+        {paths}
+      </svg>
+    </span>
   );
 }
 
@@ -1166,8 +1173,10 @@ export default function FeedApp() {
             aria-label="Feed verversen"
           >
             <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M20 12a8 8 0 1 1-2.35-5.65" />
-              <path d="M20 4v6h-6" />
+              <path d="M20.3 8.2A8.7 8.7 0 0 0 4.1 7" />
+              <path d="M4 3v4.4h4.4" />
+              <path d="M3.7 15.8A8.7 8.7 0 0 0 19.9 17" />
+              <path d="M20 21v-4.4h-4.4" />
             </svg>
           </button>
           <button
