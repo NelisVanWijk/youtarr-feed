@@ -12,6 +12,7 @@ import {
   faFolderOpen,
   faHouse,
   faInbox,
+  faLink,
   faList,
   faMagnifyingGlass,
   faMinus,
@@ -35,7 +36,7 @@ import type {
   WatchProgressMap,
 } from "../lib/types";
 
-type View = "feed" | "continue" | "local" | "channels";
+type View = "feed" | "continue" | "local" | "singles" | "channels";
 type Filter = "all" | "new" | "downloaded";
 type PlayerMode = "full" | "mini";
 type WebKitVideoElement = HTMLVideoElement & {
@@ -71,7 +72,9 @@ function NavIcon({ view }: { view: View }) {
         ? faClockRotateLeft
         : view === "local"
           ? faFolderOpen
-          : faList;
+          : view === "singles"
+            ? faLink
+            : faList;
   return (
     <span className="nav-icon-frame">
       <FontAwesomeIcon className="nav-icon" icon={icon} aria-hidden="true" />
@@ -286,6 +289,7 @@ function VideoCard({
   onOpen,
   onChannel,
   onDelete,
+  onRemoveFromList,
 }: {
   video: FeedVideo;
   index: number;
@@ -293,8 +297,9 @@ function VideoCard({
   streamSource?: StreamSourceInfo | null;
   downloadJob?: DownloadJob;
   onOpen: (video: FeedVideo) => void;
-  onChannel: (channelId: string) => void;
+  onChannel?: (channelId: string) => void;
   onDelete: (video: FeedVideo) => void;
+  onRemoveFromList?: (video: FeedVideo) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const channel = {
@@ -320,7 +325,8 @@ function VideoCard({
       <div className="video-details">
         <button
           className="avatar-button"
-          onClick={() => onChannel(video.channelId)}
+          onClick={() => onChannel?.(video.channelId)}
+          disabled={!onChannel}
           aria-label={`${video.channelName} openen`}
         >
           <ChannelAvatar channel={channel} size="small" />
@@ -369,6 +375,17 @@ function VideoCard({
                   Download verwijderen
                 </button>
               )}
+              {onRemoveFromList && (
+                <button
+                  className="danger-menu-item"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    onRemoveFromList(video);
+                  }}
+                >
+                  Uit losse video&apos;s verwijderen
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -411,6 +428,8 @@ export default function FeedApp() {
   const [channelLoading, setChannelLoading] = useState(false);
   const [localVideos, setLocalVideos] = useState<FeedVideo[]>([]);
   const [localLoading, setLocalLoading] = useState(false);
+  const [singleVideos, setSingleVideos] = useState<FeedVideo[]>([]);
+  const [singleLoading, setSingleLoading] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<FeedVideo | null>(null);
   const [playerMode, setPlayerMode] = useState<PlayerMode>("full");
   const [playerPlaying, setPlayerPlaying] = useState(false);
@@ -426,6 +445,11 @@ export default function FeedApp() {
     "idle" | "adding" | "added" | "error"
   >("idle");
   const [addChannelMessage, setAddChannelMessage] = useState("");
+  const [singleVideoUrl, setSingleVideoUrl] = useState("");
+  const [singleVideoState, setSingleVideoState] = useState<
+    "idle" | "adding" | "added" | "error"
+  >("idle");
+  const [singleVideoMessage, setSingleVideoMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [standaloneMode, setStandaloneMode] = useState(false);
   const [streamSource, setStreamSource] = useState<StreamSourceInfo | null>(null);
@@ -466,6 +490,11 @@ export default function FeedApp() {
     const timer = window.setTimeout(() => void loadFeed(), 0);
     return () => window.clearTimeout(timer);
   }, [loadFeed]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadSingleVideos(true), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const standaloneQuery = window.matchMedia("(display-mode: standalone)");
@@ -532,7 +561,12 @@ export default function FeedApp() {
     let stopped = false;
     async function checkDownloads() {
       const jobsByChannel = new Map<string, string[]>();
+      const singleVideoIds: string[] = [];
       queuedJobs.forEach(([videoId, job]) => {
+        if (job.channelId.startsWith("single:")) {
+          singleVideoIds.push(videoId);
+          return;
+        }
         jobsByChannel.set(job.channelId, [
           ...(jobsByChannel.get(job.channelId) || []),
           videoId,
@@ -561,6 +595,24 @@ export default function FeedApp() {
         })
       );
 
+      if (singleVideoIds.length > 0) {
+        try {
+          const response = await fetch("/api/single-videos", { cache: "no-store" });
+          if (response.ok) {
+            const data = (await response.json()) as { videos?: FeedVideo[] };
+            setSingleVideos(data.videos || []);
+            (data.videos || []).forEach((video) => {
+              if (video.downloaded && singleVideoIds.includes(video.id)) {
+                completed.push(video.id);
+                markVideoDownloaded(video);
+              }
+            });
+          }
+        } catch {
+          // De volgende poll probeert het opnieuw.
+        }
+      }
+
       if (stopped || completed.length === 0) return;
       setDownloadJobs((current) => {
         const next = { ...current };
@@ -572,6 +624,9 @@ export default function FeedApp() {
       }
       if (view === "local") {
         void loadLocalVideos(true, true);
+      }
+      if (view === "singles") {
+        void loadSingleVideos(true);
       }
     }
 
@@ -586,6 +641,9 @@ export default function FeedApp() {
   useEffect(() => {
     if (view === "local") {
       void loadLocalVideos(localVideos.length > 0);
+    }
+    if (view === "singles") {
+      void loadSingleVideos(singleVideos.length > 0);
     }
     // loadLocalVideos is intentionally local to this component; view changes drive refreshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -697,7 +755,8 @@ export default function FeedApp() {
 
   const continueVideos = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    return (feed?.videos || [])
+    const progressVideos = [...(feed?.videos || []), ...singleVideos];
+    return progressVideos
       .filter((video) => {
         if (!video.downloaded || !watchProgress[video.id]) return false;
         if (
@@ -713,7 +772,7 @@ export default function FeedApp() {
           (watchProgress[b.id]?.updatedAt || 0) -
           (watchProgress[a.id]?.updatedAt || 0)
       );
-  }, [feed?.videos, query, watchProgress]);
+  }, [feed?.videos, query, singleVideos, watchProgress]);
 
   const filteredLocalVideos = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -728,6 +787,19 @@ export default function FeedApp() {
     });
   }, [localVideos, query]);
 
+  const filteredSingleVideos = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return singleVideos.filter((video) => {
+      if (
+        normalized &&
+        !`${video.title} ${video.channelName}`.toLowerCase().includes(normalized)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [query, singleVideos]);
+
   useEffect(() => {
     if (mode !== "live") return;
     const source =
@@ -735,7 +807,9 @@ export default function FeedApp() {
         ? continueVideos
         : view === "local"
           ? filteredLocalVideos
-          : visibleVideos;
+          : view === "singles"
+            ? filteredSingleVideos
+            : visibleVideos;
     const candidates = source
       .filter((video) => video.downloaded && !streamSources[video.id])
       .slice(0, 80);
@@ -774,6 +848,7 @@ export default function FeedApp() {
   }, [
     continueVideos,
     filteredLocalVideos,
+    filteredSingleVideos,
     mode,
     streamSources,
     view,
@@ -805,6 +880,30 @@ export default function FeedApp() {
     }
   }
 
+  async function loadSingleVideos(quiet = false) {
+    if (!quiet) setSingleLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/single-videos", { cache: "no-store" });
+      const data = (await response.json()) as {
+        videos?: FeedVideo[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Losse video's laden mislukte");
+      }
+      setSingleVideos(data.videos || []);
+    } catch (singleError) {
+      setError(
+        singleError instanceof Error
+          ? singleError.message
+          : "Losse video's laden mislukte"
+      );
+    } finally {
+      setSingleLoading(false);
+    }
+  }
+
   function markVideoDownloaded(updatedVideo: FeedVideo) {
     const updated = { ...updatedVideo, downloaded: true };
     const updateList = (videos: FeedVideo[]) =>
@@ -817,6 +916,7 @@ export default function FeedApp() {
     );
     setChannelVideos((current) => updateList(current));
     setLocalVideos((current) => updateList(current));
+    setSingleVideos((current) => updateList(current));
     setSelectedVideo((current) =>
       current?.id === updated.id ? { ...current, ...updated } : current
     );
@@ -1062,10 +1162,18 @@ export default function FeedApp() {
         return next;
       });
       setLocalVideos((current) => current.filter((item) => item.id !== video.id));
+      setSingleVideos((current) =>
+        current.map((item) =>
+          item.id === video.id ? { ...item, downloaded: false } : item
+        )
+      );
       setDeleteState("idle");
       void loadFeed(true, true);
       if (view === "local") {
         void loadLocalVideos(true, true);
+      }
+      if (view === "singles") {
+        void loadSingleVideos(true);
       }
     } catch (deleteFailure) {
       setDeleteState("error");
@@ -1108,6 +1216,71 @@ export default function FeedApp() {
         addFailure instanceof Error
           ? addFailure.message
           : "Kanaal toevoegen mislukte"
+      );
+    }
+  }
+
+  async function submitSingleVideo(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const url = singleVideoUrl.trim();
+    if (!url) return;
+    setSingleVideoState("adding");
+    setSingleVideoMessage("");
+    try {
+      const response = await fetch("/api/single-videos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        video?: FeedVideo;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Losse video toevoegen mislukte");
+      }
+      setSingleVideoUrl("");
+      setSingleVideoState("added");
+      setSingleVideoMessage(`${data.video?.title || "Video"} is toegevoegd`);
+      void loadSingleVideos(true);
+    } catch (addFailure) {
+      setSingleVideoState("error");
+      setSingleVideoMessage(
+        addFailure instanceof Error
+          ? addFailure.message
+          : "Losse video toevoegen mislukte"
+      );
+    }
+  }
+
+  async function removeSingleVideo(video: FeedVideo) {
+    try {
+      const response = await fetch("/api/single-videos", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: video.id }),
+      });
+      const data = (await response.json()) as {
+        videos?: FeedVideo[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || "Losse video verwijderen mislukte");
+      }
+      setSingleVideos(data.videos || []);
+      setWatchProgress((current) => {
+        const next = { ...current };
+        delete next[video.id];
+        return next;
+      });
+      if (selectedVideo?.id === video.id) {
+        setSelectedVideo(null);
+      }
+    } catch (removeFailure) {
+      setError(
+        removeFailure instanceof Error
+          ? removeFailure.message
+          : "Losse video verwijderen mislukte"
       );
     }
   }
@@ -1203,6 +1376,13 @@ export default function FeedApp() {
           >
             <NavIcon view="local" />
             <span>Lokaal</span>
+          </button>
+          <button
+            className={view === "singles" ? "active" : ""}
+            onClick={() => switchView("singles")}
+          >
+            <NavIcon view="singles" />
+            <span>Losse video&apos;s</span>
           </button>
           <button
             className={view === "channels" ? "active" : ""}
@@ -1385,6 +1565,70 @@ export default function FeedApp() {
           </>
         )}
 
+        {view === "singles" && (
+          <>
+            <section className="page-heading">
+              <div>
+                <span className="eyebrow">Eenmalige links</span>
+                <h1>Losse video&apos;s</h1>
+                <p>Voeg een YouTube-link toe zonder het kanaal te volgen.</p>
+              </div>
+              <button
+                className="settings-link"
+                onClick={() => void loadSingleVideos(true)}
+              >
+                Verversen
+              </button>
+            </section>
+            <form className="add-video-form" onSubmit={submitSingleVideo}>
+              <input
+                value={singleVideoUrl}
+                onChange={(event) => setSingleVideoUrl(event.target.value)}
+                placeholder="YouTube-video URL, Shorts-link of video-ID"
+                aria-label="YouTube-video URL, Shorts-link of video-ID"
+              />
+              <button
+                className="primary-button"
+                disabled={singleVideoState === "adding"}
+              >
+                {singleVideoState === "adding" ? "Bezig" : "Toevoegen"}
+              </button>
+              {singleVideoMessage && (
+                <span className={`form-message form-${singleVideoState}`}>
+                  {singleVideoMessage}
+                </span>
+              )}
+            </form>
+            {singleLoading ? (
+              <LoadingGrid />
+            ) : filteredSingleVideos.length ? (
+              <div className="video-grid">
+                {filteredSingleVideos.map((video, index) => (
+                  <VideoCard
+                    key={`single-${video.id}`}
+                    video={video}
+                    index={index}
+                    progress={progressPercent(video.id)}
+                    streamSource={streamSources[video.id]}
+                    downloadJob={downloadJobs[video.id]}
+                    onOpen={openVideo}
+                    onDelete={(item) => void removeDownload(item)}
+                    onRemoveFromList={(item) => void removeSingleVideo(item)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <span className="empty-mark">
+                  <FontAwesomeIcon icon={faInbox} aria-hidden="true" />
+                </span>
+                <h2>Nog geen losse video&apos;s</h2>
+                <p>Plak hierboven een YouTube-link om hem hier vast te zetten.</p>
+              </div>
+            )}
+          </>
+        )}
+
         {view === "channels" && !selectedChannel && (
           <>
             <section className="page-heading">
@@ -1526,6 +1770,13 @@ export default function FeedApp() {
         >
           <NavIcon view="local" />
           <small>Lokaal</small>
+        </button>
+        <button
+          className={view === "singles" ? "active" : ""}
+          onClick={() => switchView("singles")}
+        >
+          <NavIcon view="singles" />
+          <small>Los</small>
         </button>
         <button
           className={view === "channels" ? "active" : ""}

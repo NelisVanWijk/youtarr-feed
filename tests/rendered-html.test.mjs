@@ -35,6 +35,7 @@ test("renders the Dutch Youtarr subscription shell", async () => {
   assert.match(html, /<title>Youtarr Feed<\/title>/i);
   assert.match(html, /Je abonnementen/);
   assert.match(html, /Kanalen/);
+  assert.match(html, /Losse video/);
   assert.match(html, /Nog ophalen/);
 });
 
@@ -126,6 +127,40 @@ test("requires a live Youtarr connection before adding channels", async () => {
   });
   assert.equal(response.status, 400);
   assert.match((await response.json()).error, /Youtarr gekoppeld/);
+});
+
+test("stores single YouTube videos server-side", async () => {
+  const worker = await createWorker();
+  const invalid = await fetchFrom(worker, "/api/single-videos", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url: "https://example.com/watch?v=not-youtube" }),
+  });
+  assert.equal(invalid.status, 400);
+
+  const videoId = "dQw4w9WgXcQ";
+  const added = await fetchFrom(worker, "/api/single-videos", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url: `https://youtu.be/${videoId}` }),
+  });
+  assert.equal(added.status, 200);
+  assert.equal((await added.json()).video.id, videoId);
+
+  const loaded = await fetchFrom(worker, "/api/single-videos");
+  assert.equal(loaded.status, 200);
+  assert.ok((await loaded.json()).videos.some((video) => video.id === videoId));
+
+  const removed = await fetchFrom(worker, "/api/single-videos", {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id: videoId }),
+  });
+  assert.equal(removed.status, 200);
+  assert.equal(
+    (await removed.json()).videos.some((video) => video.id === videoId),
+    false,
+  );
 });
 
 test("stores watch progress server-side", async () => {

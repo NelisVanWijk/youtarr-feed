@@ -591,6 +591,10 @@ main {
   text-align: left;
 }
 
+.avatar-button:disabled {
+  cursor: default;
+}
+
 .avatar {
   flex: 0 0 auto;
   display: grid;
@@ -854,7 +858,8 @@ main {
   font-size: clamp(27px, 3.5vw, 38px);
 }
 
-.add-channel-form {
+.add-channel-form,
+.add-video-form {
   max-width: 1120px;
   margin: -8px auto 22px;
   display: grid;
@@ -862,7 +867,8 @@ main {
   gap: 9px;
 }
 
-.add-channel-form input {
+.add-channel-form input,
+.add-video-form input {
   min-width: 0;
   height: 40px;
   padding: 0 12px;
@@ -873,7 +879,8 @@ main {
   font-size: 13px;
 }
 
-.add-channel-form .primary-button {
+.add-channel-form .primary-button,
+.add-video-form .primary-button {
   height: 40px;
 }
 
@@ -1643,11 +1650,11 @@ main {
     bottom: 0;
     left: 0;
     height: calc(64px + var(--safe-bottom));
-    padding: 6px max(14px, 8vw) var(--safe-bottom);
+    padding: 6px max(10px, 3vw) var(--safe-bottom);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: clamp(10px, 4vw, 24px);
+    gap: clamp(4px, 2.2vw, 16px);
     background: rgba(15, 15, 16, 0.9);
     border-top: 1px solid rgba(255, 255, 255, 0.08);
     box-shadow: 0 -14px 30px rgba(0, 0, 0, 0.22);
@@ -1656,7 +1663,7 @@ main {
 
   .bottom-nav button {
     position: relative;
-    width: 58px;
+    width: 54px;
     height: 52px;
     display: grid;
     grid-template-rows: 25px 12px;
