@@ -64,11 +64,6 @@ const configuredPassword = process.env.YOUTARR_PASSWORD || "";
 const configuredApiKey = process.env.YOUTARR_API_KEY?.trim() || "";
 const configuredYouTubeApiKey = process.env.YOUTUBE_API_KEY?.trim() || "";
 const authDisabled = process.env.YOUTARR_AUTH_DISABLED === "true";
-const rescanBeforeRedownload = process.env.YOUTARR_RESCAN_BEFORE_REDOWNLOAD !== "false";
-const rescanBeforeRedownloadTimeoutMs = Math.max(
-  5,
-  Number(process.env.YOUTARR_RESCAN_BEFORE_REDOWNLOAD_TIMEOUT_SECONDS) || 45
-) * 1000;
 
 let cachedToken = configuredSession;
 let tokenExpiresAt = configuredSession ? Number.POSITIVE_INFINITY : 0;
@@ -158,45 +153,6 @@ async function getJson<T>(path: string): Promise<T> {
     throw new Error(`Youtarr request failed (${response.status})`);
   }
   return (await response.json()) as T;
-}
-
-function delay(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitForRescan(timeoutMs = rescanBeforeRedownloadTimeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const response = await requestYoutarr("/api/maintenance/rescan-status");
-    if (response.ok) {
-      const data = (await response.json().catch(() => ({}))) as {
-        running?: boolean;
-      };
-      if (!data.running) return { running: false, timedOut: false };
-    }
-    await delay(1000);
-  }
-  return { running: true, timedOut: true };
-}
-
-export async function rescanFilesOnDiskBeforeRedownload() {
-  const response = await requestYoutarr("/api/maintenance/rescan-files", {
-    method: "POST",
-  });
-  if (response.status !== 202 && response.status !== 409) {
-    const data = (await response.json().catch(() => ({}))) as {
-      error?: string;
-      message?: string;
-    };
-    throw new Error(
-      data.error || data.message || `Could not start Youtarr rescan (${response.status})`
-    );
-  }
-
-  return {
-    started: response.status === 202,
-    ...(await waitForRescan()),
-  };
 }
 
 function toChannel(channel: YoutarrChannel): Channel {
@@ -479,8 +435,6 @@ export async function queueDownload(
   options: {
     allowRedownload?: boolean;
     channelId?: string;
-    resolution?: string;
-    subfolder?: string;
   } = {}
 ) {
   if (!/^[A-Za-z0-9_-]{11}$/.test(youtubeId)) {
@@ -493,8 +447,6 @@ export async function queueDownload(
           urls: [url],
           overrideSettings: {
             allowRedownload: true,
-            ...(options.resolution ? { resolution: options.resolution } : {}),
-            ...(options.subfolder ? { subfolder: options.subfolder } : {}),
           },
           ...(options.channelId && /^UC[A-Za-z0-9_-]{22}$/.test(options.channelId)
             ? { videoChannelMap: { [youtubeId]: options.channelId } }
@@ -502,8 +454,6 @@ export async function queueDownload(
         }
       : {
           url,
-          ...(options.resolution ? { resolution: options.resolution } : {}),
-          ...(options.subfolder ? { subfolder: options.subfolder } : {}),
         };
   const headers = new Headers({ "Content-Type": "application/json" });
   let response: Response;
@@ -538,46 +488,6 @@ export async function queueDownload(
     throw new Error(data.error || `Could not start download (${response.status})`);
   }
   return data;
-}
-
-export async function queueDualQualityDownload(
-  youtubeId: string,
-  options: { allowRedownload?: boolean; channelId?: string } = {}
-) {
-  const dualEnabled = process.env.YOUTARR_DUAL_QUALITY_DOWNLOADS === "true";
-  const primaryResolution =
-    process.env.YOUTARR_PRIMARY_DOWNLOAD_RESOLUTION?.trim() || "";
-  const secondaryResolution =
-    process.env.YOUTARR_SECONDARY_DOWNLOAD_RESOLUTION?.trim() || "1080";
-  const secondarySubfolder =
-    process.env.YOUTARR_SECONDARY_DOWNLOAD_SUBFOLDER?.trim() || "__1080p";
-
-  const rescan = options.allowRedownload === true && rescanBeforeRedownload
-    ? await rescanFilesOnDiskBeforeRedownload()
-    : undefined;
-  const primary = await queueDownload(youtubeId, {
-    ...options,
-    ...(primaryResolution ? { resolution: primaryResolution } : {}),
-  });
-  if (!dualEnabled) return { ...primary, rescan };
-
-  try {
-    await queueDownload(youtubeId, {
-      ...options,
-      allowRedownload: true,
-      resolution: secondaryResolution,
-      subfolder: secondarySubfolder,
-    });
-    return { ...primary, dualQuality: true, rescan };
-  } catch (error) {
-    return {
-      ...primary,
-      dualQuality: false,
-      rescan,
-      dualQualityError:
-        error instanceof Error ? error.message : "Could not queue secondary quality",
-    };
-  }
 }
 
 export async function deleteDownload(youtubeId: string) {

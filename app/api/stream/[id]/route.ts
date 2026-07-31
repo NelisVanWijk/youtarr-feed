@@ -1,10 +1,5 @@
 import { NextResponse } from "next/server";
-import {
-  type LocalMediaQuality,
-  getLocalMediaResponse,
-  isLikelyAppleClient,
-} from "../../../../lib/local-media";
-import { getTranscodeMediaResponse } from "../../../../lib/transcode";
+import { getLocalMediaResponse } from "../../../../lib/local-media";
 import { getStream, isYoutarrConfigured } from "../../../../lib/youtarr";
 
 export const dynamic = "force-dynamic";
@@ -20,24 +15,13 @@ export async function GET(
   const range = request.headers.get("range");
   const searchParams = new URL(request.url).searchParams;
   const direct = searchParams.get("direct") !== "0";
-  const requestedQuality = searchParams.get("quality");
-  const quality: LocalMediaQuality =
-    requestedQuality === "original" || requestedQuality === "1080"
-      ? requestedQuality
-      : "auto";
 
   try {
     if (direct) {
-      if (isLikelyAppleClient(request.headers.get("user-agent")) && quality !== "original") {
-        const compatibleResponse = await getTranscodeMediaResponse(id, range);
-        if (compatibleResponse) return compatibleResponse;
-      }
-
       const localResponse = await getLocalMediaResponse(
         id,
         range,
-        request.headers.get("user-agent"),
-        quality
+        request.headers.get("user-agent")
       );
       if (localResponse) return localResponse;
     }

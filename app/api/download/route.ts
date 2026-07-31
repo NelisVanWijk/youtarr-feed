@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { invalidateVideoListCache } from "../../../lib/server-cache";
-import { isYoutarrConfigured, queueDualQualityDownload } from "../../../lib/youtarr";
+import { isYoutarrConfigured, queueDownload } from "../../../lib/youtarr";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await queueDualQualityDownload(body.id, {
+    const result = await queueDownload(body.id, {
       allowRedownload: body.missing === true || body.redownload === true,
       channelId: body.channelId,
     });

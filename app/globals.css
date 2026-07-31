@@ -1210,65 +1210,6 @@ main {
   line-height: 1.22;
 }
 
-.transcode-panel .download-orbit {
-  margin-bottom: 14px;
-}
-
-.modal-copy .stream-switch {
-  grid-column: 1 / -1;
-  margin-top: 12px;
-  display: inline-flex;
-  width: fit-content;
-  max-width: 100%;
-  padding: 3px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 999px;
-}
-
-.modal-copy .stream-switch button {
-  width: auto;
-  min-width: 0;
-  height: 34px;
-  padding: 0 11px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  background: transparent;
-  color: var(--muted);
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1;
-  white-space: nowrap;
-}
-
-.modal-copy .stream-switch button.active {
-  background: rgba(255, 255, 255, 0.14);
-  color: #fff;
-}
-
-.modal-copy .stream-switch button:disabled {
-  cursor: wait;
-  opacity: 0.68;
-}
-
-.modal-copy .stream-switch .svg-inline--fa {
-  width: 13px;
-  height: 13px;
-}
-
-.modal-copy .stream-switch button:disabled .svg-inline--fa {
-  animation: spin 1s linear infinite;
-}
-
-.transcode-error {
-  margin-top: 8px;
-  display: block;
-  color: #ffb7b1;
-}
-
 .mini-player-shell {
   position: fixed;
   z-index: 90;
@@ -1474,11 +1415,6 @@ main {
 .stream-source-youtarr {
   background: rgba(255, 198, 92, 0.1);
   border-color: rgba(255, 198, 92, 0.26);
-}
-
-.stream-source-compatible {
-  background: rgba(92, 179, 255, 0.1);
-  border-color: rgba(92, 179, 255, 0.26);
 }
 
 .modal-actions {

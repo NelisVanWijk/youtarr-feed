@@ -55,15 +55,12 @@ The player shows the active source for downloaded videos:
 - `Direct file`: streaming from the read-only media mount.
 - `Via Youtarr`: local file was not found, so playback uses Youtarr's stream
   endpoint.
-- `Compatible stream`: Apple-friendly HLS generated server-side from the local
-  file, used only when enabled and needed for iPhone, iPad, Safari, or AirPlay.
 
 Video thumbnails also show a compact `Direct` or `Youtarr` badge for downloaded
 items, so you can see the expected playback path before opening the video.
 
 Direct local streaming does not change delete behavior. Deletes still go
 through Youtarr, so Youtarr remains the owner of the library.
-Deleting a download also removes its cached compatible transcode.
 
 The Local tab uses Youtarr's downloaded-video state as its source of truth. It
 shows all videos Youtarr reports as downloaded and lets you play or delete them
@@ -199,13 +196,7 @@ find /mnt/user/Media/Youtarr -type d -exec chmod 775 {} \;
 find /mnt/user/Media/Youtarr -type f -exec chmod 664 {} \;
 ```
 
-Youtarr Feed only needs read access to stream local files. If you want Youtarr
-Feed to remove every local quality variant after a delete, mount the media path
-as read-write and set:
-
-```env
-YOUTARR_FEED_DELETE_LOCAL_FILES=true
-```
+Youtarr Feed only needs read access to stream local files.
 
 ### Updating On Unraid
 
@@ -309,19 +300,14 @@ docker run -d \
   --name youtarr-feed \
   --restart unless-stopped \
   --add-host=host.docker.internal:host-gateway \
-  --device=/dev/dri:/dev/dri \
   -p 3090:3000 \
   -e YOUTARR_URL=http://host.docker.internal:3087 \
   -e YOUTARR_USERNAME=your-username \
   -e YOUTARR_PASSWORD=your-password \
   -e YOUTARR_FEED_DATA_DIR=/data \
   -e YOUTARR_MEDIA_DIR=/usr/src/app/data \
-  -e YOUTARR_FEED_DELETE_LOCAL_FILES=true \
-  -e YOUTARR_TRANSCODE_ENABLED=true \
-  -e YOUTARR_TRANSCODE_ACCEL=vaapi \
-  -e YOUTARR_TRANSCODE_DEVICE=/dev/dri/renderD128 \
   -v ./data:/data \
-  -v /path/to/youtarr/output:/usr/src/app/data:rw \
+  -v /path/to/youtarr/output:/usr/src/app/data:ro \
   ghcr.io/nelisvanwijk/youtarr-feed:latest
 ```
 
@@ -338,24 +324,6 @@ docker run -d \
 | `YOUTUBE_API_KEY` | Optional | Fallback YouTube Data API key for enriching date-only publish values with exact timestamps. Prefer setting the key in Youtarr first. |
 | `YOUTARR_FEED_DATA_DIR` | Recommended | Persistent app data directory. Defaults to `/data` in production. |
 | `YOUTARR_FEED_CACHE_TTL_SECONDS` | Optional | Server-side feed/local-video cache duration. Defaults to `300`. |
-| `YOUTARR_MEDIA_DIR` | Recommended | Mount of the Youtarr output folder for direct streaming. Use read-write if Youtarr Feed should clean up local variants after delete. |
-| `YOUTARR_FEED_DELETE_LOCAL_FILES` | Optional | Set to `true` to delete every local media file matching the same YouTube video ID after Youtarr confirms a delete. Requires a writable media mount. Defaults to `false`. |
-| `YOUTARR_RESCAN_BEFORE_REDOWNLOAD` | Optional | Set to `true` to trigger Youtarr's filesystem rescan before redownload/missing download requests. Defaults to `true`. |
-| `YOUTARR_RESCAN_BEFORE_REDOWNLOAD_TIMEOUT_SECONDS` | Optional | Maximum seconds to wait for the pre-redownload rescan to finish. Defaults to `45`. |
-| `YOUTARR_DUAL_QUALITY_DOWNLOADS` | Optional | Set to `true` to ask Youtarr for a second 1080p copy whenever Youtarr Feed starts a download. Defaults to `false`. |
-| `YOUTARR_PRIMARY_DOWNLOAD_RESOLUTION` | Optional | Resolution override for the primary/original download. Leave empty to use Youtarr's channel/global setting. |
-| `YOUTARR_SECONDARY_DOWNLOAD_RESOLUTION` | Optional | Resolution for the second copy. Defaults to `1080`. |
-| `YOUTARR_SECONDARY_DOWNLOAD_SUBFOLDER` | Optional | Subfolder for the second copy so it does not overwrite the original. Defaults to `__1080p`. |
-| `YOUTARR_TRANSCODE_ENABLED` | Optional | Set to `true` to enable Apple-compatible transcoding. |
-| `YOUTARR_TRANSCODE_ACCEL` | Optional | Use `vaapi` for Intel Quick Sync, or `software`. Defaults to `vaapi` when a device is configured. |
-| `YOUTARR_TRANSCODE_DEVICE` | Optional | VAAPI render device, usually `/dev/dri/renderD128` on Unraid/Linux. |
-| `YOUTARR_TRANSCODE_DIR` | Optional | Compatible-file cache and temporary transcode working directory. Defaults to `<data dir>/transcodes`. |
-| `YOUTARR_TRANSCODE_OUTPUT_MODE` | Optional | Use `file` to create reusable compatible MP4 files, or `hls` for the older temporary HLS mode. Defaults to `file`. |
-| `YOUTARR_TRANSCODE_MIN_HEIGHT` | Optional | Only transcode videos at this height or higher. Defaults to `1440`, so 1440p and 4K are prepared while 1080p is skipped. Set `0` to allow all resolutions. |
-| `YOUTARR_TRANSCODE_PLAYBACK_MODE` | Optional | HLS-only. Use `vod` to avoid Apple's Live Broadcast label, or `fast` to start while HLS is still growing. Defaults to `vod`. |
-| `YOUTARR_TRANSCODE_VIDEO_BITRATE` | Optional | Target video bitrate for compatible output when software transcoding is used. Defaults to `18000k`. |
-| `YOUTARR_TRANSCODE_VAAPI_QUALITY` | Optional | VAAPI CQP quality value. Lower is higher quality. Defaults to `20`. |
-| `YOUTARR_TRANSCODE_AUDIO_BITRATE` | Optional | Target AAC audio bitrate. Defaults to `160k`. |
 | `PLEX_URL` | Optional | Plex server URL for refresh requests. |
 | `PLEX_TOKEN` | Optional | Plex token. |
 | `PLEX_LIBRARY_ID` | Optional | Numeric Plex library section ID. |
@@ -365,100 +333,6 @@ docker run -d \
 Direct local streaming can reduce buffering because it removes the Youtarr
 stream proxy from the playback path. It does not fix codec compatibility by
 itself.
-
-### Dual-Quality Downloads
-
-If you prefer to avoid server-side transcoding, Youtarr Feed can ask Youtarr for
-two downloads when you start a download from this app: the normal/original copy
-and a second 1080p copy. Enable it with:
-
-```env
-YOUTARR_DUAL_QUALITY_DOWNLOADS=true
-YOUTARR_SECONDARY_DOWNLOAD_RESOLUTION=1080
-YOUTARR_SECONDARY_DOWNLOAD_SUBFOLDER=__1080p
-```
-
-Leave `YOUTARR_PRIMARY_DOWNLOAD_RESOLUTION` empty to keep using the quality set
-in Youtarr for that channel or globally. Set it to `2160` only if you want this
-app to force the primary download toward 4K.
-
-The second copy should use a separate subfolder or a Youtarr filename template
-that includes the resolution. Otherwise the 1080p copy may overwrite or conflict
-with the original. Youtarr Feed scans the media mount recursively, so a separate
-`__1080p` subfolder is fine.
-
-When `YOUTARR_FEED_DELETE_LOCAL_FILES=true` and the media mount is writable,
-Youtarr Feed removes every local file matching the deleted YouTube video ID after
-Youtarr confirms the delete. This cleans up both the original and 1080p copies.
-
-When you use **Re-download** from Youtarr Feed, the app first triggers Youtarr's
-**Rescan files on disk** maintenance action and waits briefly before queuing the
-download again. This helps clear stale "missing" state after files were deleted,
-moved, or restored outside Youtarr:
-
-```env
-YOUTARR_RESCAN_BEFORE_REDOWNLOAD=true
-YOUTARR_RESCAN_BEFORE_REDOWNLOAD_TIMEOUT_SECONDS=45
-```
-
-Youtarr's own UI only redownloads the quality you choose there. Dual-quality
-redownloads require starting the redownload from Youtarr Feed.
-
-When both variants exist, the player shows a quality switch:
-
-```text
-Auto | Original | 1080p
-```
-
-`Auto` uses 1080p on Apple/Safari-style clients when available, and Original on
-other browsers such as Firefox on macOS. If only one 1080p file exists, no switch
-is shown.
-
-When transcoding is enabled, Youtarr Feed checks local video files with
-`ffprobe`. By default it only prepares compatible versions for 1440p and 4K
-files, because those are the files most likely to be VP9, AV1, HEVC, or otherwise
-awkward for Apple playback.
-
-The default `YOUTARR_TRANSCODE_OUTPUT_MODE=file` creates a reusable
-Apple-compatible `compatible.mp4` cache file with `ffmpeg`. When a newly queued
-download finishes while the web app is open, Youtarr Feed starts that compatible
-file in the background. For existing downloaded videos, use the three-dot menu
-and choose **Prepare compatible file**.
-
-Apple clients prefer the compatible MP4 when it exists. Other clients keep using
-the original direct file, so Windows/Chrome-style playback does not use the
-compatible copy. Watch progress is still stored against the original video and
-duration. Compatible files are removed when the download is deleted.
-
-The older HLS mode is still available with `YOUTARR_TRANSCODE_OUTPUT_MODE=hls`.
-In that mode, `YOUTARR_TRANSCODE_PLAYBACK_MODE=vod` avoids Apple's "Live
-Broadcast" label by waiting for a finite playlist, while `fast` starts as soon
-as the first segment exists.
-
-For Intel Quick Sync on Unraid, pass the render device into the container:
-
-```text
-Extra Parameters: --device=/dev/dri:/dev/dri
-```
-
-Recommended transcode variables:
-
-```env
-YOUTARR_TRANSCODE_ENABLED=true
-YOUTARR_TRANSCODE_ACCEL=vaapi
-YOUTARR_TRANSCODE_DEVICE=/dev/dri/renderD128
-YOUTARR_TRANSCODE_OUTPUT_MODE=file
-YOUTARR_TRANSCODE_MIN_HEIGHT=1440
-YOUTARR_TRANSCODE_VAAPI_QUALITY=20
-```
-
-After updating the container, VAAPI can be checked from inside the container:
-
-```bash
-docker exec -it youtarr-feed vainfo --display drm --device /dev/dri/renderD128
-```
-
-For Intel 11th gen and newer, the container uses the `iHD` VAAPI driver.
 
 For Apple devices and AirPlay, the safest high-quality target is usually:
 

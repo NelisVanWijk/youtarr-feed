@@ -1,12 +1,9 @@
 import { createReadStream } from "node:fs";
-import { opendir, stat, unlink } from "node:fs/promises";
+import { opendir, stat } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 
 const mediaDirectory = process.env.YOUTARR_MEDIA_DIR?.trim() || "";
-const secondaryQualitySubfolder =
-  process.env.YOUTARR_SECONDARY_DOWNLOAD_SUBFOLDER?.trim().toLowerCase() ||
-  "__1080p";
 const allowedExtensions = new Set([".mp4", ".m4v", ".mov", ".webm", ".mkv"]);
 const appleFriendlyExtensions = new Set([".mp4", ".m4v", ".mov"]);
 const mimeTypes = new Map([
@@ -16,18 +13,6 @@ const mimeTypes = new Map([
   [".webm", "video/webm"],
   [".mkv", "video/x-matroska"],
 ]);
-
-export type LocalMediaQuality = "auto" | "original" | "1080";
-
-export type LocalMediaVariant = {
-  quality: "original" | "1080";
-  label: string;
-  fileName: string;
-  size: number;
-  extension: string;
-  compatible: boolean;
-  height?: number;
-};
 
 function isValidVideoId(value: string) {
   return /^[A-Za-z0-9_-]{11}$/.test(value);
@@ -47,42 +32,10 @@ function isInsideMediaDirectory(filePath: string) {
   return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
-function inferHeight(filePath: string) {
-  const normalized = filePath.toLowerCase();
-  if (/\b4k\b/.test(normalized)) return 2160;
-  const match = /(?:^|[^\d])(2160|1440|1080|720|480)p?(?:[^\d]|$)/.exec(
-    normalized
-  );
-  return match ? Number(match[1]) : undefined;
-}
-
-function variantLabel(height?: number) {
-  if (!height) return "Original";
-  if (height >= 2160) return "4K";
-  return `${height}p`;
-}
-
-function isSecondaryQualityPath(filePath: string) {
-  if (!mediaDirectory || !secondaryQualitySubfolder) return false;
-  const relative = path.relative(mediaDirectory, filePath).toLowerCase();
-  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
-    return false;
-  }
-  return relative
-    .split(/[\\/]+/)
-    .some((segment) => segment === secondaryQualitySubfolder);
-}
-
-function inferVariantQuality(filePath: string): "original" | "1080" {
-  if (isSecondaryQualityPath(filePath)) return "1080";
-  return inferHeight(filePath) === 1080 ? "1080" : "original";
-}
-
-async function findLocalVideoFiles(videoId: string) {
+async function findLocalVideoFile(videoId: string) {
   if (!mediaDirectory || !isValidVideoId(videoId)) return null;
 
   const stack = [mediaDirectory];
-  const matches: string[] = [];
   while (stack.length > 0) {
     const directory = stack.pop();
     if (!directory) continue;
@@ -101,58 +54,17 @@ async function findLocalVideoFiles(videoId: string) {
         const extension = path.extname(entry.name).toLowerCase();
         if (!allowedExtensions.has(extension)) continue;
         if (!isInsideMediaDirectory(entryPath)) continue;
-        matches.push(entryPath);
+        return entryPath;
       }
     } catch {
       continue;
     }
   }
 
-  return matches.sort((left, right) => {
-    const leftExtension = path.extname(left).toLowerCase();
-    const rightExtension = path.extname(right).toLowerCase();
-    const leftHeight = inferHeight(left) || 0;
-    const rightHeight = inferHeight(right) || 0;
-    if (leftHeight !== rightHeight) return rightHeight - leftHeight;
-    const leftFriendly = appleFriendlyExtensions.has(leftExtension) ? 0 : 1;
-    const rightFriendly = appleFriendlyExtensions.has(rightExtension) ? 0 : 1;
-    if (leftFriendly !== rightFriendly) return leftFriendly - rightFriendly;
-    return left.localeCompare(right);
-  });
-}
-
-export async function deleteLocalMediaFiles(videoId: string) {
-  const files = await findLocalVideoFiles(videoId);
-  if (!files?.length) return { deleted: 0, files: [] as string[] };
-
-  const deletedFiles: string[] = [];
-  const failures: string[] = [];
-  for (const filePath of files) {
-    try {
-      await unlink(filePath);
-      deletedFiles.push(path.basename(filePath));
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-      failures.push(path.basename(filePath));
-    }
-  }
-
-  if (failures.length > 0) {
-    throw new Error(`Could not delete local file(s): ${failures.join(", ")}`);
-  }
-
-  return { deleted: deletedFiles.length, files: deletedFiles };
-}
-
-async function findLocalVideoFile(videoId: string) {
-  const files = await findLocalVideoFiles(videoId);
-  if (!files?.length) return null;
-  return files.find((file) => inferHeight(file) !== 1080) || files[0];
+  return null;
 }
 
 export async function getLocalMediaFile(videoId: string) {
-  if (!mediaDirectory || !isValidVideoId(videoId)) return null;
-
   const filePath = await findLocalVideoFile(videoId);
   if (!filePath) return null;
 
@@ -170,57 +82,7 @@ export async function getLocalMediaFile(videoId: string) {
   }
 }
 
-export async function getLocalMediaVariants(videoId: string) {
-  const files = await findLocalVideoFiles(videoId);
-  if (!files?.length) return [];
-
-  const variants: Array<LocalMediaVariant & { filePath: string }> = [];
-  for (const filePath of files) {
-    try {
-      const fileStat = await stat(filePath);
-      const extension = path.extname(filePath).toLowerCase();
-      const height = inferHeight(filePath);
-      const quality = inferVariantQuality(filePath);
-      if (variants.some((variant) => variant.quality === quality)) continue;
-      variants.push({
-        quality,
-        label: quality === "1080" ? "1080p" : variantLabel(height),
-        filePath,
-        fileName: path.basename(filePath),
-        size: fileStat.size,
-        extension,
-        compatible: appleFriendlyExtensions.has(extension),
-        height,
-      });
-    } catch {
-      continue;
-    }
-  }
-
-  return variants.sort((left, right) => {
-    if (left.quality === right.quality) return 0;
-    return left.quality === "original" ? -1 : 1;
-  });
-}
-
-function selectVariant(
-  variants: Array<LocalMediaVariant & { filePath: string }>,
-  userAgent?: string | null,
-  quality: LocalMediaQuality = "auto"
-) {
-  const original = variants.find((variant) => variant.quality === "original");
-  const hd = variants.find((variant) => variant.quality === "1080");
-  if (quality === "1080") return hd || null;
-  if (quality === "original") return original || null;
-  if (isLikelyAppleClient(userAgent) && hd) return hd;
-  return original || hd || null;
-}
-
-async function getLocalMediaLookup(
-  videoId: string,
-  userAgent?: string | null,
-  quality: LocalMediaQuality = "auto"
-) {
+async function getLocalMediaLookup(videoId: string, userAgent?: string | null) {
   if (!mediaDirectory) {
     return {
       configured: false,
@@ -229,8 +91,7 @@ async function getLocalMediaLookup(
     };
   }
 
-  const variants = await getLocalMediaVariants(videoId);
-  const localFile = selectVariant(variants, userAgent, quality);
+  const localFile = await getLocalMediaFile(videoId);
   if (!localFile) {
     return {
       configured: true,
@@ -239,36 +100,22 @@ async function getLocalMediaLookup(
     };
   }
 
-  try {
-    const appleCompatible = !isLikelyAppleClient(userAgent) ||
-      localFile.compatible;
-    return {
-      configured: true,
-      available: appleCompatible,
-      source: appleCompatible ? "local" as const : "youtarr" as const,
-      filePath: localFile.filePath,
-      fileName: localFile.fileName,
-      size: localFile.size,
-      extension: localFile.extension,
-      compatible: appleCompatible,
-      quality: localFile.quality,
-      variants: variants.map(({ filePath: _filePath, ...variant }) => variant),
-    };
-  } catch {
-    return {
-      configured: true,
-      available: false,
-      source: "youtarr" as const,
-    };
-  }
+  const playable = !isLikelyAppleClient(userAgent) ||
+    appleFriendlyExtensions.has(localFile.extension);
+  return {
+    configured: true,
+    available: playable,
+    source: playable ? "local" as const : "youtarr" as const,
+    filePath: localFile.filePath,
+    fileName: localFile.fileName,
+    size: localFile.size,
+    extension: localFile.extension,
+    playable,
+  };
 }
 
-export async function getLocalMediaStatus(
-  videoId: string,
-  userAgent?: string | null,
-  quality: LocalMediaQuality = "auto"
-) {
-  const status = await getLocalMediaLookup(videoId, userAgent, quality);
+export async function getLocalMediaStatus(videoId: string, userAgent?: string | null) {
+  const status = await getLocalMediaLookup(videoId, userAgent);
   if ("filePath" in status) {
     delete status.filePath;
   }
@@ -306,10 +153,9 @@ function parseRange(range: string | null, fileSize: number) {
 export async function getLocalMediaResponse(
   videoId: string,
   range: string | null,
-  userAgent?: string | null,
-  quality: LocalMediaQuality = "auto"
+  userAgent?: string | null
 ) {
-  const status = await getLocalMediaLookup(videoId, userAgent, quality);
+  const status = await getLocalMediaLookup(videoId, userAgent);
   if (!status.available) return null;
 
   const filePath = status.filePath;
@@ -331,8 +177,6 @@ export async function getLocalMediaResponse(
     "Content-Type": contentType,
     "X-Content-Type-Options": "nosniff",
     "Cache-Control": "no-store",
-    "X-Youtarr-Feed-File": encodeURIComponent(status.fileName),
-    "X-Youtarr-Feed-Quality": status.quality || "unknown",
   });
 
   if (parsedRange === "invalid") {

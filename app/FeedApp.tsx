@@ -4,13 +4,11 @@ import {
   faCheck,
   faChevronLeft,
   faChevronRight,
-  faBolt,
   faCirclePlay,
   faClockRotateLeft,
   faClone,
   faDownload,
   faEllipsisVertical,
-  faFilm,
   faFolderOpen,
   faHouse,
   faInbox,
@@ -48,8 +46,6 @@ import type {
 type View = "feed" | "continue" | "local" | "singles" | "channels";
 type Filter = "all" | "new" | "downloaded";
 type PlayerMode = "full" | "mini";
-type PlayerStreamMode = "direct" | "youtarr" | "compatible";
-type PlayerQuality = "auto" | "original" | "1080";
 type WebKitVideoElement = HTMLVideoElement & {
   webkitEnterFullscreen?: () => void;
   webkitPresentationMode?: string;
@@ -64,41 +60,9 @@ type StreamSourceInfo = {
     fileName?: string;
     extension?: string;
     size?: number;
-    compatible?: boolean;
-    quality?: "original" | "1080";
-    variants?: Array<{
-      quality: "original" | "1080";
-      label: string;
-      fileName: string;
-      size: number;
-      extension: string;
-      compatible: boolean;
-      height?: number;
-    }>;
-  };
-  transcode?: {
-    enabled: boolean;
-    configured: boolean;
-    available: boolean;
-    ready: boolean;
-    complete: boolean;
-    running: boolean;
-    startTime: number;
-    outputMode: "file" | "hls";
-    playbackMode: "vod" | "fast";
-    mediaUrl?: string;
-    playlistUrl?: string;
-    error?: string;
+    playable?: boolean;
   };
   youtarrConfigured: boolean;
-};
-type TranscodeResponse = StreamSourceInfo["transcode"] & {
-  appleDecision?: {
-    suggested: boolean;
-    reason?: string;
-    videoCodec?: string;
-    audioCodec?: string;
-  };
 };
 type DownloadJob = {
   state: "queueing" | "queued" | "error";
@@ -108,19 +72,6 @@ type DownloadJob = {
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
 const languageStorageKey = "youtarr-feed-language";
-const qualityStorageKey = "youtarr-feed-quality";
-
-function isPlayerQuality(value: string | null): value is PlayerQuality {
-  return value === "auto" || value === "original" || value === "1080";
-}
-
-function isApplePlaybackUserAgent(value: string) {
-  return /\b(iPhone|iPad|iPod)\b/i.test(value) || (
-    /\bMacintosh\b/i.test(value) &&
-    /\bSafari\b/i.test(value) &&
-    !/\b(Chrome|Chromium|Edg|OPR|Firefox|CriOS|FxiOS)\b/i.test(value)
-  );
-}
 
 function NavIcon({ view }: { view: View }) {
   const icon =
@@ -370,7 +321,6 @@ function VideoCard({
   onDelete,
   onRedownload,
   onRemoveFromList,
-  onPrepareCompatible,
   copy,
 }: {
   video: FeedVideo;
@@ -383,7 +333,6 @@ function VideoCard({
   onDelete: (video: FeedVideo) => void;
   onRedownload?: (video: FeedVideo) => void;
   onRemoveFromList?: (video: FeedVideo) => void;
-  onPrepareCompatible?: (video: FeedVideo) => void;
   copy: AppCopy;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -464,16 +413,6 @@ function VideoCard({
                         : copy.menu.redownload}
                     </button>
                   )}
-                  {onPrepareCompatible && (
-                    <button
-                      onClick={() => {
-                        setMenuOpen(false);
-                        onPrepareCompatible(video);
-                      }}
-                    >
-                      {copy.menu.prepareCompatible}
-                    </button>
-                  )}
                   <button
                     className="danger-menu-item"
                     onClick={() => {
@@ -529,11 +468,6 @@ export default function FeedApp() {
     const storedLanguage = window.localStorage.getItem(languageStorageKey);
     return isLanguage(storedLanguage) ? storedLanguage : defaultLanguage;
   });
-  const [playbackQuality, setPlaybackQuality] = useState<PlayerQuality>(() => {
-    if (typeof window === "undefined") return "auto";
-    const storedQuality = window.localStorage.getItem(qualityStorageKey);
-    return isPlayerQuality(storedQuality) ? storedQuality : "auto";
-  });
   const [view, setView] = useState<View>("feed");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -553,12 +487,6 @@ export default function FeedApp() {
   const [selectedVideo, setSelectedVideo] = useState<FeedVideo | null>(null);
   const [playerMode, setPlayerMode] = useState<PlayerMode>("full");
   const [playerPlaying, setPlayerPlaying] = useState(false);
-  const [playerStreamMode, setPlayerStreamMode] = useState<PlayerStreamMode>("direct");
-  const [transcodeState, setTranscodeState] = useState<
-    "idle" | "checking" | "starting" | "running" | "ready" | "error"
-  >("idle");
-  const [transcodeError, setTranscodeError] = useState("");
-  const [transcodeStartTime, setTranscodeStartTime] = useState(0);
   const [downloadJobs, setDownloadJobs] = useState<Record<string, DownloadJob>>({});
   const [deleteState, setDeleteState] = useState<"idle" | "deleting" | "error">(
     "idle"
@@ -584,15 +512,6 @@ export default function FeedApp() {
   const playerRef = useRef<HTMLVideoElement | null>(null);
   const intendedPlaybackRef = useRef(false);
   const pauseIntentTimerRef = useRef<number | null>(null);
-  const pendingQualityResumeRef = useRef<{
-    videoId: string;
-    currentTime: number;
-    wasPlaying: boolean;
-  } | null>(null);
-  const activeCompatibleRef = useRef<{
-    videoId: string;
-    outputMode: "file" | "hls";
-  } | null>(null);
   const mode: AppMode = feed?.mode || "demo";
   const copy = translations[language];
   const shouldUseInlineWatchPage = useCallback(() => true, []);
@@ -601,10 +520,6 @@ export default function FeedApp() {
     window.localStorage.setItem(languageStorageKey, language);
     document.documentElement.lang = language;
   }, [language]);
-
-  useEffect(() => {
-    window.localStorage.setItem(qualityStorageKey, playbackQuality);
-  }, [playbackQuality]);
 
   const loadFeed = useCallback(async (quiet = false, refresh = false) => {
     if (quiet) setRefreshing(true);
@@ -871,48 +786,12 @@ export default function FeedApp() {
   }, [mode, selectedVideo]);
 
   useEffect(() => {
-    activeCompatibleRef.current =
-      selectedVideo && playerStreamMode === "compatible"
-        ? {
-            videoId: selectedVideo.id,
-            outputMode: streamSource?.transcode?.outputMode || "file",
-          }
-        : null;
-  }, [playerStreamMode, selectedVideo, streamSource?.transcode?.outputMode]);
-
-  useEffect(() => {
-    function cleanupActiveCompatibleStream() {
-      const activeCompatible = activeCompatibleRef.current;
-      if (activeCompatible?.outputMode === "hls") {
-        void stopCompatibleStream(activeCompatible.videoId, true);
-      }
-    }
-
-    window.addEventListener("pagehide", cleanupActiveCompatibleStream);
-    return () => {
-      cleanupActiveCompatibleStream();
-      window.removeEventListener("pagehide", cleanupActiveCompatibleStream);
-    };
-  }, []);
-
-  useEffect(() => {
     intendedPlaybackRef.current = false;
     if (pauseIntentTimerRef.current) {
       window.clearTimeout(pauseIntentTimerRef.current);
       pauseIntentTimerRef.current = null;
     }
   }, [selectedVideo?.id]);
-
-  useEffect(() => {
-    if (playerStreamMode === "direct" || !playerRef.current) return;
-    const player = playerRef.current;
-    player.load();
-    if (intendedPlaybackRef.current) {
-      void player.play().catch(() => {
-        setPlayerPlaying(false);
-      });
-    }
-  }, [playerStreamMode]);
 
   useEffect(() => {
     let stopped = false;
@@ -924,7 +803,7 @@ export default function FeedApp() {
       if (!selectedVideo?.downloaded || mode !== "live") return;
       try {
         const response = await fetch(
-          `/api/stream/${encodeURIComponent(selectedVideo.id)}/source?detail=1&${qualityQuery()}`,
+          `/api/stream/${encodeURIComponent(selectedVideo.id)}/source?detail=1`,
           { cache: "no-store" }
         );
         if (!response.ok) return;
@@ -940,7 +819,7 @@ export default function FeedApp() {
       stopped = true;
       window.clearTimeout(resetTimer);
     };
-  }, [mode, playbackQuality, selectedVideo?.downloaded, selectedVideo?.id]);
+  }, [mode, selectedVideo?.downloaded, selectedVideo?.id]);
 
   const visibleVideos = useMemo(() => {
     const source = selectedChannel ? channelVideos : feed?.videos || [];
@@ -1026,7 +905,7 @@ export default function FeedApp() {
         candidates.map(async (video) => {
           try {
             const response = await fetch(
-              `/api/stream/${encodeURIComponent(video.id)}/source?${qualityQuery()}`,
+              `/api/stream/${encodeURIComponent(video.id)}/source`,
               { cache: "no-store" }
             );
             if (!response.ok) return null;
@@ -1055,7 +934,6 @@ export default function FeedApp() {
     filteredLocalVideos,
     filteredSingleVideos,
     mode,
-    playbackQuality,
     streamSources,
     view,
     visibleVideos,
@@ -1138,161 +1016,6 @@ export default function FeedApp() {
     setSelectedVideo((current) =>
       current?.id === updated.id ? { ...current, ...updated } : current
     );
-    if (mode === "live") {
-      void prepareCompatibleDownload(updated.id);
-    }
-  }
-
-  function isApplePlaybackClient() {
-    if (typeof navigator === "undefined") return false;
-    return isApplePlaybackUserAgent(navigator.userAgent);
-  }
-
-  function qualityQuery() {
-    return `quality=${encodeURIComponent(playbackQuality)}`;
-  }
-
-  function wait(milliseconds: number) {
-    return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
-  }
-
-  async function pollTranscode(videoId: string) {
-    for (let attempt = 0; attempt < 2400; attempt += 1) {
-      const response = await fetch(`/api/transcode/${encodeURIComponent(videoId)}`, {
-        cache: "no-store",
-      });
-      const data = (await response.json()) as TranscodeResponse;
-      setStreamSources((current) => ({
-        ...current,
-        [videoId]: {
-          ...(current[videoId] || {
-            source: "local" as const,
-            youtarrConfigured: true,
-          }),
-          transcode: data,
-        },
-      }));
-      if (selectedVideo?.id === videoId) {
-        setStreamSource((current) =>
-          current ? { ...current, transcode: data } : current
-        );
-      }
-      if (data.ready && (data.mediaUrl || data.playlistUrl)) {
-        setTranscodeStartTime(data.startTime || 0);
-        setTranscodeState("ready");
-        return data;
-      }
-      if (data.error && !data.running) {
-        throw new Error(data.error);
-      }
-      await wait(data.playbackMode === "vod" ? 1500 : 700);
-    }
-    throw new Error(copy.player.transcodeTimeout);
-  }
-
-  function stopCompatibleStream(videoId: string, keepalive = false) {
-    return fetch(`/api/transcode/${encodeURIComponent(videoId)}`, {
-      method: "DELETE",
-      keepalive,
-    }).catch(() => undefined);
-  }
-
-  async function prepareCompatibleDownload(videoId: string) {
-    try {
-      const response = await fetch(`/api/transcode/${encodeURIComponent(videoId)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startTime: 0 }),
-      });
-      if (!response.ok) return;
-      const data = (await response.json()) as TranscodeResponse;
-      setStreamSources((current) => ({
-        ...current,
-        [videoId]: {
-          ...(current[videoId] || {
-            source: "local" as const,
-            youtarrConfigured: true,
-          }),
-          transcode: data,
-        },
-      }));
-    } catch {
-      // Background compatible-file preparation should never block downloads.
-    }
-  }
-
-  async function startCompatibleStream(video: FeedVideo) {
-    const player = playerRef.current;
-    const savedProgress = watchProgress[video.id]?.currentTime || 0;
-    const playerTime =
-      player && Number.isFinite(player.currentTime) ? player.currentTime : 0;
-    const currentTime = playerStreamMode === "compatible"
-      ? transcodeStartTime + playerTime
-      : playerTime > 1
-        ? playerTime
-        : savedProgress;
-    setTranscodeError("");
-    setTranscodeState("starting");
-    setTranscodeStartTime(0);
-    setPlayerStreamMode("compatible");
-    try {
-      const response = await fetch(`/api/transcode/${encodeURIComponent(video.id)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ startTime: currentTime }),
-      });
-      const data = (await response.json()) as TranscodeResponse;
-      if (!response.ok && data?.error) throw new Error(data.error);
-      setTranscodeStartTime(data.startTime || 0);
-      if (data.ready && (data.mediaUrl || data.playlistUrl)) {
-        setTranscodeState("ready");
-        return;
-      }
-      setTranscodeState("running");
-      await pollTranscode(video.id);
-    } catch (transcodeFailure) {
-      setTranscodeState("error");
-      setTranscodeError(
-        transcodeFailure instanceof Error
-          ? transcodeFailure.message
-          : copy.player.transcodeFailed
-      );
-      setPlayerStreamMode("youtarr");
-    }
-  }
-
-  async function chooseInitialStream(video: FeedVideo) {
-    setPlayerStreamMode("direct");
-    setTranscodeState("idle");
-    setTranscodeStartTime(0);
-    setTranscodeError("");
-
-    if (!isApplePlaybackClient()) return;
-    try {
-      setTranscodeState("checking");
-      const response = await fetch(`/api/transcode/${encodeURIComponent(video.id)}`, {
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        setTranscodeState("idle");
-        return;
-      }
-      const data = (await response.json()) as TranscodeResponse;
-      setStreamSource((current) =>
-        current ? { ...current, transcode: data } : current
-      );
-      if (data.ready && (data.mediaUrl || data.playlistUrl) && data.appleDecision?.suggested) {
-        setPlayerStreamMode("compatible");
-        setTranscodeStartTime(data.startTime || 0);
-        setTranscodeState("ready");
-        return;
-      }
-      setPlayerStreamMode("direct");
-      setTranscodeState("idle");
-    } catch {
-      setPlayerStreamMode("direct");
-      setTranscodeState("idle");
-    }
   }
 
   async function openChannel(channelId: string) {
@@ -1330,7 +1053,7 @@ export default function FeedApp() {
       if (mode === "live") {
         try {
           const response = await fetch(
-            `/api/stream/${encodeURIComponent(video.id)}/source?${qualityQuery()}`,
+            `/api/stream/${encodeURIComponent(video.id)}/source`,
             { cache: "no-store" }
           );
           if (response.ok) {
@@ -1339,17 +1062,11 @@ export default function FeedApp() {
             if (source.source === "local") {
               const downloadedVideo = { ...video, downloaded: true };
               markVideoDownloaded(downloadedVideo);
-              const appleClient = isApplePlaybackClient();
-              setPlayerStreamMode("direct");
-              setTranscodeState(appleClient ? "checking" : "idle");
-              setTranscodeStartTime(0);
-              setTranscodeError("");
               setSelectedVideo(downloadedVideo);
               setPlayerMode("full");
               setPlayerPlaying(false);
               setDeleteState("idle");
               setDeleteError("");
-              void chooseInitialStream(downloadedVideo);
               return;
             }
           }
@@ -1360,17 +1077,11 @@ export default function FeedApp() {
       void startDownload(video);
       return;
     }
-    const appleClient = isApplePlaybackClient();
-    setPlayerStreamMode("direct");
-    setTranscodeState(appleClient ? "checking" : "idle");
-    setTranscodeStartTime(0);
-    setTranscodeError("");
     setSelectedVideo(video);
     setPlayerMode("full");
     setPlayerPlaying(false);
     setDeleteState("idle");
     setDeleteError("");
-    void chooseInitialStream(video);
   }
 
   function closePlayer() {
@@ -1378,18 +1089,8 @@ export default function FeedApp() {
       setPlayerMode("mini");
       return;
     }
-    if (
-      selectedVideo &&
-      playerStreamMode === "compatible" &&
-      streamSource?.transcode?.outputMode === "hls"
-    ) {
-      void stopCompatibleStream(selectedVideo.id);
-    }
     playerRef.current?.pause();
     intendedPlaybackRef.current = false;
-    setPlayerStreamMode("direct");
-    setTranscodeState("idle");
-    setTranscodeStartTime(0);
     setPlayerPlaying(false);
     setSelectedVideo(null);
   }
@@ -1509,7 +1210,6 @@ export default function FeedApp() {
   }
 
   function playerProgressDuration(video: FeedVideo, player: HTMLVideoElement) {
-    if (playerStreamMode === "compatible") return knownVideoDuration(video);
     return Number.isFinite(player.duration) && player.duration > 0
       ? player.duration
       : knownVideoDuration(video);
@@ -1521,10 +1221,9 @@ export default function FeedApp() {
     force = false
   ) {
     const duration = playerProgressDuration(video, player);
-    const streamOffset = playerStreamMode === "compatible" ? transcodeStartTime : 0;
     const currentTime = Math.max(
       0,
-      Math.min(streamOffset + player.currentTime, duration || streamOffset + player.currentTime)
+      Math.min(player.currentTime, duration || player.currentTime)
     );
     storeWatchProgress(video.id, currentTime, duration, force);
   }
@@ -1575,32 +1274,14 @@ export default function FeedApp() {
 
   function resumePlayback(video: FeedVideo, player: HTMLVideoElement) {
     const videoId = video.id;
-    const pendingResume = pendingQualityResumeRef.current;
-    if (pendingResume?.videoId === videoId) {
-      pendingQualityResumeRef.current = null;
-      try {
-        player.currentTime = Math.max(0, pendingResume.currentTime);
-      } catch {
-        // Some mobile players reject seeking until enough metadata is available.
-      }
-      if (pendingResume.wasPlaying) {
-        void player.play().catch(() => setPlayerPlaying(false));
-      }
-      return;
-    }
-
     const progress = watchProgress[videoId];
     if (!progress || progress.currentTime < 5) return;
     const duration = playerProgressDuration(video, player) || progress.duration;
     if (progress.currentTime < duration - 8) {
       try {
-        player.currentTime = Math.max(
-          0,
-          progress.currentTime -
-            (playerStreamMode === "compatible" ? transcodeStartTime : 0)
-        );
+        player.currentTime = Math.max(0, progress.currentTime);
       } catch {
-        // In-progress HLS playlists may reject seeking until later segments exist.
+        // Some mobile players reject seeking until enough metadata is available.
       }
     }
   }
@@ -1609,30 +1290,6 @@ export default function FeedApp() {
     const progress = watchProgress[videoId];
     if (!progress?.duration) return undefined;
     return Math.max(2, Math.min(98, (progress.currentTime / progress.duration) * 100));
-  }
-
-  function switchPlaybackQuality(video: FeedVideo, quality: PlayerQuality) {
-    if (quality === playbackQuality) return;
-
-    const player = playerRef.current;
-    if (player) {
-      const duration = playerProgressDuration(video, player);
-      const streamOffset = playerStreamMode === "compatible" ? transcodeStartTime : 0;
-      const currentTime = Math.max(0, streamOffset + (player.currentTime || 0));
-      pendingQualityResumeRef.current = {
-        videoId: video.id,
-        currentTime,
-        wasPlaying: !player.paused && !player.ended,
-      };
-      if (duration > 0) {
-        storeWatchProgress(video.id, currentTime, duration, true);
-      }
-    }
-
-    setPlaybackQuality(quality);
-    setPlayerStreamMode("direct");
-    setTranscodeState("idle");
-    setTranscodeStartTime(0);
   }
 
   async function removeDownload(video: FeedVideo) {
@@ -1793,36 +1450,7 @@ export default function FeedApp() {
   const selectedVideoId = selectedVideo
     ? encodeURIComponent(selectedVideo.id)
     : "";
-  const compatiblePlayerSource =
-    streamSource?.transcode?.mediaUrl ||
-    streamSource?.transcode?.playlistUrl ||
-    `/api/transcode/${selectedVideoId}/hls/index.m3u8`;
-  const directPlayerSource = `/api/stream/${selectedVideoId}?${qualityQuery()}${
-    playerStreamMode === "youtarr" ? "&direct=0" : ""
-  }`;
-  const localVariants = streamSource?.local?.variants || [];
-  const activeLocalVariant = localVariants.find(
-    (variant) => variant.quality === streamSource?.local?.quality
-  );
-  const activeLocalQualityLabel =
-    activeLocalVariant?.label ||
-    (streamSource?.local?.quality === "1080"
-      ? "1080p"
-      : streamSource?.local?.quality === "original"
-        ? "Original"
-        : undefined);
-  const hasQualityVariants =
-    localVariants.some((variant) => variant.quality === "original") &&
-    localVariants.some((variant) => variant.quality === "1080");
-  const playerSource = selectedVideo
-    ? playerStreamMode === "compatible" && transcodeState === "ready"
-      ? compatiblePlayerSource
-      : directPlayerSource
-    : "";
-  const transcodePreparing =
-    selectedVideo?.downloaded &&
-    playerStreamMode === "compatible" &&
-    transcodeState !== "ready";
+  const playerSource = selectedVideo ? `/api/stream/${selectedVideoId}` : "";
   const inlineWatchPage = selectedVideo ? shouldUseInlineWatchPage() : false;
 
   return (
@@ -1994,7 +1622,6 @@ export default function FeedApp() {
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
                     onRedownload={(item) => void startDownload(item, true)}
-                    onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     copy={copy}
                   />
                 ))}
@@ -2036,7 +1663,6 @@ export default function FeedApp() {
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
                     onRedownload={(item) => void startDownload(item, true)}
-                    onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     copy={copy}
                   />
                 ))}
@@ -2084,7 +1710,6 @@ export default function FeedApp() {
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
                     onRedownload={(item) => void startDownload(item, true)}
-                    onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     copy={copy}
                   />
                 ))}
@@ -2150,7 +1775,6 @@ export default function FeedApp() {
                     onOpen={openVideo}
                     onDelete={(item) => void removeDownload(item)}
                     onRedownload={(item) => void startDownload(item, true)}
-                    onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     onRemoveFromList={(item) => void removeSingleVideo(item)}
                     copy={copy}
                   />
@@ -2281,7 +1905,6 @@ export default function FeedApp() {
                     onChannel={() => undefined}
                     onDelete={(item) => void removeDownload(item)}
                     onRedownload={(item) => void startDownload(item, true)}
-                    onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     copy={copy}
                   />
                 ))}
@@ -2470,33 +2093,18 @@ export default function FeedApp() {
                     onError={(event) => {
                       intendedPlaybackRef.current =
                         intendedPlaybackRef.current || !event.currentTarget.paused;
-                      if (playerStreamMode === "direct" && isApplePlaybackClient()) {
-                        void startCompatibleStream(selectedVideo);
-                        return;
-                      }
-                      if (playerStreamMode === "direct") {
-                        const fallbackSource: StreamSourceInfo = {
-                          source: "youtarr",
-                          local: streamSource?.local,
-                          transcode: streamSource?.transcode,
-                          youtarrConfigured: streamSource?.youtarrConfigured ?? true,
-                        };
-                        setStreamSource(fallbackSource);
-                        setStreamSources((current) => ({
-                          ...current,
-                          [selectedVideo.id]: fallbackSource,
-                        }));
-                        setPlayerStreamMode("youtarr");
-                      }
+                      const fallbackSource: StreamSourceInfo = {
+                        source: "youtarr",
+                        local: streamSource?.local,
+                        youtarrConfigured: streamSource?.youtarrConfigured ?? true,
+                      };
+                      setStreamSource(fallbackSource);
+                      setStreamSources((current) => ({
+                        ...current,
+                        [selectedVideo.id]: fallbackSource,
+                      }));
                     }}
                   />
-                  {transcodePreparing && (
-                    <div className="player-busy-overlay" aria-live="polite">
-                      <span>
-                        <FontAwesomeIcon icon={faRotateRight} aria-hidden="true" />
-                      </span>
-                    </div>
-                  )}
                 </div>
                 {playerMode === "mini" && (
                   <div
@@ -2550,28 +2158,17 @@ export default function FeedApp() {
               <span>{relativeDate(selectedVideo.publishedAt, copy)}</span>
               {selectedVideo.downloaded && (
                 <p
-                  className={`stream-source stream-source-${
-                    playerStreamMode === "compatible"
-                      ? "compatible"
-                      : streamSource?.source || "unknown"
-                  }`}
+                  className={`stream-source stream-source-${streamSource?.source || "unknown"}`}
                 >
                   <strong>
-                    {playerStreamMode === "compatible"
-                      ? copy.player.sourceCompatible
-                      : streamSource?.source === "local"
+                    {streamSource?.source === "local"
                       ? copy.player.sourceDirect
                       : streamSource?.source === "youtarr"
                         ? copy.player.sourceYoutarr
                         : copy.player.sourceChecking}
                   </strong>
-                  {playerStreamMode === "compatible"
-                    ? copy.player.sourceCompatibleBody
-                    : streamSource?.source === "local" && streamSource.local?.fileName
-                    ? copy.player.sourceDirectBody(
-                        streamSource.local.fileName,
-                        activeLocalQualityLabel
-                      )
+                  {streamSource?.source === "local" && streamSource.local?.fileName
+                    ? copy.player.sourceDirectBody(streamSource.local.fileName)
                     : streamSource?.local?.configured === false
                       ? copy.player.sourceNoMount
                       : streamSource?.source === "youtarr"
@@ -2579,81 +2176,6 @@ export default function FeedApp() {
                         : copy.player.sourceCheckingBody}
                 </p>
               )}
-              {selectedVideo.downloaded &&
-                mode === "live" &&
-                hasQualityVariants && (
-                  <div className="stream-switch" aria-label={copy.player.qualityMode}>
-                    {[
-                      ["auto", copy.player.useAutoQuality],
-                      ["original", copy.player.useOriginalQuality],
-                      ["1080", copy.player.use1080Quality],
-                    ].map(([value, label]) => (
-                      <button
-                        key={value}
-                        className={playbackQuality === value ? "active" : ""}
-                        onClick={() =>
-                          switchPlaybackQuality(selectedVideo, value as PlayerQuality)
-                        }
-                      >
-                        <span>{label}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              {selectedVideo.downloaded &&
-                mode === "live" &&
-                streamSource?.transcode?.enabled &&
-                isApplePlaybackClient() && (
-                  <div className="stream-switch" aria-label={copy.player.streamMode}>
-                    <button
-                      className={playerStreamMode !== "compatible" ? "active" : ""}
-                      onClick={() => {
-                        setTranscodeError("");
-                        if (
-                          selectedVideo &&
-                          playerStreamMode === "compatible" &&
-                          streamSource?.transcode?.outputMode === "hls"
-                        ) {
-                          void stopCompatibleStream(selectedVideo.id);
-                        }
-                        setPlayerStreamMode("direct");
-                        setTranscodeState("idle");
-                        setTranscodeStartTime(0);
-                      }}
-                    >
-                      <FontAwesomeIcon icon={faFilm} aria-hidden="true" />
-                      <span>{copy.player.useDefault}</span>
-                    </button>
-                    <button
-                      className={playerStreamMode === "compatible" ? "active" : ""}
-                      onClick={() => void startCompatibleStream(selectedVideo)}
-                      disabled={
-                        transcodeState === "checking" ||
-                        transcodeState === "starting" ||
-                        transcodeState === "running"
-                      }
-                    >
-                      <FontAwesomeIcon
-                        icon={
-                          transcodeState === "checking" ||
-                          transcodeState === "starting" ||
-                          transcodeState === "running"
-                            ? faRotateRight
-                            : faBolt
-                        }
-                        aria-hidden="true"
-                      />
-                      <span>
-                        {transcodeState === "checking" ||
-                        transcodeState === "starting" ||
-                        transcodeState === "running"
-                          ? copy.player.transcoding
-                          : copy.player.useCompatible}
-                      </span>
-                    </button>
-                  </div>
-                )}
-              {transcodeError && <small className="transcode-error">{transcodeError}</small>}
               {selectedVideo.downloaded && (
                 <div className="modal-actions">
                   <button
@@ -2733,24 +2255,6 @@ export default function FeedApp() {
                       onClick={() => setLanguage(option.code)}
                     >
                       {option.label}
-                    </button>
-                  ))}
-                </strong>
-              </div>
-              <div>
-                <span>{copy.settings.qualityLabel}</span>
-                <strong className="language-switcher">
-                  {[
-                    ["auto", copy.settings.qualityAuto],
-                    ["original", copy.settings.qualityOriginal],
-                    ["1080", copy.settings.quality1080],
-                  ].map(([value, label]) => (
-                    <button
-                      key={value}
-                      className={playbackQuality === value ? "active" : ""}
-                      onClick={() => setPlaybackQuality(value as PlayerQuality)}
-                    >
-                      {label}
                     </button>
                   ))}
                 </strong>
