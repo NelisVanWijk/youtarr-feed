@@ -227,7 +227,8 @@ function Thumbnail({
           src={video.thumbnail}
           alt=""
           onError={() => setFailed(true)}
-          loading="lazy"
+          loading={index < 6 ? "eager" : "lazy"}
+          fetchPriority={index < 4 ? "high" : "auto"}
         />
       ) : (
         <div className="thumbnail-art" aria-hidden="true">
@@ -439,13 +440,13 @@ export default function FeedApp() {
   const pauseIntentTimerRef = useRef<number | null>(null);
   const mode: AppMode = feed?.mode || "demo";
 
-  const loadFeed = useCallback(async (quiet = false) => {
+  const loadFeed = useCallback(async (quiet = false, refresh = false) => {
     if (quiet) setRefreshing(true);
     else setLoading(true);
     setError("");
     try {
       const [feedResponse, statusResponse] = await Promise.all([
-        fetch("/api/feed", { cache: "no-store" }),
+        fetch(`/api/feed${refresh ? "?refresh=1" : ""}`, { cache: "no-store" }),
         fetch("/api/status", { cache: "no-store" }),
       ]);
       const feedData = (await feedResponse.json()) as FeedResponse & {
@@ -574,7 +575,7 @@ export default function FeedApp() {
         void fetch("/api/plex/refresh", { method: "POST" });
       }
       if (view === "local") {
-        void loadLocalVideos(true);
+        void loadLocalVideos(true, true);
       }
     }
 
@@ -783,11 +784,14 @@ export default function FeedApp() {
     visibleVideos,
   ]);
 
-  async function loadLocalVideos(quiet = false) {
+  async function loadLocalVideos(quiet = false, refresh = false) {
     if (!quiet) setLocalLoading(true);
     setError("");
     try {
-      const response = await fetch("/api/local-videos", { cache: "no-store" });
+      const response = await fetch(
+        `/api/local-videos${refresh ? "?refresh=1" : ""}`,
+        { cache: "no-store" }
+      );
       const data = (await response.json()) as {
         videos?: FeedVideo[];
         error?: string;
@@ -1063,9 +1067,9 @@ export default function FeedApp() {
       });
       setLocalVideos((current) => current.filter((item) => item.id !== video.id));
       setDeleteState("idle");
-      void loadFeed(true);
+      void loadFeed(true, true);
       if (view === "local") {
-        void loadLocalVideos(true);
+        void loadLocalVideos(true, true);
       }
     } catch (deleteFailure) {
       setDeleteState("error");
@@ -1101,7 +1105,7 @@ export default function FeedApp() {
           ? `${data.channel.name || "Kanaal"} is hersteld`
           : `${data.channel?.name || "Kanaal"} is toegevoegd`
       );
-      void loadFeed(true);
+      void loadFeed(true, true);
     } catch (addFailure) {
       setAddChannelState("error");
       setAddChannelMessage(
@@ -1158,7 +1162,7 @@ export default function FeedApp() {
           </button>
           <button
             className={`round-button refresh-button ${refreshing ? "spinning" : ""}`}
-            onClick={() => void loadFeed(true)}
+            onClick={() => void loadFeed(true, true)}
             aria-label="Feed verversen"
           >
             ↻
@@ -1338,7 +1342,7 @@ export default function FeedApp() {
               </div>
               <button
                 className="settings-link"
-                onClick={() => void loadLocalVideos(true)}
+                onClick={() => void loadLocalVideos(true, true)}
               >
                 Verversen
               </button>

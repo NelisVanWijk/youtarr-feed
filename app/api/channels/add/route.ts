@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { invalidateVideoListCache } from "../../../../lib/server-cache";
 import { addChannel, isYoutarrConfigured } from "../../../../lib/youtarr";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ export async function POST(request: Request) {
 
   try {
     const channel = await addChannel(url);
+    await invalidateVideoListCache("feed", "local-videos");
     return NextResponse.json({ success: true, channel });
   } catch (error) {
     return NextResponse.json(

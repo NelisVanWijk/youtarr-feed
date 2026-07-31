@@ -33,6 +33,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="nl">
+      <head>
+        <link rel="preconnect" href="https://i.ytimg.com" />
+      </head>
       <body>{children}</body>
     </html>
   );

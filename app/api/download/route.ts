@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { invalidateVideoListCache } from "../../../lib/server-cache";
 import { isYoutarrConfigured, queueDownload } from "../../../lib/youtarr";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
       allowRedownload: body.missing === true,
       channelId: body.channelId,
     });
+    await invalidateVideoListCache("feed", "local-videos");
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return NextResponse.json(

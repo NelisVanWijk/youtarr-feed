@@ -19,6 +19,7 @@ token, API key, and optional Plex token are never sent to the browser.
 - Re-download videos Youtarr marks as missing after their files were removed.
 - Delete a downloaded video through Youtarr.
 - Server-side watch progress stored in `/data/watch-progress.json`.
+- Server-side feed cache stored in `/data/feed-cache.json` for faster first opens.
 - Continue Watching tab synced across browsers/devices.
 - Local downloads tab with all videos Youtarr currently marks as downloaded.
 - Optional Plex library refresh after a download completes.
@@ -81,6 +82,25 @@ enriches date-only or missing publish values server-side through the official
 YouTube `videos.list` endpoint and then sorts using the returned
 `snippet.publishedAt` timestamp. Requests are batched in groups of up to 50
 video IDs; `videos.list` costs 1 quota unit per call.
+
+## Server-Side Cache
+
+The feed and Local tab use a small server-side cache so opening the app does not
+need to wait for every Youtarr channel request each time. By default cached
+results are reused for 300 seconds and stored in the persistent app data
+directory:
+
+```text
+/data/feed-cache.json
+/data/local-videos-cache.json
+```
+
+When a cache entry is older than the TTL, the app returns the old result
+immediately and refreshes it in the background. Manual refreshes, deletes,
+downloads, and channel adds invalidate or bypass the cache.
+
+Set `YOUTARR_FEED_CACHE_TTL_SECONDS` to tune this. Higher values make first open
+faster for longer, lower values keep the feed closer to Youtarr on every open.
 
 ## Recommended Youtarr Mount Layout
 
@@ -296,6 +316,7 @@ docker run -d \
 | `YOUTARR_API_KEY` | Optional | Optional Youtarr API key for download commands. |
 | `YOUTUBE_API_KEY` | Optional | Fallback YouTube Data API key for enriching date-only publish values with exact timestamps. Prefer setting the key in Youtarr first. |
 | `YOUTARR_FEED_DATA_DIR` | Recommended | Persistent app data directory. Defaults to `/data` in production. |
+| `YOUTARR_FEED_CACHE_TTL_SECONDS` | Optional | Server-side feed/local-video cache duration. Defaults to `300`. |
 | `YOUTARR_MEDIA_DIR` | Recommended | Read-only mount of the Youtarr output folder for direct streaming. |
 | `PLEX_URL` | Optional | Plex server URL for refresh requests. |
 | `PLEX_TOKEN` | Optional | Plex token. |

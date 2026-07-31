@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { invalidateVideoListCache } from "../../../lib/server-cache";
 import { deleteDownload, isYoutarrConfigured } from "../../../lib/youtarr";
 import { clearWatchProgress } from "../../../lib/watch-progress";
 
@@ -18,6 +19,7 @@ export async function POST(request: Request) {
   try {
     const result = await deleteDownload(body.id);
     await clearWatchProgress(body.id);
+    await invalidateVideoListCache("feed", "local-videos");
     return NextResponse.json({ success: true, ...result });
   } catch (error) {
     return NextResponse.json(

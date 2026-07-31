@@ -1,12 +1,8 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { readFile } from "node:fs/promises";
+import { appDataPath, ensureDataDirectory, writeJsonAtomic } from "./app-data";
 import type { WatchProgressEntry, WatchProgressMap } from "./types";
 
-const dataDirectory =
-  process.env.YOUTARR_FEED_DATA_DIR ||
-  process.env.DATA_DIR ||
-  (process.env.NODE_ENV === "production" ? "/data" : ".data");
-const storePath = path.join(dataDirectory, "watch-progress.json");
+const storePath = appDataPath("watch-progress.json");
 
 let writeQueue = Promise.resolve();
 
@@ -30,10 +26,6 @@ function normalizeEntry(entry: Partial<WatchProgressEntry>): WatchProgressEntry 
   };
 }
 
-async function ensureStoreDirectory() {
-  await mkdir(dataDirectory, { recursive: true });
-}
-
 export async function readWatchProgress(): Promise<WatchProgressMap> {
   try {
     const raw = await readFile(storePath, "utf8");
@@ -51,10 +43,8 @@ export async function readWatchProgress(): Promise<WatchProgressMap> {
 }
 
 async function writeWatchProgress(progress: WatchProgressMap) {
-  await ensureStoreDirectory();
-  const temporaryPath = `${storePath}.${process.pid}.tmp`;
-  await writeFile(temporaryPath, `${JSON.stringify(progress, null, 2)}\n`, "utf8");
-  await rename(temporaryPath, storePath);
+  await ensureDataDirectory();
+  await writeJsonAtomic(storePath, progress);
 }
 
 export function updateWatchProgress(
