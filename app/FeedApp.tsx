@@ -1165,7 +1165,10 @@ export default function FeedApp() {
             onClick={() => void loadFeed(true, true)}
             aria-label="Feed verversen"
           >
-            ↻
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M20 12a8 8 0 1 1-2.35-5.65" />
+              <path d="M20 4v6h-6" />
+            </svg>
           </button>
           <button
             className="profile-button"

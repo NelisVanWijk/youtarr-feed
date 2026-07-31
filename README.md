@@ -96,8 +96,10 @@ directory:
 ```
 
 When a cache entry is older than the TTL, the app returns the old result
-immediately and refreshes it in the background. Manual refreshes, deletes,
-downloads, and channel adds invalidate or bypass the cache.
+immediately and refreshes it in the background. The cache is not discarded just
+because it is older than the TTL, so opening the app hours later can still show
+the last known feed quickly as long as `/data` is persistent. Manual refreshes,
+deletes, downloads, and channel adds invalidate or bypass the cache.
 
 Set `YOUTARR_FEED_CACHE_TTL_SECONDS` to tune this. Higher values make first open
 faster for longer, lower values keep the feed closer to Youtarr on every open.

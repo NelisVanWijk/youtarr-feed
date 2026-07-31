@@ -194,8 +194,17 @@ input:focus-visible {
 }
 
 .refresh-button {
-  font-size: 24px;
   line-height: 1;
+}
+
+.refresh-button svg {
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .refresh-button.spinning {
@@ -1549,10 +1558,6 @@ main {
 
   .mobile-search {
     display: grid;
-  }
-
-  .refresh-button {
-    display: none;
   }
 
   .search-wrap {
