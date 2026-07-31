@@ -8,6 +8,7 @@ export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
     id?: string;
     missing?: boolean;
+    redownload?: boolean;
     channelId?: string;
   };
   if (!body.id || !/^[A-Za-z0-9_-]{11}$/.test(body.id)) {
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await queueDualQualityDownload(body.id, {
-      allowRedownload: body.missing === true,
+      allowRedownload: body.missing === true || body.redownload === true,
       channelId: body.channelId,
     });
     await invalidateVideoListCache("feed", "local-videos");

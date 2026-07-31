@@ -340,6 +340,8 @@ docker run -d \
 | `YOUTARR_FEED_CACHE_TTL_SECONDS` | Optional | Server-side feed/local-video cache duration. Defaults to `300`. |
 | `YOUTARR_MEDIA_DIR` | Recommended | Mount of the Youtarr output folder for direct streaming. Use read-write if Youtarr Feed should clean up local variants after delete. |
 | `YOUTARR_FEED_DELETE_LOCAL_FILES` | Optional | Set to `true` to delete every local media file matching the same YouTube video ID after Youtarr confirms a delete. Requires a writable media mount. Defaults to `false`. |
+| `YOUTARR_RESCAN_BEFORE_REDOWNLOAD` | Optional | Set to `true` to trigger Youtarr's filesystem rescan before redownload/missing download requests. Defaults to `true`. |
+| `YOUTARR_RESCAN_BEFORE_REDOWNLOAD_TIMEOUT_SECONDS` | Optional | Maximum seconds to wait for the pre-redownload rescan to finish. Defaults to `45`. |
 | `YOUTARR_DUAL_QUALITY_DOWNLOADS` | Optional | Set to `true` to ask Youtarr for a second 1080p copy whenever Youtarr Feed starts a download. Defaults to `false`. |
 | `YOUTARR_PRIMARY_DOWNLOAD_RESOLUTION` | Optional | Resolution override for the primary/original download. Leave empty to use Youtarr's channel/global setting. |
 | `YOUTARR_SECONDARY_DOWNLOAD_RESOLUTION` | Optional | Resolution for the second copy. Defaults to `1080`. |
@@ -388,6 +390,19 @@ with the original. Youtarr Feed scans the media mount recursively, so a separate
 When `YOUTARR_FEED_DELETE_LOCAL_FILES=true` and the media mount is writable,
 Youtarr Feed removes every local file matching the deleted YouTube video ID after
 Youtarr confirms the delete. This cleans up both the original and 1080p copies.
+
+When you use **Re-download** from Youtarr Feed, the app first triggers Youtarr's
+**Rescan files on disk** maintenance action and waits briefly before queuing the
+download again. This helps clear stale "missing" state after files were deleted,
+moved, or restored outside Youtarr:
+
+```env
+YOUTARR_RESCAN_BEFORE_REDOWNLOAD=true
+YOUTARR_RESCAN_BEFORE_REDOWNLOAD_TIMEOUT_SECONDS=45
+```
+
+Youtarr's own UI only redownloads the quality you choose there. Dual-quality
+redownloads require starting the redownload from Youtarr Feed.
 
 When both variants exist, the player shows a quality switch:
 

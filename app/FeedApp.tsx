@@ -368,6 +368,7 @@ function VideoCard({
   onOpen,
   onChannel,
   onDelete,
+  onRedownload,
   onRemoveFromList,
   onPrepareCompatible,
   copy,
@@ -380,6 +381,7 @@ function VideoCard({
   onOpen: (video: FeedVideo) => void;
   onChannel?: (channelId: string) => void;
   onDelete: (video: FeedVideo) => void;
+  onRedownload?: (video: FeedVideo) => void;
   onRemoveFromList?: (video: FeedVideo) => void;
   onPrepareCompatible?: (video: FeedVideo) => void;
   copy: AppCopy;
@@ -450,6 +452,18 @@ function VideoCard({
               </button>
               {video.downloaded && (
                 <>
+                  {onRedownload && (
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onRedownload(video);
+                      }}
+                    >
+                      {downloadJob
+                        ? copy.menu.downloadRunning
+                        : copy.menu.redownload}
+                    </button>
+                  )}
                   {onPrepareCompatible && (
                     <button
                       onClick={() => {
@@ -1437,7 +1451,7 @@ export default function FeedApp() {
     }
   }
 
-  async function startDownload(video: FeedVideo) {
+  async function startDownload(video: FeedVideo, redownload = false) {
     const existing = downloadJobs[video.id];
     if (existing && existing.state !== "error") return;
     setDownloadJobs((current) => ({
@@ -1451,6 +1465,7 @@ export default function FeedApp() {
         body: JSON.stringify({
           id: video.id,
           missing: video.missing,
+          redownload,
           channelId: video.channelId,
         }),
       });
@@ -1978,6 +1993,7 @@ export default function FeedApp() {
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
+                    onRedownload={(item) => void startDownload(item, true)}
                     onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     copy={copy}
                   />
@@ -2019,6 +2035,7 @@ export default function FeedApp() {
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
+                    onRedownload={(item) => void startDownload(item, true)}
                     onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     copy={copy}
                   />
@@ -2066,6 +2083,7 @@ export default function FeedApp() {
                     onOpen={openVideo}
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
+                    onRedownload={(item) => void startDownload(item, true)}
                     onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     copy={copy}
                   />
@@ -2131,6 +2149,7 @@ export default function FeedApp() {
                     downloadJob={downloadJobs[video.id]}
                     onOpen={openVideo}
                     onDelete={(item) => void removeDownload(item)}
+                    onRedownload={(item) => void startDownload(item, true)}
                     onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     onRemoveFromList={(item) => void removeSingleVideo(item)}
                     copy={copy}
@@ -2261,6 +2280,7 @@ export default function FeedApp() {
                     onOpen={openVideo}
                     onChannel={() => undefined}
                     onDelete={(item) => void removeDownload(item)}
+                    onRedownload={(item) => void startDownload(item, true)}
                     onPrepareCompatible={(item) => void prepareCompatibleDownload(item.id)}
                     copy={copy}
                   />
