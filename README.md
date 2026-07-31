@@ -337,6 +337,7 @@ docker run -d \
 | `YOUTARR_TRANSCODE_DEVICE` | Optional | VAAPI render device, usually `/dev/dri/renderD128` on Unraid/Linux. |
 | `YOUTARR_TRANSCODE_DIR` | Optional | Persistent transcode cache directory. Defaults to `<data dir>/transcodes`. |
 | `YOUTARR_TRANSCODE_VIDEO_BITRATE` | Optional | Target video bitrate for compatible HLS. Defaults to `18000k`. |
+| `YOUTARR_TRANSCODE_VAAPI_QUALITY` | Optional | VAAPI CQP quality value. Lower is higher quality. Defaults to `24`. |
 | `YOUTARR_TRANSCODE_AUDIO_BITRATE` | Optional | Target AAC audio bitrate. Defaults to `160k`. |
 | `PLEX_URL` | Optional | Plex server URL for refresh requests. |
 | `PLEX_TOKEN` | Optional | Plex token. |
@@ -366,6 +367,7 @@ Recommended transcode variables:
 YOUTARR_TRANSCODE_ENABLED=true
 YOUTARR_TRANSCODE_ACCEL=vaapi
 YOUTARR_TRANSCODE_DEVICE=/dev/dri/renderD128
+YOUTARR_TRANSCODE_VAAPI_QUALITY=24
 ```
 
 After updating the container, VAAPI can be checked from inside the container:

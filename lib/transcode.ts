@@ -50,6 +50,8 @@ const transcodeVideoBitrate =
   process.env.YOUTARR_TRANSCODE_VIDEO_BITRATE?.trim() || "18000k";
 const transcodeAudioBitrate =
   process.env.YOUTARR_TRANSCODE_AUDIO_BITRATE?.trim() || "160k";
+const transcodeVaapiQuality =
+  process.env.YOUTARR_TRANSCODE_VAAPI_QUALITY?.trim() || "24";
 const hlsFilePattern = /^(index\.m3u8|segment_\d{5}\.ts)$/;
 
 function runProcess(command: string, args: string[], timeoutMs = 12000) {
@@ -163,12 +165,10 @@ function ffmpegArguments(inputPath: string, outputDirectory: string) {
       "format=nv12,hwupload",
       "-c:v",
       "h264_vaapi",
-      "-b:v",
-      transcodeVideoBitrate,
-      "-maxrate",
-      transcodeVideoBitrate,
-      "-bufsize",
-      "36000k",
+      "-rc_mode",
+      "CQP",
+      "-global_quality",
+      transcodeVaapiQuality,
       ...commonOutput,
     ];
   }
