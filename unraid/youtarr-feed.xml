@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <Container version="2">
-  <Name>Youtarr Feed</Name>
+  <Name>Youtarr-Feed</Name>
   <Repository>ghcr.io/nelisvanwijk/youtarr-feed:latest</Repository>
   <Registry>https://github.com/NelisVanWijk/youtarr-feed/pkgs/container/youtarr-feed</Registry>
   <Network>bridge</Network>
