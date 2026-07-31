@@ -157,6 +157,10 @@ export const translations = {
       sourceDirectBody: (fileName: string) => `Direct: ${fileName}`,
       sourceNoMount: "No media mount configured; falling back to Youtarr.",
       sourceFallback: "Local file not found; using stream fallback.",
+      sourceExpectedPath: (filePath: string, sourceDir: string, mediaDir: string) =>
+        `Youtarr path: ${filePath}. Mapping ${sourceDir || "source"} -> ${
+          mediaDir || "media mount"
+        }.`,
       sourceCheckingBody: "Checking which stream path is being used.",
       deleting: "Deleting",
     },
@@ -325,6 +329,10 @@ export const translations = {
       sourceDirectBody: (fileName: string) => `Direct: ${fileName}`,
       sourceNoMount: "Geen media-mount ingesteld; fallback naar Youtarr.",
       sourceFallback: "Lokaal bestand niet gevonden; stream fallback.",
+      sourceExpectedPath: (filePath: string, sourceDir: string, mediaDir: string) =>
+        `Youtarr-pad: ${filePath}. Mapping ${sourceDir || "bron"} -> ${
+          mediaDir || "media-mount"
+        }.`,
       sourceCheckingBody: "Even kijken welk stream-pad wordt gebruikt.",
       deleting: "Verwijderen",
     },

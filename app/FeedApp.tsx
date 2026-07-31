@@ -61,6 +61,13 @@ type StreamSourceInfo = {
     extension?: string;
     size?: number;
     playable?: boolean;
+    debug?: {
+      reason?: string;
+      expectedFilePath?: string | null;
+      mediaDirectory?: string;
+      sourceMediaDirectory?: string;
+      checkedPaths?: string[];
+    };
   };
   youtarrConfigured: boolean;
 };
@@ -2188,6 +2195,17 @@ export default function FeedApp() {
                       : streamSource?.source === "youtarr"
                         ? copy.player.sourceFallback
                         : copy.player.sourceCheckingBody}
+                  {streamSource?.source === "youtarr" &&
+                    streamSource.local?.debug?.reason === "file_not_found" &&
+                    streamSource.local.debug.expectedFilePath && (
+                      <small>
+                        {copy.player.sourceExpectedPath(
+                          streamSource.local.debug.expectedFilePath,
+                          streamSource.local.debug.sourceMediaDirectory || "",
+                          streamSource.local.debug.mediaDirectory || ""
+                        )}
+                      </small>
+                    )}
                 </p>
               )}
               {selectedVideo.downloaded && (

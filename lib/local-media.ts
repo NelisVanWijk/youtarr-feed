@@ -16,6 +16,18 @@ const mimeTypes = new Map([
   [".mkv", "video/x-matroska"],
 ]);
 
+type LocalMediaDebug = {
+  reason:
+    | "media_mount_missing"
+    | "file_not_found"
+    | "file_not_playable"
+    | "found";
+  expectedFilePath?: string | null;
+  mediaDirectory?: string;
+  sourceMediaDirectory?: string;
+  checkedPaths?: string[];
+};
+
 function isValidVideoId(value: string) {
   return /^[A-Za-z0-9_-]{11}$/.test(value);
 }
@@ -208,11 +220,19 @@ async function getLocalMediaLookup(
   userAgent?: string | null,
   expectedFilePath?: string | null
 ) {
+  const debugBase: Omit<LocalMediaDebug, "reason"> = {
+    expectedFilePath,
+    mediaDirectory,
+    sourceMediaDirectory,
+    checkedPaths: mappedExpectedPaths(expectedFilePath),
+  };
+
   if (!mediaDirectory) {
     return {
       configured: false,
       available: false,
       source: "youtarr" as const,
+      debug: { ...debugBase, reason: "media_mount_missing" as const },
     };
   }
 
@@ -222,6 +242,7 @@ async function getLocalMediaLookup(
       configured: true,
       available: false,
       source: "youtarr" as const,
+      debug: { ...debugBase, reason: "file_not_found" as const },
     };
   }
 
@@ -236,6 +257,11 @@ async function getLocalMediaLookup(
     size: localFile.size,
     extension: localFile.extension,
     playable,
+    debug: {
+      ...debugBase,
+      checkedPaths: [...(debugBase.checkedPaths || []), localFile.filePath],
+      reason: playable ? "found" as const : "file_not_playable" as const,
+    },
   };
 }
 
