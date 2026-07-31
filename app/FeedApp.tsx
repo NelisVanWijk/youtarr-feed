@@ -4,11 +4,13 @@ import {
   faCheck,
   faChevronLeft,
   faChevronRight,
+  faBolt,
   faCirclePlay,
   faClockRotateLeft,
   faClone,
   faDownload,
   faEllipsisVertical,
+  faFilm,
   faFolderOpen,
   faHouse,
   faInbox,
@@ -70,6 +72,7 @@ type StreamSourceInfo = {
     ready: boolean;
     complete: boolean;
     running: boolean;
+    startTime: number;
     playlistUrl?: string;
     error?: string;
   };
@@ -503,6 +506,7 @@ export default function FeedApp() {
     "idle" | "checking" | "starting" | "running" | "ready" | "error"
   >("idle");
   const [transcodeError, setTranscodeError] = useState("");
+  const [transcodeStartTime, setTranscodeStartTime] = useState(0);
   const [downloadJobs, setDownloadJobs] = useState<Record<string, DownloadJob>>({});
   const [deleteState, setDeleteState] = useState<"idle" | "deleting" | "error">(
     "idle"
@@ -528,6 +532,7 @@ export default function FeedApp() {
   const playerRef = useRef<HTMLVideoElement | null>(null);
   const intendedPlaybackRef = useRef(false);
   const pauseIntentTimerRef = useRef<number | null>(null);
+  const activeCompatibleVideoIdRef = useRef<string | null>(null);
   const mode: AppMode = feed?.mode || "demo";
   const copy = translations[language];
   const shouldUseInlineWatchPage = useCallback(() => true, []);
@@ -800,6 +805,24 @@ export default function FeedApp() {
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
   }, [mode, selectedVideo]);
+
+  useEffect(() => {
+    activeCompatibleVideoIdRef.current =
+      selectedVideo && playerStreamMode === "compatible" ? selectedVideo.id : null;
+  }, [playerStreamMode, selectedVideo]);
+
+  useEffect(() => {
+    function cleanupActiveCompatibleStream() {
+      const videoId = activeCompatibleVideoIdRef.current;
+      if (videoId) void stopCompatibleStream(videoId, true);
+    }
+
+    window.addEventListener("pagehide", cleanupActiveCompatibleStream);
+    return () => {
+      cleanupActiveCompatibleStream();
+      window.removeEventListener("pagehide", cleanupActiveCompatibleStream);
+    };
+  }, []);
 
   useEffect(() => {
     intendedPlaybackRef.current = false;
@@ -1076,6 +1099,7 @@ export default function FeedApp() {
         );
       }
       if (data.ready && data.playlistUrl) {
+        setTranscodeStartTime(data.startTime || 0);
         setTranscodeState("ready");
         return data;
       }
@@ -1087,16 +1111,36 @@ export default function FeedApp() {
     throw new Error(copy.player.transcodeTimeout);
   }
 
+  function stopCompatibleStream(videoId: string, keepalive = false) {
+    return fetch(`/api/transcode/${encodeURIComponent(videoId)}`, {
+      method: "DELETE",
+      keepalive,
+    }).catch(() => undefined);
+  }
+
   async function startCompatibleStream(video: FeedVideo) {
+    const player = playerRef.current;
+    const savedProgress = watchProgress[video.id]?.currentTime || 0;
+    const playerTime =
+      player && Number.isFinite(player.currentTime) ? player.currentTime : 0;
+    const currentTime = playerStreamMode === "compatible"
+      ? transcodeStartTime + playerTime
+      : playerTime > 1
+        ? playerTime
+        : savedProgress;
     setTranscodeError("");
     setTranscodeState("starting");
+    setTranscodeStartTime(0);
     setPlayerStreamMode("compatible");
     try {
       const response = await fetch(`/api/transcode/${encodeURIComponent(video.id)}`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ startTime: currentTime }),
       });
       const data = (await response.json()) as TranscodeResponse;
       if (!response.ok && data?.error) throw new Error(data.error);
+      setTranscodeStartTime(data.startTime || 0);
       if (data.ready && data.playlistUrl) {
         setTranscodeState("ready");
         return;
@@ -1117,28 +1161,23 @@ export default function FeedApp() {
   async function chooseInitialStream(video: FeedVideo) {
     setPlayerStreamMode("direct");
     setTranscodeState("idle");
+    setTranscodeStartTime(0);
     setTranscodeError("");
 
     if (!isApplePlaybackClient()) return;
     try {
-      setPlayerStreamMode("compatible");
       setTranscodeState("checking");
       const response = await fetch(`/api/transcode/${encodeURIComponent(video.id)}`, {
         cache: "no-store",
       });
       if (!response.ok) {
-        setPlayerStreamMode("direct");
         setTranscodeState("idle");
         return;
       }
       const data = (await response.json()) as TranscodeResponse;
       if (data.ready && data.playlistUrl && data.appleDecision?.suggested) {
-        setPlayerStreamMode("compatible");
-        setTranscodeState("ready");
-        return;
-      }
-      if (data.enabled && data.available && data.appleDecision?.suggested) {
-        await startCompatibleStream(video);
+        setTranscodeStartTime(data.startTime || 0);
+        setTranscodeState("idle");
         return;
       }
       setPlayerStreamMode("direct");
@@ -1194,8 +1233,9 @@ export default function FeedApp() {
               const downloadedVideo = { ...video, downloaded: true };
               markVideoDownloaded(downloadedVideo);
               const appleClient = isApplePlaybackClient();
-              setPlayerStreamMode(appleClient ? "compatible" : "direct");
+              setPlayerStreamMode("direct");
               setTranscodeState(appleClient ? "checking" : "idle");
+              setTranscodeStartTime(0);
               setTranscodeError("");
               setSelectedVideo(downloadedVideo);
               setPlayerMode("full");
@@ -1214,8 +1254,9 @@ export default function FeedApp() {
       return;
     }
     const appleClient = isApplePlaybackClient();
-    setPlayerStreamMode(appleClient ? "compatible" : "direct");
+    setPlayerStreamMode("direct");
     setTranscodeState(appleClient ? "checking" : "idle");
+    setTranscodeStartTime(0);
     setTranscodeError("");
     setSelectedVideo(video);
     setPlayerMode("full");
@@ -1230,10 +1271,14 @@ export default function FeedApp() {
       setPlayerMode("mini");
       return;
     }
+    if (selectedVideo && playerStreamMode === "compatible") {
+      void stopCompatibleStream(selectedVideo.id);
+    }
     playerRef.current?.pause();
     intendedPlaybackRef.current = false;
     setPlayerStreamMode("direct");
     setTranscodeState("idle");
+    setTranscodeStartTime(0);
     setPlayerPlaying(false);
     setSelectedVideo(null);
   }
@@ -1344,6 +1389,34 @@ export default function FeedApp() {
     }
   }
 
+  function knownVideoDuration(video: FeedVideo) {
+    const savedDuration = watchProgress[video.id]?.duration || 0;
+    return Number.isFinite(video.duration) && video.duration > 0
+      ? video.duration
+      : savedDuration;
+  }
+
+  function playerProgressDuration(video: FeedVideo, player: HTMLVideoElement) {
+    if (playerStreamMode === "compatible") return knownVideoDuration(video);
+    return Number.isFinite(player.duration) && player.duration > 0
+      ? player.duration
+      : knownVideoDuration(video);
+  }
+
+  function storePlayerWatchProgress(
+    video: FeedVideo,
+    player: HTMLVideoElement,
+    force = false
+  ) {
+    const duration = playerProgressDuration(video, player);
+    const streamOffset = playerStreamMode === "compatible" ? transcodeStartTime : 0;
+    const currentTime = Math.max(
+      0,
+      Math.min(streamOffset + player.currentTime, duration || streamOffset + player.currentTime)
+    );
+    storeWatchProgress(video.id, currentTime, duration, force);
+  }
+
   function storeWatchProgress(
     videoId: string,
     currentTime: number,
@@ -1388,14 +1461,21 @@ export default function FeedApp() {
       });
   }
 
-  function resumePlayback(videoId: string, player: HTMLVideoElement) {
+  function resumePlayback(video: FeedVideo, player: HTMLVideoElement) {
+    const videoId = video.id;
     const progress = watchProgress[videoId];
     if (!progress || progress.currentTime < 5) return;
-    const duration = Number.isFinite(player.duration)
-      ? player.duration
-      : progress.duration;
+    const duration = playerProgressDuration(video, player) || progress.duration;
     if (progress.currentTime < duration - 8) {
-      player.currentTime = progress.currentTime;
+      try {
+        player.currentTime = Math.max(
+          0,
+          progress.currentTime -
+            (playerStreamMode === "compatible" ? transcodeStartTime : 0)
+        );
+      } catch {
+        // In-progress HLS playlists may reject seeking until later segments exist.
+      }
     }
   }
 
@@ -1564,7 +1644,7 @@ export default function FeedApp() {
     ? encodeURIComponent(selectedVideo.id)
     : "";
   const playerSource = selectedVideo
-    ? playerStreamMode === "compatible"
+    ? playerStreamMode === "compatible" && transcodeState === "ready"
       ? `/api/transcode/${selectedVideoId}/hls/index.m3u8`
       : `/api/stream/${selectedVideoId}${
           playerStreamMode === "youtarr" ? "?direct=0" : ""
@@ -2144,20 +2224,7 @@ export default function FeedApp() {
               )}
             {selectedVideo.downloaded && mode === "live" ? (
               <>
-                {transcodePreparing ? (
-                  <div className="download-panel transcode-panel">
-                    <div className="download-orbit active">
-                      <FontAwesomeIcon icon={faRotateRight} aria-hidden="true" />
-                    </div>
-                    <span className="eyebrow">{copy.player.transcodeEyebrow}</span>
-                    <h2>{copy.player.transcodeTitle}</h2>
-                    <p>
-                      {transcodeState === "checking"
-                        ? copy.player.transcodeChecking
-                        : copy.player.transcodeBody}
-                    </p>
-                  </div>
-                ) : (
+                <div className="player-frame">
                   <video
                     ref={playerRef}
                     className="player"
@@ -2173,7 +2240,7 @@ export default function FeedApp() {
                       event.currentTarget.setAttribute("webkit-playsinline", "true");
                       updateMediaSession(selectedVideo);
                       updateMediaSessionControls(event.currentTarget);
-                      resumePlayback(selectedVideo.id, event.currentTarget);
+                      resumePlayback(selectedVideo, event.currentTarget);
                       if (playerMode === "full" && !inlineWatchPage) {
                         void requestNativeFullscreen(event.currentTarget);
                       }
@@ -2195,11 +2262,7 @@ export default function FeedApp() {
                       }
                     }}
                     onTimeUpdate={(event) =>
-                      storeWatchProgress(
-                        selectedVideo.id,
-                        event.currentTarget.currentTime,
-                        event.currentTarget.duration
-                      )
+                      storePlayerWatchProgress(selectedVideo, event.currentTarget)
                     }
                     onPause={(event) => {
                       if (pauseIntentTimerRef.current) {
@@ -2213,20 +2276,15 @@ export default function FeedApp() {
                       if ("mediaSession" in navigator) {
                         navigator.mediaSession.playbackState = "paused";
                       }
-                      storeWatchProgress(
-                        selectedVideo.id,
-                        event.currentTarget.currentTime,
-                        event.currentTarget.duration,
-                        true
-                      );
+                      storePlayerWatchProgress(selectedVideo, event.currentTarget, true);
                     }}
                     onEnded={(event) => {
                       intendedPlaybackRef.current = false;
                       setPlayerPlaying(false);
                       storeWatchProgress(
                         selectedVideo.id,
-                        event.currentTarget.duration,
-                        event.currentTarget.duration,
+                        playerProgressDuration(selectedVideo, event.currentTarget),
+                        playerProgressDuration(selectedVideo, event.currentTarget),
                         true
                       );
                     }}
@@ -2253,7 +2311,14 @@ export default function FeedApp() {
                       }
                     }}
                   />
-                )}
+                  {transcodePreparing && (
+                    <div className="player-busy-overlay" aria-live="polite">
+                      <span>
+                        <FontAwesomeIcon icon={faRotateRight} aria-hidden="true" />
+                      </span>
+                    </div>
+                  )}
+                </div>
                 {playerMode === "mini" && (
                   <div
                     className="mini-player-controls"
@@ -2337,30 +2402,48 @@ export default function FeedApp() {
                 streamSource?.transcode?.enabled &&
                 isApplePlaybackClient() && (
                   <div className="stream-switch" aria-label={copy.player.streamMode}>
-                  <button
-                    className={playerStreamMode !== "compatible" ? "active" : ""}
-                    onClick={() => {
-                      setTranscodeError("");
-                      setPlayerStreamMode("direct");
-                    }}
-                  >
-                    {copy.player.useDefault}
-                  </button>
-                  <button
-                    className={playerStreamMode === "compatible" ? "active" : ""}
-                    onClick={() => void startCompatibleStream(selectedVideo)}
-                    disabled={
-                      transcodeState === "checking" ||
-                      transcodeState === "starting" ||
-                      transcodeState === "running"
-                    }
-                  >
-                    {transcodeState === "checking" ||
-                    transcodeState === "starting" ||
-                    transcodeState === "running"
-                      ? copy.player.transcoding
-                      : copy.player.useCompatible}
-                  </button>
+                    <button
+                      className={playerStreamMode !== "compatible" ? "active" : ""}
+                      onClick={() => {
+                        setTranscodeError("");
+                        if (selectedVideo && playerStreamMode === "compatible") {
+                          void stopCompatibleStream(selectedVideo.id);
+                        }
+                        setPlayerStreamMode("direct");
+                        setTranscodeState("idle");
+                        setTranscodeStartTime(0);
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faFilm} aria-hidden="true" />
+                      <span>{copy.player.useDefault}</span>
+                    </button>
+                    <button
+                      className={playerStreamMode === "compatible" ? "active" : ""}
+                      onClick={() => void startCompatibleStream(selectedVideo)}
+                      disabled={
+                        transcodeState === "checking" ||
+                        transcodeState === "starting" ||
+                        transcodeState === "running"
+                      }
+                    >
+                      <FontAwesomeIcon
+                        icon={
+                          transcodeState === "checking" ||
+                          transcodeState === "starting" ||
+                          transcodeState === "running"
+                            ? faRotateRight
+                            : faBolt
+                        }
+                        aria-hidden="true"
+                      />
+                      <span>
+                        {transcodeState === "checking" ||
+                        transcodeState === "starting" ||
+                        transcodeState === "running"
+                          ? copy.player.transcoding
+                          : copy.player.useCompatible}
+                      </span>
+                    </button>
                   </div>
                 )}
               {transcodeError && <small className="transcode-error">{transcodeError}</small>}

@@ -335,7 +335,7 @@ docker run -d \
 | `YOUTARR_TRANSCODE_ENABLED` | Optional | Set to `true` to enable Apple-compatible HLS transcoding. |
 | `YOUTARR_TRANSCODE_ACCEL` | Optional | Use `vaapi` for Intel Quick Sync, or `software`. Defaults to `vaapi` when a device is configured. |
 | `YOUTARR_TRANSCODE_DEVICE` | Optional | VAAPI render device, usually `/dev/dri/renderD128` on Unraid/Linux. |
-| `YOUTARR_TRANSCODE_DIR` | Optional | Persistent transcode cache directory. Defaults to `<data dir>/transcodes`. |
+| `YOUTARR_TRANSCODE_DIR` | Optional | Temporary transcode working directory. Defaults to `<data dir>/transcodes`. |
 | `YOUTARR_TRANSCODE_VIDEO_BITRATE` | Optional | Target video bitrate for compatible HLS. Defaults to `18000k`. |
 | `YOUTARR_TRANSCODE_VAAPI_QUALITY` | Optional | VAAPI CQP quality value. Lower is higher quality. Defaults to `24`. |
 | `YOUTARR_TRANSCODE_AUDIO_BITRATE` | Optional | Target AAC audio bitrate. Defaults to `160k`. |
@@ -355,9 +355,16 @@ the app prepares an Apple-compatible HLS stream with `ffmpeg`. Other clients
 keep using direct playback, so transcoding is not used for Windows/Chrome-style
 playback.
 
-HLS playback starts as soon as the first playlist and media segment are
-available; the remaining transcode continues in the background and is kept as a
-cache for later playback.
+Compatible playback is started manually from the watch page, or automatically
+only after direct Apple playback fails. HLS playback starts as soon as the first
+playlist and media segment are available. When playback resumes from saved
+watch progress, transcoding starts near that saved position instead of from the
+beginning of the video.
+
+Watch progress is still stored against the original video and duration, so
+switching between direct playback and compatible playback keeps Continue
+Watching in sync. Temporary transcode files are removed when compatible playback
+is stopped, when the page is closed, or when the download is deleted.
 
 For Intel Quick Sync on Unraid, pass the render device into the container:
 

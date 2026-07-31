@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  deleteTranscode,
   getAppleTranscodeDecision,
   getTranscodeStatus,
   startTranscode,
@@ -25,6 +26,29 @@ export async function GET(
 }
 
 export async function POST(
+  request: Request,
+  context: { params: Promise<{ id: string }> }
+) {
+  const { id } = await context.params;
+  if (!/^[A-Za-z0-9_-]{11}$/.test(id)) {
+    return NextResponse.json({ error: "Invalid video" }, { status: 400 });
+  }
+
+  let startTime = 0;
+  try {
+    const body = (await request.json()) as { startTime?: number };
+    startTime = Number(body.startTime) || 0;
+  } catch {
+    startTime = 0;
+  }
+
+  const status = await startTranscode(id, startTime);
+  return NextResponse.json(status, {
+    status: status.error && !status.running && !status.ready ? 409 : 202,
+  });
+}
+
+export async function DELETE(
   _request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
@@ -33,8 +57,6 @@ export async function POST(
     return NextResponse.json({ error: "Invalid video" }, { status: 400 });
   }
 
-  const status = await startTranscode(id);
-  return NextResponse.json(status, {
-    status: status.error && !status.running && !status.ready ? 409 : 202,
-  });
+  await deleteTranscode(id);
+  return NextResponse.json({ ok: true });
 }

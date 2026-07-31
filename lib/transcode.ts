@@ -10,6 +10,7 @@ import { getLocalMediaFile, isLikelyAppleClient } from "./local-media";
 type TranscodeJob = {
   state: "running" | "error";
   startedAt: number;
+  startTime: number;
   child?: ChildProcessWithoutNullStreams;
   error?: string;
 };
@@ -19,6 +20,7 @@ type TranscodeMetadata = {
   sourcePath: string;
   sourceSize: number;
   sourceMtimeMs: number;
+  startTime: number;
   completedAt: number;
 };
 
@@ -29,6 +31,7 @@ export type TranscodeStatus = {
   ready: boolean;
   complete: boolean;
   running: boolean;
+  startTime: number;
   playlistUrl?: string;
   error?: string;
 };
@@ -103,6 +106,11 @@ function playlistUrl(videoId: string) {
   return `/api/transcode/${encodeURIComponent(videoId)}/hls/index.m3u8`;
 }
 
+function normalizeStartTime(value?: number) {
+  if (!Number.isFinite(value) || !value || value < 10) return 0;
+  return Math.max(0, Math.floor(value) - 5);
+}
+
 async function readMetadata(videoId: string) {
   try {
     return JSON.parse(await readFile(metadataPath(videoId), "utf8")) as
@@ -112,7 +120,7 @@ async function readMetadata(videoId: string) {
   }
 }
 
-async function isReady(videoId: string) {
+async function isReady(videoId: string, startTime?: number) {
   try {
     const localFile = await getLocalMediaFile(videoId);
     if (!localFile) return false;
@@ -125,7 +133,8 @@ async function isReady(videoId: string) {
         metadata &&
         metadata.sourcePath === localFile.filePath &&
         metadata.sourceSize === localFile.size &&
-        metadata.sourceMtimeMs === localFile.mtimeMs
+        metadata.sourceMtimeMs === localFile.mtimeMs &&
+        (startTime === undefined || (metadata.startTime || 0) === startTime)
     );
   } catch {
     return false;
@@ -143,8 +152,13 @@ async function hasPlayableHls(videoId: string) {
   }
 }
 
-function ffmpegArguments(inputPath: string, outputDirectory: string) {
+function ffmpegArguments(inputPath: string, outputDirectory: string, startTime: number) {
   const segmentPath = path.join(outputDirectory, "segment_%05d.ts");
+  const inputArgs = [
+    ...(startTime > 0 ? ["-ss", String(startTime)] : []),
+    "-i",
+    inputPath,
+  ];
   const commonOutput = [
     "-c:a",
     "aac",
@@ -173,8 +187,7 @@ function ffmpegArguments(inputPath: string, outputDirectory: string) {
       "warning",
       "-vaapi_device",
       transcodeDevice,
-      "-i",
-      inputPath,
+      ...inputArgs,
       "-vf",
       "format=nv12,hwupload",
       "-c:v",
@@ -192,8 +205,7 @@ function ffmpegArguments(inputPath: string, outputDirectory: string) {
     "-y",
     "-loglevel",
     "warning",
-    "-i",
-    inputPath,
+    ...inputArgs,
     "-c:v",
     "libx264",
     "-preset",
@@ -221,12 +233,15 @@ export async function getTranscodeStatus(videoId: string): Promise<TranscodeStat
       ready: false,
       complete: false,
       running: false,
+      startTime: 0,
       error: "Invalid video",
     };
   }
 
   const localFile = await getLocalMediaFile(videoId);
   const job = transcodeJobs.get(videoId);
+  const metadata = await readMetadata(videoId);
+  const startTime = job?.startTime ?? metadata?.startTime ?? 0;
   const complete = transcodeEnabled && await isReady(videoId);
   const playable = complete || Boolean(job?.state === "running" && await hasPlayableHls(videoId));
   return {
@@ -236,6 +251,7 @@ export async function getTranscodeStatus(videoId: string): Promise<TranscodeStat
     ready: playable,
     complete,
     running: job?.state === "running",
+    startTime,
     playlistUrl: playable ? playlistUrl(videoId) : undefined,
     error: job?.state === "error" ? job.error : undefined,
   };
@@ -294,7 +310,11 @@ export async function getAppleTranscodeDecision(
   }
 }
 
-export async function startTranscode(videoId: string): Promise<TranscodeStatus> {
+export async function startTranscode(
+  videoId: string,
+  requestedStartTime?: number
+): Promise<TranscodeStatus> {
+  const startTime = normalizeStartTime(requestedStartTime);
   if (!transcodeEnabled) {
     return {
       enabled: false,
@@ -303,6 +323,7 @@ export async function startTranscode(videoId: string): Promise<TranscodeStatus> 
       ready: false,
       complete: false,
       running: false,
+      startTime,
       error: "Transcoding is disabled",
     };
   }
@@ -314,10 +335,11 @@ export async function startTranscode(videoId: string): Promise<TranscodeStatus> 
       ready: false,
       complete: false,
       running: false,
+      startTime,
       error: "Invalid video",
     };
   }
-  if (await isReady(videoId)) {
+  if (await isReady(videoId, startTime)) {
     return getTranscodeStatus(videoId);
   }
 
@@ -330,18 +352,25 @@ export async function startTranscode(videoId: string): Promise<TranscodeStatus> 
       ready: false,
       complete: false,
       running: false,
+      startTime,
       error: "Local media file not found",
     };
   }
 
   const existing = transcodeJobs.get(videoId);
-  if (existing?.state === "running") return getTranscodeStatus(videoId);
+  if (existing?.state === "running" && existing.startTime === startTime) {
+    return getTranscodeStatus(videoId);
+  }
+  if (existing?.state === "running") {
+    existing.child?.kill("SIGTERM");
+    transcodeJobs.delete(videoId);
+  }
 
   const outputDirectory = transcodeDirectory(videoId);
   await rm(outputDirectory, { recursive: true, force: true });
   await mkdir(outputDirectory, { recursive: true });
 
-  const child = spawn("ffmpeg", ffmpegArguments(localFile.filePath, outputDirectory), {
+  const child = spawn("ffmpeg", ffmpegArguments(localFile.filePath, outputDirectory, startTime), {
     env: {
       ...process.env,
       LIBVA_DRIVER_NAME: process.env.LIBVA_DRIVER_NAME || "iHD",
@@ -352,6 +381,7 @@ export async function startTranscode(videoId: string): Promise<TranscodeStatus> 
   transcodeJobs.set(videoId, {
     state: "running",
     startedAt: Date.now(),
+    startTime,
     child,
   });
 
@@ -364,6 +394,7 @@ export async function startTranscode(videoId: string): Promise<TranscodeStatus> 
     transcodeJobs.set(videoId, {
       state: "error",
       startedAt: Date.now(),
+      startTime,
       error: error.message,
     });
   });
@@ -378,6 +409,7 @@ export async function startTranscode(videoId: string): Promise<TranscodeStatus> 
           sourcePath: currentFile.filePath,
           sourceSize: currentFile.size,
           sourceMtimeMs: currentFile.mtimeMs,
+          startTime,
           completedAt: Date.now(),
         };
         await writeFile(metadataPath(videoId), JSON.stringify(metadata, null, 2), "utf8");
@@ -389,6 +421,7 @@ export async function startTranscode(videoId: string): Promise<TranscodeStatus> 
     transcodeJobs.set(videoId, {
       state: "error",
       startedAt: Date.now(),
+      startTime,
       error: stderr.trim() || `ffmpeg exited with code ${code}`,
     });
   });
