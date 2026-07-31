@@ -32,6 +32,7 @@ export type TranscodeStatus = {
   complete: boolean;
   running: boolean;
   startTime: number;
+  playbackMode: "vod" | "fast";
   playlistUrl?: string;
   error?: string;
 };
@@ -56,6 +57,10 @@ const transcodeAudioBitrate =
   process.env.YOUTARR_TRANSCODE_AUDIO_BITRATE?.trim() || "160k";
 const transcodeVaapiQuality =
   process.env.YOUTARR_TRANSCODE_VAAPI_QUALITY?.trim() || "24";
+const transcodePlaybackMode =
+  process.env.YOUTARR_TRANSCODE_PLAYBACK_MODE?.trim().toLowerCase() === "fast"
+    ? "fast"
+    : "vod";
 const hlsFilePattern = /^(index\.m3u8|segment_\d{5}\.ts)$/;
 
 function runProcess(command: string, args: string[], timeoutMs = 12000) {
@@ -172,8 +177,9 @@ function ffmpegArguments(inputPath: string, outputDirectory: string, startTime: 
     "4",
     "-hls_list_size",
     "0",
-    "-hls_flags",
-    "independent_segments",
+    ...(transcodePlaybackMode === "vod"
+      ? ["-hls_playlist_type", "vod"]
+      : ["-hls_flags", "independent_segments"]),
     "-hls_segment_filename",
     segmentPath,
     path.join(outputDirectory, "index.m3u8"),
@@ -234,6 +240,7 @@ export async function getTranscodeStatus(videoId: string): Promise<TranscodeStat
       complete: false,
       running: false,
       startTime: 0,
+      playbackMode: transcodePlaybackMode,
       error: "Invalid video",
     };
   }
@@ -243,7 +250,12 @@ export async function getTranscodeStatus(videoId: string): Promise<TranscodeStat
   const metadata = await readMetadata(videoId);
   const startTime = job?.startTime ?? metadata?.startTime ?? 0;
   const complete = transcodeEnabled && await isReady(videoId);
-  const playable = complete || Boolean(job?.state === "running" && await hasPlayableHls(videoId));
+  const playable = complete ||
+    Boolean(
+      transcodePlaybackMode === "fast" &&
+        job?.state === "running" &&
+        await hasPlayableHls(videoId)
+    );
   return {
     enabled: transcodeEnabled,
     configured: Boolean(transcodeRoot),
@@ -252,6 +264,7 @@ export async function getTranscodeStatus(videoId: string): Promise<TranscodeStat
     complete,
     running: job?.state === "running",
     startTime,
+    playbackMode: transcodePlaybackMode,
     playlistUrl: playable ? playlistUrl(videoId) : undefined,
     error: job?.state === "error" ? job.error : undefined,
   };
@@ -324,6 +337,7 @@ export async function startTranscode(
       complete: false,
       running: false,
       startTime,
+      playbackMode: transcodePlaybackMode,
       error: "Transcoding is disabled",
     };
   }
@@ -336,6 +350,7 @@ export async function startTranscode(
       complete: false,
       running: false,
       startTime,
+      playbackMode: transcodePlaybackMode,
       error: "Invalid video",
     };
   }
@@ -353,6 +368,7 @@ export async function startTranscode(
       complete: false,
       running: false,
       startTime,
+      playbackMode: transcodePlaybackMode,
       error: "Local media file not found",
     };
   }
@@ -431,6 +447,9 @@ export async function startTranscode(
 
 export async function getTranscodeHlsResponse(videoId: string, fileName: string) {
   if (!transcodeEnabled || !isValidVideoId(videoId) || !hlsFilePattern.test(fileName)) {
+    return null;
+  }
+  if (transcodePlaybackMode !== "fast" && !(await isReady(videoId))) {
     return null;
   }
 

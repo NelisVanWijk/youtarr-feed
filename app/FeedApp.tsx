@@ -73,6 +73,7 @@ type StreamSourceInfo = {
     complete: boolean;
     running: boolean;
     startTime: number;
+    playbackMode: "vod" | "fast";
     playlistUrl?: string;
     error?: string;
   };
@@ -1078,7 +1079,7 @@ export default function FeedApp() {
   }
 
   async function pollTranscode(videoId: string) {
-    for (let attempt = 0; attempt < 90; attempt += 1) {
+    for (let attempt = 0; attempt < 2400; attempt += 1) {
       const response = await fetch(`/api/transcode/${encodeURIComponent(videoId)}`, {
         cache: "no-store",
       });
@@ -1106,7 +1107,7 @@ export default function FeedApp() {
       if (data.error && !data.running) {
         throw new Error(data.error);
       }
-      await wait(700);
+      await wait(data.playbackMode === "vod" ? 1500 : 700);
     }
     throw new Error(copy.player.transcodeTimeout);
   }

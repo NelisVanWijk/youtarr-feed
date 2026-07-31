@@ -336,6 +336,7 @@ docker run -d \
 | `YOUTARR_TRANSCODE_ACCEL` | Optional | Use `vaapi` for Intel Quick Sync, or `software`. Defaults to `vaapi` when a device is configured. |
 | `YOUTARR_TRANSCODE_DEVICE` | Optional | VAAPI render device, usually `/dev/dri/renderD128` on Unraid/Linux. |
 | `YOUTARR_TRANSCODE_DIR` | Optional | Temporary transcode working directory. Defaults to `<data dir>/transcodes`. |
+| `YOUTARR_TRANSCODE_PLAYBACK_MODE` | Optional | Use `vod` to avoid Apple's Live Broadcast label, or `fast` to start while HLS is still growing. Defaults to `vod`. |
 | `YOUTARR_TRANSCODE_VIDEO_BITRATE` | Optional | Target video bitrate for compatible HLS. Defaults to `18000k`. |
 | `YOUTARR_TRANSCODE_VAAPI_QUALITY` | Optional | VAAPI CQP quality value. Lower is higher quality. Defaults to `24`. |
 | `YOUTARR_TRANSCODE_AUDIO_BITRATE` | Optional | Target AAC audio bitrate. Defaults to `160k`. |
@@ -356,10 +357,16 @@ keep using direct playback, so transcoding is not used for Windows/Chrome-style
 playback.
 
 Compatible playback is started manually from the watch page, or automatically
-only after direct Apple playback fails. HLS playback starts as soon as the first
-playlist and media segment are available. When playback resumes from saved
-watch progress, transcoding starts near that saved position instead of from the
-beginning of the video.
+only after direct Apple playback fails. By default, compatible playback uses
+`YOUTARR_TRANSCODE_PLAYBACK_MODE=vod`: the app shows an in-player spinner until
+ffmpeg has written a complete finite HLS playlist, which avoids Apple's "Live
+Broadcast" treatment. When playback resumes from saved watch progress,
+transcoding starts near that saved position instead of from the beginning of the
+video.
+
+If you prefer the fastest possible startup and do not mind Apple's player
+calling the temporary stream live, set `YOUTARR_TRANSCODE_PLAYBACK_MODE=fast`.
+That mode starts as soon as the first playlist and media segment are available.
 
 Watch progress is still stored against the original video and duration, so
 switching between direct playback and compatible playback keeps Continue
@@ -378,6 +385,7 @@ Recommended transcode variables:
 YOUTARR_TRANSCODE_ENABLED=true
 YOUTARR_TRANSCODE_ACCEL=vaapi
 YOUTARR_TRANSCODE_DEVICE=/dev/dri/renderD128
+YOUTARR_TRANSCODE_PLAYBACK_MODE=vod
 YOUTARR_TRANSCODE_VAAPI_QUALITY=24
 ```
 
