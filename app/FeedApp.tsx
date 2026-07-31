@@ -98,10 +98,6 @@ function NavIcon({ view }: { view: View }) {
   );
 }
 
-function filePathQuery(video?: FeedVideo | null) {
-  return video?.filePath ? `filePath=${encodeURIComponent(video.filePath)}` : "";
-}
-
 function initials(value: string) {
   return value
     .split(/\s+/)
@@ -814,9 +810,7 @@ export default function FeedApp() {
       if (!selectedVideo?.downloaded || mode !== "live") return;
       try {
         const response = await fetch(
-          `/api/stream/${encodeURIComponent(selectedVideo.id)}/source?detail=1${
-            selectedVideo.filePath ? `&${filePathQuery(selectedVideo)}` : ""
-          }`,
+          `/api/stream/${encodeURIComponent(selectedVideo.id)}/source?detail=1`,
           { cache: "no-store" }
         );
         if (!response.ok) return;
@@ -918,9 +912,7 @@ export default function FeedApp() {
         candidates.map(async (video) => {
           try {
             const response = await fetch(
-              `/api/stream/${encodeURIComponent(video.id)}/source${
-                video.filePath ? `?${filePathQuery(video)}` : ""
-              }`,
+              `/api/stream/${encodeURIComponent(video.id)}/source`,
               { cache: "no-store" }
             );
             if (!response.ok) return null;
@@ -1068,9 +1060,7 @@ export default function FeedApp() {
       if (mode === "live") {
         try {
           const response = await fetch(
-            `/api/stream/${encodeURIComponent(video.id)}/source${
-              video.filePath ? `?${filePathQuery(video)}` : ""
-            }`,
+            `/api/stream/${encodeURIComponent(video.id)}/source`,
             { cache: "no-store" }
           );
           if (response.ok) {
@@ -1468,9 +1458,7 @@ export default function FeedApp() {
     ? encodeURIComponent(selectedVideo.id)
     : "";
   const playerSource = selectedVideo
-    ? `/api/stream/${selectedVideoId}${
-        selectedVideo.filePath ? `?${filePathQuery(selectedVideo)}` : ""
-      }`
+    ? `/api/stream/${selectedVideoId}`
     : "";
   const inlineWatchPage = selectedVideo ? shouldUseInlineWatchPage() : false;
 

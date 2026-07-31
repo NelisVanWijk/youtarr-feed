@@ -59,6 +59,13 @@ type OrderedFeedVideo = FeedVideo & {
   sourceOrder: number;
 };
 
+type YoutarrVideoLocation = {
+  filePath: string | null;
+  audioFilePath: string | null;
+  downloaded: boolean;
+  removed: boolean;
+};
+
 const configuredUrl = process.env.YOUTARR_URL?.trim().replace(/\/+$/, "") || "";
 const configuredSession = process.env.YOUTARR_SESSION_TOKEN?.trim() || "";
 const configuredUser = process.env.YOUTARR_USERNAME?.trim() || "";
@@ -71,6 +78,13 @@ let cachedToken = configuredSession;
 let tokenExpiresAt = configuredSession ? Number.POSITIVE_INFINITY : 0;
 let youtubeApiBackoffUntil = 0;
 const youtubePublishedAtCache = new Map<string, string | null>();
+const youtarrLocationCache = new Map<
+  string,
+  YoutarrVideoLocation & { expiresAt: number }
+>();
+const locationCacheHitTtlMs = 5 * 60 * 1000;
+const locationCacheMissTtlMs = 15 * 1000;
+let youtarrLocationScanPromise: Promise<void> | null = null;
 
 export function isYoutarrConfigured() {
   return Boolean(
@@ -176,6 +190,12 @@ function toVideo(video: YoutarrVideo, channel: Channel): FeedVideo | null {
   if (!id) return null;
   const added = video.added === true;
   const removed = video.removed === true;
+  rememberYoutarrVideoLocation(id, {
+    filePath: video.filePath || null,
+    audioFilePath: video.audioFilePath || null,
+    downloaded: added,
+    removed,
+  });
   return {
     id,
     channelId: channel.id,
@@ -194,6 +214,99 @@ function toVideo(video: YoutarrVideo, channel: Channel): FeedVideo | null {
     removedFromYouTube: video.youtube_removed === true,
     filePath: video.filePath || null,
   };
+}
+
+function isValidYoutubeId(value: string) {
+  return /^[A-Za-z0-9_-]{11}$/.test(value);
+}
+
+function rememberYoutarrVideoLocation(
+  youtubeId: string,
+  location: YoutarrVideoLocation
+) {
+  if (!isValidYoutubeId(youtubeId)) return;
+  const hasUsablePath = Boolean(location.filePath || location.audioFilePath);
+  youtarrLocationCache.set(youtubeId, {
+    ...location,
+    expiresAt:
+      Date.now() + (hasUsablePath ? locationCacheHitTtlMs : locationCacheMissTtlMs),
+  });
+}
+
+function fromYoutarrVideoLocation(video: YoutarrVideo): YoutarrVideoLocation {
+  const downloaded = video.added === true || Boolean(video.filePath || video.audioFilePath);
+  const removed = video.removed === true;
+  return {
+    filePath: video.filePath || null,
+    audioFilePath: video.audioFilePath || null,
+    downloaded,
+    removed,
+  };
+}
+
+function cacheAndReturnLocation(youtubeId: string, location: YoutarrVideoLocation) {
+  rememberYoutarrVideoLocation(youtubeId, location);
+  return location;
+}
+
+function readCachedYoutarrVideoLocation(youtubeId: string) {
+  const cached = youtarrLocationCache.get(youtubeId);
+  if (!cached || cached.expiresAt <= Date.now()) return null;
+  return {
+    filePath: cached.filePath,
+    audioFilePath: cached.audioFilePath,
+    downloaded: cached.downloaded,
+    removed: cached.removed,
+  };
+}
+
+async function scanYoutarrVideoLocations() {
+  const pageSize = 250;
+  const maxPages = 20;
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const data = await getJson<{
+      videos?: YoutarrVideo[];
+      totalPages?: number;
+    }>(
+      `/getVideos?page=${page}&limit=${pageSize}&sortBy=added&sortOrder=desc&missingFilter=off`
+    );
+
+    for (const video of data.videos || []) {
+      const youtubeId = video.youtubeId || video.youtube_id || "";
+      if (youtubeId) rememberYoutarrVideoLocation(youtubeId, fromYoutarrVideoLocation(video));
+    }
+
+    const totalPages = Math.max(1, data.totalPages || 1);
+    if (page >= totalPages) break;
+  }
+}
+
+async function refreshYoutarrVideoLocationCache() {
+  youtarrLocationScanPromise ||= scanYoutarrVideoLocations().finally(() => {
+    youtarrLocationScanPromise = null;
+  });
+  return youtarrLocationScanPromise;
+}
+
+export async function getYoutarrVideoLocation(
+  youtubeId: string
+): Promise<YoutarrVideoLocation | null> {
+  if (!isValidYoutubeId(youtubeId) || !isYoutarrConfigured()) return null;
+
+  const cached = readCachedYoutarrVideoLocation(youtubeId);
+  if (cached) return cached;
+
+  await refreshYoutarrVideoLocationCache();
+  const refreshed = readCachedYoutarrVideoLocation(youtubeId);
+  if (refreshed) return refreshed;
+
+  return cacheAndReturnLocation(youtubeId, {
+    filePath: null,
+    audioFilePath: null,
+    downloaded: false,
+    removed: false,
+  });
 }
 
 function toOrderedVideo(

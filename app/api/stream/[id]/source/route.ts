@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { getLocalMediaStatus } from "../../../../../lib/local-media";
-import { isYoutarrConfigured } from "../../../../../lib/youtarr";
+import {
+  getYoutarrVideoLocation,
+  isYoutarrConfigured,
+} from "../../../../../lib/youtarr";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +16,8 @@ export async function GET(
     return NextResponse.json({ error: "Invalid video" }, { status: 400 });
   }
 
-  const expectedFilePath = new URL(request.url).searchParams.get("filePath");
+  const youtarrLocation = await getYoutarrVideoLocation(id).catch(() => null);
+  const expectedFilePath = youtarrLocation?.filePath || null;
   const local = await getLocalMediaStatus(
     id,
     request.headers.get("user-agent"),

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { getLocalMediaResponse } from "../../../../lib/local-media";
-import { getStream, isYoutarrConfigured } from "../../../../lib/youtarr";
+import {
+  getStream,
+  getYoutarrVideoLocation,
+  isYoutarrConfigured,
+} from "../../../../lib/youtarr";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +19,12 @@ export async function GET(
   const range = request.headers.get("range");
   const searchParams = new URL(request.url).searchParams;
   const direct = searchParams.get("direct") !== "0";
-  const expectedFilePath = searchParams.get("filePath");
+  let expectedFilePath: string | null = null;
 
   try {
     if (direct) {
+      const youtarrLocation = await getYoutarrVideoLocation(id).catch(() => null);
+      expectedFilePath = youtarrLocation?.filePath || null;
       const localResponse = await getLocalMediaResponse(
         id,
         range,

@@ -45,12 +45,12 @@ Youtarr output folder into this container as read-only:
 browser -> youtarr-feed -> video file
 ```
 
-When `YOUTARR_MEDIA_DIR` is configured, Youtarr Feed first uses the `filePath`
-reported by Youtarr. If needed, it maps that path from
-`YOUTARR_SOURCE_MEDIA_DIR` to `YOUTARR_MEDIA_DIR`, then falls back to searching
-the media folder by filename. If it finds a playable file, it streams it
-directly with HTTP Range support. If it does not find one, it falls back to
-Youtarr.
+When `YOUTARR_MEDIA_DIR` is configured, Youtarr Feed asks Youtarr for the
+downloaded video's stored `filePath` and treats that as the source of truth.
+If needed, it maps that path from `YOUTARR_SOURCE_MEDIA_DIR` to
+`YOUTARR_MEDIA_DIR`, then falls back to searching the media folder by filename.
+If it finds a playable file, it streams it directly with HTTP Range support. If
+it does not find one, it falls back to Youtarr.
 
 The player shows the active source for downloaded videos:
 
