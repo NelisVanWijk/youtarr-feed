@@ -197,14 +197,9 @@ input:focus-visible {
   line-height: 1;
 }
 
-.refresh-button svg {
+.refresh-button .svg-inline--fa {
   width: 20px;
   height: 20px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .refresh-button.spinning {
@@ -277,19 +272,9 @@ input:focus-visible {
 }
 
 .nav-icon {
-  width: 21px;
-  height: 21px;
+  width: 20px;
+  height: 20px;
   display: block;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.85;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.nav-icon circle {
-  fill: currentColor;
-  stroke: none;
 }
 
 .sidebar-status {
@@ -1763,9 +1748,8 @@ main {
   }
 
   .bottom-nav .nav-icon {
-    width: 21px;
-    height: 21px;
-    stroke-width: 1.95;
+    width: 20px;
+    height: 20px;
   }
 
   .mini-player-shell {
