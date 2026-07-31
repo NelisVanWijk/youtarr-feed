@@ -4,6 +4,8 @@ import path from "node:path";
 import { Readable } from "node:stream";
 
 const mediaDirectory = process.env.YOUTARR_MEDIA_DIR?.trim() || "";
+const sourceMediaDirectory =
+  process.env.YOUTARR_SOURCE_MEDIA_DIR?.trim() || "/usr/src/app/data";
 const allowedExtensions = new Set([".mp4", ".m4v", ".mov", ".webm", ".mkv"]);
 const appleFriendlyExtensions = new Set([".mp4", ".m4v", ".mov"]);
 const mimeTypes = new Map([
@@ -32,8 +34,127 @@ function isInsideMediaDirectory(filePath: string) {
   return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
-async function findLocalVideoFile(videoId: string) {
+async function pathStatus(filePath: string) {
+  try {
+    return await stat(filePath);
+  } catch {
+    return null;
+  }
+}
+
+function pathInsideDirectory(directory: string, filePath: string) {
+  const relative = path.relative(directory, filePath);
+  return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+function mappedExpectedPaths(expectedFilePath?: string | null) {
+  if (!mediaDirectory || !expectedFilePath) return [];
+
+  const candidates = new Set<string>();
+  candidates.add(expectedFilePath);
+
+  if (sourceMediaDirectory && pathInsideDirectory(sourceMediaDirectory, expectedFilePath)) {
+    candidates.add(
+      path.join(mediaDirectory, path.relative(sourceMediaDirectory, expectedFilePath))
+    );
+  }
+
+  return [...candidates].filter((candidate) => {
+    return isInsideMediaDirectory(candidate);
+  });
+}
+
+async function findFirstMediaInDirectory(directory: string, videoId?: string) {
+  const stack = [directory];
+  let fallback: string | null = null;
+  while (stack.length > 0) {
+    const currentDirectory = stack.pop();
+    if (!currentDirectory) continue;
+
+    try {
+      const handle = await opendir(currentDirectory);
+      for await (const entry of handle) {
+        const entryPath = path.join(currentDirectory, entry.name);
+        if (entry.isDirectory()) {
+          stack.push(entryPath);
+          continue;
+        }
+        if (!entry.isFile()) continue;
+
+        const extension = path.extname(entry.name).toLowerCase();
+        if (!allowedExtensions.has(extension)) continue;
+        if (!isInsideMediaDirectory(entryPath)) continue;
+        if (videoId && entry.name.includes(videoId)) return entryPath;
+        fallback ||= entryPath;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return fallback;
+}
+
+async function findByBasename(expectedFilePath?: string | null, videoId?: string) {
+  if (!mediaDirectory || !expectedFilePath) return null;
+  const expectedName = path.basename(expectedFilePath).toLowerCase();
+  if (!expectedName) return null;
+
+  const stack = [mediaDirectory];
+  while (stack.length > 0) {
+    const directory = stack.pop();
+    if (!directory) continue;
+
+    try {
+      const handle = await opendir(directory);
+      for await (const entry of handle) {
+        const entryPath = path.join(directory, entry.name);
+        if (entry.isDirectory()) {
+          if (entry.name.toLowerCase() === expectedName) {
+            const directoryMatch = await findFirstMediaInDirectory(entryPath, videoId);
+            if (directoryMatch) return directoryMatch;
+          }
+          stack.push(entryPath);
+          continue;
+        }
+        if (!entry.isFile() || entry.name.toLowerCase() !== expectedName) continue;
+
+        const extension = path.extname(entry.name).toLowerCase();
+        if (!allowedExtensions.has(extension)) continue;
+        if (!isInsideMediaDirectory(entryPath)) continue;
+        return entryPath;
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+async function findExpectedLocalVideoFile(
+  expectedFilePath?: string | null,
+  videoId?: string
+) {
+  for (const candidate of mappedExpectedPaths(expectedFilePath)) {
+    const candidateStatus = await pathStatus(candidate);
+    if (candidateStatus?.isFile()) {
+      const extension = path.extname(candidate).toLowerCase();
+      if (allowedExtensions.has(extension)) return candidate;
+    }
+    if (candidateStatus?.isDirectory()) {
+      const directoryMatch = await findFirstMediaInDirectory(candidate, videoId);
+      if (directoryMatch) return directoryMatch;
+    }
+  }
+  return findByBasename(expectedFilePath, videoId);
+}
+
+async function findLocalVideoFile(videoId: string, expectedFilePath?: string | null) {
   if (!mediaDirectory || !isValidVideoId(videoId)) return null;
+
+  const expectedMatch = await findExpectedLocalVideoFile(expectedFilePath, videoId);
+  if (expectedMatch) return expectedMatch;
 
   const stack = [mediaDirectory];
   while (stack.length > 0) {
@@ -64,8 +185,8 @@ async function findLocalVideoFile(videoId: string) {
   return null;
 }
 
-export async function getLocalMediaFile(videoId: string) {
-  const filePath = await findLocalVideoFile(videoId);
+export async function getLocalMediaFile(videoId: string, expectedFilePath?: string | null) {
+  const filePath = await findLocalVideoFile(videoId, expectedFilePath);
   if (!filePath) return null;
 
   try {
@@ -82,7 +203,11 @@ export async function getLocalMediaFile(videoId: string) {
   }
 }
 
-async function getLocalMediaLookup(videoId: string, userAgent?: string | null) {
+async function getLocalMediaLookup(
+  videoId: string,
+  userAgent?: string | null,
+  expectedFilePath?: string | null
+) {
   if (!mediaDirectory) {
     return {
       configured: false,
@@ -91,7 +216,7 @@ async function getLocalMediaLookup(videoId: string, userAgent?: string | null) {
     };
   }
 
-  const localFile = await getLocalMediaFile(videoId);
+  const localFile = await getLocalMediaFile(videoId, expectedFilePath);
   if (!localFile) {
     return {
       configured: true,
@@ -114,8 +239,12 @@ async function getLocalMediaLookup(videoId: string, userAgent?: string | null) {
   };
 }
 
-export async function getLocalMediaStatus(videoId: string, userAgent?: string | null) {
-  const status = await getLocalMediaLookup(videoId, userAgent);
+export async function getLocalMediaStatus(
+  videoId: string,
+  userAgent?: string | null,
+  expectedFilePath?: string | null
+) {
+  const status = await getLocalMediaLookup(videoId, userAgent, expectedFilePath);
   if ("filePath" in status) {
     delete status.filePath;
   }
@@ -153,9 +282,10 @@ function parseRange(range: string | null, fileSize: number) {
 export async function getLocalMediaResponse(
   videoId: string,
   range: string | null,
-  userAgent?: string | null
+  userAgent?: string | null,
+  expectedFilePath?: string | null
 ) {
-  const status = await getLocalMediaLookup(videoId, userAgent);
+  const status = await getLocalMediaLookup(videoId, userAgent, expectedFilePath);
   if (!status.available) return null;
 
   const filePath = status.filePath;

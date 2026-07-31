@@ -91,6 +91,10 @@ function NavIcon({ view }: { view: View }) {
   );
 }
 
+function filePathQuery(video?: FeedVideo | null) {
+  return video?.filePath ? `filePath=${encodeURIComponent(video.filePath)}` : "";
+}
+
 function initials(value: string) {
   return value
     .split(/\s+/)
@@ -803,7 +807,9 @@ export default function FeedApp() {
       if (!selectedVideo?.downloaded || mode !== "live") return;
       try {
         const response = await fetch(
-          `/api/stream/${encodeURIComponent(selectedVideo.id)}/source?detail=1`,
+          `/api/stream/${encodeURIComponent(selectedVideo.id)}/source?detail=1${
+            selectedVideo.filePath ? `&${filePathQuery(selectedVideo)}` : ""
+          }`,
           { cache: "no-store" }
         );
         if (!response.ok) return;
@@ -905,7 +911,9 @@ export default function FeedApp() {
         candidates.map(async (video) => {
           try {
             const response = await fetch(
-              `/api/stream/${encodeURIComponent(video.id)}/source`,
+              `/api/stream/${encodeURIComponent(video.id)}/source${
+                video.filePath ? `?${filePathQuery(video)}` : ""
+              }`,
               { cache: "no-store" }
             );
             if (!response.ok) return null;
@@ -1053,7 +1061,9 @@ export default function FeedApp() {
       if (mode === "live") {
         try {
           const response = await fetch(
-            `/api/stream/${encodeURIComponent(video.id)}/source`,
+            `/api/stream/${encodeURIComponent(video.id)}/source${
+              video.filePath ? `?${filePathQuery(video)}` : ""
+            }`,
             { cache: "no-store" }
           );
           if (response.ok) {
@@ -1450,7 +1460,11 @@ export default function FeedApp() {
   const selectedVideoId = selectedVideo
     ? encodeURIComponent(selectedVideo.id)
     : "";
-  const playerSource = selectedVideo ? `/api/stream/${selectedVideoId}` : "";
+  const playerSource = selectedVideo
+    ? `/api/stream/${selectedVideoId}${
+        selectedVideo.filePath ? `?${filePathQuery(selectedVideo)}` : ""
+      }`
+    : "";
   const inlineWatchPage = selectedVideo ? shouldUseInlineWatchPage() : false;
 
   return (

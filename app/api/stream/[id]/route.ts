@@ -15,13 +15,15 @@ export async function GET(
   const range = request.headers.get("range");
   const searchParams = new URL(request.url).searchParams;
   const direct = searchParams.get("direct") !== "0";
+  const expectedFilePath = searchParams.get("filePath");
 
   try {
     if (direct) {
       const localResponse = await getLocalMediaResponse(
         id,
         range,
-        request.headers.get("user-agent")
+        request.headers.get("user-agent"),
+        expectedFilePath
       );
       if (localResponse) return localResponse;
     }

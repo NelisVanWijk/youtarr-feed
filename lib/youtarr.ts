@@ -19,6 +19,8 @@ type YoutarrVideo = {
   removed?: boolean;
   youtube_removed?: boolean;
   watchedBy?: string[];
+  filePath?: string | null;
+  audioFilePath?: string | null;
 };
 
 type YoutarrChannelInfo = YoutarrChannel & {
@@ -190,6 +192,7 @@ function toVideo(video: YoutarrVideo, channel: Channel): FeedVideo | null {
     missing: added && removed,
     watched: Boolean(video.watchedBy?.length),
     removedFromYouTube: video.youtube_removed === true,
+    filePath: video.filePath || null,
   };
 }
 

@@ -45,10 +45,12 @@ Youtarr output folder into this container as read-only:
 browser -> youtarr-feed -> video file
 ```
 
-When `YOUTARR_MEDIA_DIR` is configured, Youtarr Feed first searches that folder
-for a video file whose filename contains the YouTube video ID. If it finds one,
-it streams the file directly with HTTP Range support. If it does not find one,
-it falls back to Youtarr.
+When `YOUTARR_MEDIA_DIR` is configured, Youtarr Feed first uses the `filePath`
+reported by Youtarr. If needed, it maps that path from
+`YOUTARR_SOURCE_MEDIA_DIR` to `YOUTARR_MEDIA_DIR`, then falls back to searching
+the media folder by filename. If it finds a playable file, it streams it
+directly with HTTP Range support. If it does not find one, it falls back to
+Youtarr.
 
 The player shows the active source for downloaded videos:
 
@@ -324,6 +326,8 @@ docker run -d \
 | `YOUTUBE_API_KEY` | Optional | Fallback YouTube Data API key for enriching date-only publish values with exact timestamps. Prefer setting the key in Youtarr first. |
 | `YOUTARR_FEED_DATA_DIR` | Recommended | Persistent app data directory. Defaults to `/data` in production. |
 | `YOUTARR_FEED_CACHE_TTL_SECONDS` | Optional | Server-side feed/local-video cache duration. Defaults to `300`. |
+| `YOUTARR_MEDIA_DIR` | Recommended | Mount of the Youtarr output folder for direct streaming. |
+| `YOUTARR_SOURCE_MEDIA_DIR` | Optional | Media path prefix as stored by Youtarr. Defaults to `/usr/src/app/data`. Set this when Youtarr stores a different container path than Youtarr Feed uses for the same host folder. |
 | `PLEX_URL` | Optional | Plex server URL for refresh requests. |
 | `PLEX_TOKEN` | Optional | Plex token. |
 | `PLEX_LIBRARY_ID` | Optional | Numeric Plex library section ID. |

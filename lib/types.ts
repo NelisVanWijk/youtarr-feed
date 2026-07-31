@@ -31,6 +31,7 @@ export interface FeedVideo {
   missing: boolean;
   watched: boolean;
   removedFromYouTube?: boolean;
+  filePath?: string | null;
 }
 
 export interface FeedResponse {

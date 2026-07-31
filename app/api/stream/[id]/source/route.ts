@@ -13,7 +13,12 @@ export async function GET(
     return NextResponse.json({ error: "Invalid video" }, { status: 400 });
   }
 
-  const local = await getLocalMediaStatus(id, request.headers.get("user-agent"));
+  const expectedFilePath = new URL(request.url).searchParams.get("filePath");
+  const local = await getLocalMediaStatus(
+    id,
+    request.headers.get("user-agent"),
+    expectedFilePath
+  );
   return NextResponse.json({
     source: local.available ? "local" : "youtarr",
     local,
