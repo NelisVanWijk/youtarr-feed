@@ -1128,6 +1128,7 @@ main {
 }
 
 .player-backdrop .video-modal-watch-page {
+  height: auto;
   min-height: 100dvh;
   overflow: auto;
   background: #0b0b0c;
@@ -1137,27 +1138,29 @@ main {
   position: sticky;
   top: 0;
   z-index: 2;
-  height: auto;
-  aspect-ratio: 16 / 9;
+  height: min(72dvh, 56.25vw);
+  aspect-ratio: auto;
   object-fit: contain;
   background: #000;
 }
 
 .player-backdrop .video-modal-watch-page .download-panel {
-  min-height: auto;
-  aspect-ratio: 16 / 9;
+  height: min(72dvh, 56.25vw);
+  aspect-ratio: auto;
   padding: 28px 20px;
   border-radius: 0;
 }
 
 .player-backdrop .video-modal-watch-page .modal-copy {
   position: static;
-  padding: 18px 18px calc(28px + var(--safe-bottom));
+  width: min(1280px, 100%);
+  margin: 0 auto;
+  padding: 18px 24px calc(36px + var(--safe-bottom));
   background: #0b0b0c;
 }
 
 .video-modal-watch-page .modal-copy h2 {
-  font-size: 20px;
+  font-size: 22px;
   line-height: 1.22;
 }
 

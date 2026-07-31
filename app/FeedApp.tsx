@@ -529,11 +529,7 @@ export default function FeedApp() {
   const pauseIntentTimerRef = useRef<number | null>(null);
   const mode: AppMode = feed?.mode || "demo";
   const copy = translations[language];
-  const shouldUseInlineWatchPage = useCallback(() => {
-    if (standaloneMode) return true;
-    if (typeof navigator === "undefined") return false;
-    return isApplePlaybackUserAgent(navigator.userAgent);
-  }, [standaloneMode]);
+  const shouldUseInlineWatchPage = useCallback(() => true, []);
 
   useEffect(() => {
     window.localStorage.setItem(languageStorageKey, language);
