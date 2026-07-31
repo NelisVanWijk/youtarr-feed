@@ -1,5 +1,5 @@
 import { createReadStream } from "node:fs";
-import { opendir, stat } from "node:fs/promises";
+import { opendir, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 
@@ -100,6 +100,29 @@ async function findLocalVideoFiles(videoId: string) {
     if (leftFriendly !== rightFriendly) return leftFriendly - rightFriendly;
     return left.localeCompare(right);
   });
+}
+
+export async function deleteLocalMediaFiles(videoId: string) {
+  const files = await findLocalVideoFiles(videoId);
+  if (!files?.length) return { deleted: 0, files: [] as string[] };
+
+  const deletedFiles: string[] = [];
+  const failures: string[] = [];
+  for (const filePath of files) {
+    try {
+      await unlink(filePath);
+      deletedFiles.push(path.basename(filePath));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+      failures.push(path.basename(filePath));
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`Could not delete local file(s): ${failures.join(", ")}`);
+  }
+
+  return { deleted: deletedFiles.length, files: deletedFiles };
 }
 
 async function findLocalVideoFile(videoId: string) {

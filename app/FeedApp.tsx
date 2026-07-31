@@ -570,6 +570,11 @@ export default function FeedApp() {
   const playerRef = useRef<HTMLVideoElement | null>(null);
   const intendedPlaybackRef = useRef(false);
   const pauseIntentTimerRef = useRef<number | null>(null);
+  const pendingQualityResumeRef = useRef<{
+    videoId: string;
+    currentTime: number;
+    wasPlaying: boolean;
+  } | null>(null);
   const activeCompatibleRef = useRef<{
     videoId: string;
     outputMode: "file" | "hls";
@@ -894,22 +899,6 @@ export default function FeedApp() {
       });
     }
   }, [playerStreamMode]);
-
-  useEffect(() => {
-    if (!playerRef.current || playerStreamMode !== "direct") return;
-    const player = playerRef.current;
-    const wasPlaying = !player.paused && !player.ended;
-    const currentTime = player.currentTime;
-    player.load();
-    const restorePlayback = () => {
-      player.currentTime = currentTime;
-      if (wasPlaying) {
-        void player.play().catch(() => setPlayerPlaying(false));
-      }
-    };
-    player.addEventListener("loadedmetadata", restorePlayback, { once: true });
-    return () => player.removeEventListener("loadedmetadata", restorePlayback);
-  }, [playbackQuality, playerStreamMode]);
 
   useEffect(() => {
     let stopped = false;
@@ -1571,6 +1560,20 @@ export default function FeedApp() {
 
   function resumePlayback(video: FeedVideo, player: HTMLVideoElement) {
     const videoId = video.id;
+    const pendingResume = pendingQualityResumeRef.current;
+    if (pendingResume?.videoId === videoId) {
+      pendingQualityResumeRef.current = null;
+      try {
+        player.currentTime = Math.max(0, pendingResume.currentTime);
+      } catch {
+        // Some mobile players reject seeking until enough metadata is available.
+      }
+      if (pendingResume.wasPlaying) {
+        void player.play().catch(() => setPlayerPlaying(false));
+      }
+      return;
+    }
+
     const progress = watchProgress[videoId];
     if (!progress || progress.currentTime < 5) return;
     const duration = playerProgressDuration(video, player) || progress.duration;
@@ -1591,6 +1594,30 @@ export default function FeedApp() {
     const progress = watchProgress[videoId];
     if (!progress?.duration) return undefined;
     return Math.max(2, Math.min(98, (progress.currentTime / progress.duration) * 100));
+  }
+
+  function switchPlaybackQuality(video: FeedVideo, quality: PlayerQuality) {
+    if (quality === playbackQuality) return;
+
+    const player = playerRef.current;
+    if (player) {
+      const duration = playerProgressDuration(video, player);
+      const streamOffset = playerStreamMode === "compatible" ? transcodeStartTime : 0;
+      const currentTime = Math.max(0, streamOffset + (player.currentTime || 0));
+      pendingQualityResumeRef.current = {
+        videoId: video.id,
+        currentTime,
+        wasPlaying: !player.paused && !player.ended,
+      };
+      if (duration > 0) {
+        storeWatchProgress(video.id, currentTime, duration, true);
+      }
+    }
+
+    setPlaybackQuality(quality);
+    setPlayerStreamMode("direct");
+    setTranscodeState("idle");
+    setTranscodeStartTime(0);
   }
 
   async function removeDownload(video: FeedVideo) {
@@ -2531,12 +2558,9 @@ export default function FeedApp() {
                       <button
                         key={value}
                         className={playbackQuality === value ? "active" : ""}
-                        onClick={() => {
-                          setPlaybackQuality(value as PlayerQuality);
-                          setPlayerStreamMode("direct");
-                          setTranscodeState("idle");
-                          setTranscodeStartTime(0);
-                        }}
+                        onClick={() =>
+                          switchPlaybackQuality(selectedVideo, value as PlayerQuality)
+                        }
                       >
                         <span>{label}</span>
                       </button>
