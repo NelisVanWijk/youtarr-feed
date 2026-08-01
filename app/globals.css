@@ -1471,7 +1471,7 @@ main {
   padding-top: 16px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   border-top: 1px solid var(--line);
 }
@@ -1486,22 +1486,34 @@ main {
   font-weight: 750;
 }
 
+.icon-secondary-button,
 .icon-danger-button {
   width: 42px;
   height: 42px;
   display: grid;
   place-items: center;
+  border-radius: 50%;
+}
+
+.icon-secondary-button {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.icon-danger-button {
   background: rgba(255, 74, 61, 0.12);
   border: 1px solid rgba(255, 74, 61, 0.32);
-  border-radius: 50%;
   color: #ffb7b1;
 }
 
+.icon-secondary-button .svg-inline--fa,
 .icon-danger-button .svg-inline--fa {
   width: 16px;
   height: 16px;
 }
 
+.icon-secondary-button:disabled,
 .danger-button:disabled,
 .icon-danger-button:disabled,
 .primary-button:disabled {
@@ -1980,11 +1992,12 @@ main {
   }
 
   .modal-actions {
-    align-items: stretch;
-    flex-direction: column;
+    align-items: center;
+    flex-wrap: wrap;
   }
 
   .modal-actions small {
+    flex-basis: 100%;
     text-align: left;
   }
 

@@ -23,6 +23,7 @@ import {
   faRotateRight,
   faThumbsUp,
   faTrash,
+  faUpRightFromSquare,
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -1275,6 +1276,22 @@ export default function FeedApp() {
     player.pause();
   }
 
+  function openSelectedVideoInVlc(video: FeedVideo) {
+    if (playerRef.current) {
+      storePlayerWatchProgress(video, playerRef.current, true);
+      playerRef.current.pause();
+    }
+
+    const streamUrl = new URL(
+      `/api/stream/${encodeURIComponent(video.id)}`,
+      window.location.origin
+    );
+    streamUrl.searchParams.set("direct", "1");
+    window.location.href = `vlc-x-callback://x-callback-url/stream?url=${encodeURIComponent(
+      streamUrl.toString()
+    )}`;
+  }
+
   async function requestNativeFullscreen(player: HTMLVideoElement) {
     try {
       const webkitPlayer = player as WebKitVideoElement;
@@ -2413,6 +2430,14 @@ export default function FeedApp() {
               )}
               {selectedVideo.downloaded && (
                 <div className="modal-actions">
+                  <button
+                    className="icon-secondary-button"
+                    onClick={() => openSelectedVideoInVlc(selectedVideo)}
+                    title={copy.player.openInVlc}
+                    aria-label={copy.player.openInVlc}
+                  >
+                    <FontAwesomeIcon icon={faUpRightFromSquare} aria-hidden="true" />
+                  </button>
                   <button
                     className="icon-danger-button"
                     onClick={() => {
