@@ -1114,6 +1114,36 @@ export default function FeedApp() {
     );
   }
 
+  function markVideoDeleted(videoId: string) {
+    const updateList = (videos: FeedVideo[]) =>
+      videos.map((video) =>
+        video.id === videoId
+          ? { ...video, downloaded: false, missing: true, watched: false }
+          : video
+      );
+
+    setFeed((current) =>
+      current ? { ...current, videos: updateList(current.videos) } : current
+    );
+    setChannelVideos((current) => updateList(current));
+    setLocalVideos((current) => current.filter((item) => item.id !== videoId));
+    setSingleVideos((current) => updateList(current));
+    setStreamSources((current) => {
+      if (!current[videoId]) return current;
+      const next = { ...current };
+      delete next[videoId];
+      return next;
+    });
+    setStreamSource(null);
+    setWatchProgress((current) => {
+      if (!current[videoId]) return current;
+      const next = { ...current };
+      delete next[videoId];
+      return next;
+    });
+    setSelectedVideo((current) => (current?.id === videoId ? null : current));
+  }
+
   async function openChannel(channelId: string) {
     const channel = feed?.channels.find((item) => item.id === channelId);
     if (!channel) return;
@@ -1438,28 +1468,16 @@ export default function FeedApp() {
       });
       const data = (await response.json()) as { error?: string; demo?: boolean };
       if (!response.ok) throw new Error(data.error || copy.errors.deleteDownload);
-      if (selectedVideo?.id === video.id) {
-        setSelectedVideo(null);
-      }
-      setWatchProgress((current) => {
-        const next = { ...current };
-        delete next[video.id];
-        return next;
-      });
-      setLocalVideos((current) => current.filter((item) => item.id !== video.id));
-      setSingleVideos((current) =>
-        current.map((item) =>
-          item.id === video.id ? { ...item, downloaded: false } : item
-        )
-      );
+      markVideoDeleted(video.id);
       setDeleteState("idle");
-      void loadFeed(true, true);
+      const refreshes = [loadFeed(true, true)];
       if (view === "local") {
-        void loadLocalVideos(true, true);
+        refreshes.push(loadLocalVideos(true, true));
       }
       if (view === "singles") {
-        void loadSingleVideos(true);
+        refreshes.push(loadSingleVideos(true));
       }
+      await Promise.allSettled(refreshes);
     } catch (deleteFailure) {
       setDeleteState("error");
       setDeleteError(

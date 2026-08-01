@@ -29,6 +29,10 @@ const cacheFiles: Record<CacheKey, string> = {
 const memoryCache: Partial<Record<CacheKey, CacheEnvelope<VideoListPayload>>> = {};
 const refreshes: Partial<Record<CacheKey, Promise<CacheEnvelope<VideoListPayload>>>> =
   {};
+const cacheGenerations: Record<CacheKey, number> = {
+  feed: 0,
+  "local-videos": 0,
+};
 
 function isCacheEnvelope(value: unknown): value is CacheEnvelope<VideoListPayload> {
   if (!value || typeof value !== "object") return false;
@@ -60,20 +64,27 @@ async function refreshCache(
   loader: () => Promise<VideoListPayload>
 ) {
   if (!refreshes[key]) {
-    refreshes[key] = loader()
+    const refreshGeneration = cacheGenerations[key];
+    const refreshPromise = loader()
       .then(async (data) => {
         const envelope: CacheEnvelope<VideoListPayload> = {
           version: 1,
           savedAt: Date.now(),
           data,
         };
+        if (refreshGeneration !== cacheGenerations[key]) {
+          return envelope;
+        }
         memoryCache[key] = envelope;
         await writeJsonAtomic(cacheFiles[key], envelope);
         return envelope;
       })
       .finally(() => {
-        delete refreshes[key];
+        if (refreshes[key] === refreshPromise) {
+          delete refreshes[key];
+        }
       });
+    refreshes[key] = refreshPromise;
   }
   return refreshes[key];
 }
@@ -111,6 +122,8 @@ export async function getCachedVideoList(
 export async function invalidateVideoListCache(...keys: CacheKey[]) {
   await Promise.all(
     keys.map(async (key) => {
+      cacheGenerations[key] += 1;
+      delete refreshes[key];
       const cached = await readCache(key);
       if (!cached) {
         delete memoryCache[key];

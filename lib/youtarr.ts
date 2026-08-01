@@ -266,6 +266,11 @@ function readCachedYoutarrVideoLocation(youtubeId: string) {
   };
 }
 
+export function clearYoutarrVideoLocationCache(youtubeId: string) {
+  if (!isValidYoutubeId(youtubeId)) return;
+  youtarrLocationCache.delete(youtubeId);
+}
+
 async function scanYoutarrVideoLocations() {
   const pageSize = 250;
   const maxPages = 20;
@@ -642,6 +647,7 @@ export async function deleteDownload(youtubeId: string) {
   if (!response.ok || data.success === false) {
     throw new Error(data.error || data.message || `Could not delete download (${response.status})`);
   }
+  clearYoutarrVideoLocationCache(youtubeId);
   return data;
 }
 
