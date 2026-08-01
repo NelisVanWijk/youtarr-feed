@@ -58,6 +58,8 @@ type WebKitVideoElement = HTMLVideoElement & {
 };
 type StreamSourceInfo = {
   source: "local" | "youtarr";
+  playbackProfile?: "primary" | "av1" | "vp9";
+  playbackLabel?: string;
   local?: {
     configured: boolean;
     available: boolean;
@@ -2303,6 +2305,8 @@ export default function FeedApp() {
                         intendedPlaybackRef.current || !event.currentTarget.paused;
                       const fallbackSource: StreamSourceInfo = {
                         source: "youtarr",
+                        playbackProfile: streamSource?.playbackProfile,
+                        playbackLabel: streamSource?.playbackLabel,
                         local: streamSource?.local,
                         youtarrConfigured: streamSource?.youtarrConfigured ?? true,
                       };

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { getLocalMediaStatus } from "../../../../../lib/local-media";
 import {
+  getYoutarrPlaybackTarget,
   getYoutarrVideoLocation,
-  isYoutarrConfigured,
 } from "../../../../../lib/youtarr";
 
 export const dynamic = "force-dynamic";
@@ -16,16 +16,25 @@ export async function GET(
     return NextResponse.json({ error: "Invalid video" }, { status: 400 });
   }
 
-  const youtarrLocation = await getYoutarrVideoLocation(id).catch(() => null);
+  const playbackTarget = getYoutarrPlaybackTarget(
+    request.headers.get("user-agent")
+  );
+  const youtarrLocation = await getYoutarrVideoLocation(
+    id,
+    playbackTarget.profile
+  ).catch(() => null);
   const expectedFilePath = youtarrLocation?.filePath || null;
   const local = await getLocalMediaStatus(
     id,
     request.headers.get("user-agent"),
-    expectedFilePath
+    expectedFilePath,
+    playbackTarget.media
   );
   return NextResponse.json({
     source: local.available ? "local" : "youtarr",
     local,
-    youtarrConfigured: isYoutarrConfigured(),
+    youtarrConfigured: playbackTarget.configured,
+    playbackProfile: playbackTarget.profile,
+    playbackLabel: playbackTarget.label,
   });
 }

@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { getLocalMediaResponse } from "../../../../lib/local-media";
 import {
   getStream,
+  getYoutarrPlaybackTarget,
   getYoutarrVideoLocation,
-  isYoutarrConfigured,
 } from "../../../../lib/youtarr";
 
 export const dynamic = "force-dynamic";
@@ -20,28 +20,35 @@ export async function GET(
   const searchParams = new URL(request.url).searchParams;
   const direct = searchParams.get("direct") !== "0";
   let expectedFilePath: string | null = null;
+  const playbackTarget = getYoutarrPlaybackTarget(
+    request.headers.get("user-agent")
+  );
 
   try {
     if (direct) {
-      const youtarrLocation = await getYoutarrVideoLocation(id).catch(() => null);
+      const youtarrLocation = await getYoutarrVideoLocation(
+        id,
+        playbackTarget.profile
+      ).catch(() => null);
       expectedFilePath = youtarrLocation?.filePath || null;
       const localResponse = await getLocalMediaResponse(
         id,
         range,
         request.headers.get("user-agent"),
-        expectedFilePath
+        expectedFilePath,
+        playbackTarget.media
       );
       if (localResponse) return localResponse;
     }
 
-    if (!isYoutarrConfigured()) {
+    if (!playbackTarget.configured) {
       return NextResponse.json(
         { error: "Playback is not available in demo mode" },
         { status: 404 }
       );
     }
 
-    const upstream = await getStream(id, range);
+    const upstream = await getStream(id, range, playbackTarget.profile);
     const headers = new Headers();
     [
       "content-type",

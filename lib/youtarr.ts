@@ -66,6 +66,21 @@ type YoutarrVideoLocation = {
   removed: boolean;
 };
 
+export type YoutarrPlaybackProfile = "primary" | "av1" | "vp9";
+
+type YoutarrInstanceConfig = {
+  key: YoutarrPlaybackProfile;
+  label: string;
+  url: string;
+  sessionToken: string;
+  username: string;
+  password: string;
+  apiKey: string;
+  authDisabled: boolean;
+  mediaDirectory: string;
+  sourceMediaDirectory: string;
+};
+
 export type YoutarrVideoMetadata = {
   description?: string | null;
   likeCount?: number | null;
@@ -79,9 +94,77 @@ const configuredPassword = process.env.YOUTARR_PASSWORD || "";
 const configuredApiKey = process.env.YOUTARR_API_KEY?.trim() || "";
 const configuredYouTubeApiKey = process.env.YOUTUBE_API_KEY?.trim() || "";
 const authDisabled = process.env.YOUTARR_AUTH_DISABLED === "true";
+const configuredMediaDirectory = process.env.YOUTARR_MEDIA_DIR?.trim() || "";
+const configuredSourceMediaDirectory =
+  process.env.YOUTARR_SOURCE_MEDIA_DIR?.trim() || "/usr/src/app/data";
+const configuredPlaybackProfile =
+  process.env.YOUTARR_PLAYBACK_PROFILE?.trim().toLowerCase() || "auto";
+
+const primaryInstance: YoutarrInstanceConfig = {
+  key: "primary",
+  label: "Youtarr",
+  url: configuredUrl,
+  sessionToken: configuredSession,
+  username: configuredUser,
+  password: configuredPassword,
+  apiKey: configuredApiKey,
+  authDisabled,
+  mediaDirectory: configuredMediaDirectory,
+  sourceMediaDirectory: configuredSourceMediaDirectory,
+};
+
+function cleanUrl(value?: string) {
+  return value?.trim().replace(/\/+$/, "") || "";
+}
+
+function optionalPlaybackInstance(
+  key: "av1" | "vp9",
+  label: string,
+  prefix: "YOUTARR_AV1" | "YOUTARR_VP9"
+): YoutarrInstanceConfig | null {
+  const url = cleanUrl(process.env[`${prefix}_URL`]);
+  if (!url) return null;
+  const apiKey = process.env[`${prefix}_API_KEY`]?.trim() || "";
+  const usesExplicitApiKeyOnly =
+    Boolean(apiKey) &&
+    !process.env[`${prefix}_USERNAME`]?.trim() &&
+    !process.env[`${prefix}_PASSWORD`] &&
+    !process.env[`${prefix}_SESSION_TOKEN`]?.trim();
+  return {
+    key,
+    label,
+    url,
+    sessionToken:
+      process.env[`${prefix}_SESSION_TOKEN`]?.trim() ||
+      (usesExplicitApiKeyOnly ? "" : configuredSession),
+    username:
+      process.env[`${prefix}_USERNAME`]?.trim() ||
+      (usesExplicitApiKeyOnly ? "" : configuredUser),
+    password:
+      process.env[`${prefix}_PASSWORD`] ||
+      (usesExplicitApiKeyOnly ? "" : configuredPassword),
+    apiKey: apiKey || configuredApiKey,
+    authDisabled:
+      process.env[`${prefix}_AUTH_DISABLED`] === "true" || authDisabled,
+    mediaDirectory: process.env[`${prefix}_MEDIA_DIR`]?.trim() || "",
+    sourceMediaDirectory:
+      process.env[`${prefix}_SOURCE_MEDIA_DIR`]?.trim() ||
+      configuredSourceMediaDirectory,
+  };
+}
+
+const playbackInstances: Record<YoutarrPlaybackProfile, YoutarrInstanceConfig | null> = {
+  primary: primaryInstance,
+  av1: optionalPlaybackInstance("av1", "Youtarr AV1", "YOUTARR_AV1"),
+  vp9: optionalPlaybackInstance("vp9", "Youtarr VP9", "YOUTARR_VP9"),
+};
 
 let cachedToken = configuredSession;
 let tokenExpiresAt = configuredSession ? Number.POSITIVE_INFINITY : 0;
+const instanceTokenCache = new Map<
+  string,
+  { token: string; expiresAt: number }
+>();
 let youtubeApiBackoffUntil = 0;
 const youtubePublishedAtCache = new Map<string, string | null>();
 const youtarrLocationCache = new Map<
@@ -90,12 +173,19 @@ const youtarrLocationCache = new Map<
 >();
 const locationCacheHitTtlMs = 5 * 60 * 1000;
 const locationCacheMissTtlMs = 15 * 1000;
-let youtarrLocationScanPromise: Promise<void> | null = null;
+const youtarrLocationScanPromises = new Map<string, Promise<void>>();
 
 export function isYoutarrConfigured() {
+  return isYoutarrInstanceConfigured(primaryInstance);
+}
+
+function isYoutarrInstanceConfigured(instance: YoutarrInstanceConfig | null) {
   return Boolean(
-    configuredUrl &&
-      (authDisabled || configuredSession || (configuredUser && configuredPassword))
+    instance?.url &&
+      (instance.authDisabled ||
+        instance.sessionToken ||
+        (instance.username && instance.password) ||
+        instance.apiKey)
   );
 }
 
@@ -108,9 +198,71 @@ export function getYoutarrPublicConfig() {
   };
 }
 
+function isIpadOrMacSafari(userAgent?: string | null) {
+  if (!userAgent) return false;
+  const isSafari =
+    /\bSafari\b/i.test(userAgent) &&
+    !/\b(Chrome|Chromium|CriOS|Edg|OPR|Firefox|FxiOS)\b/i.test(userAgent);
+  return /\biPad\b/i.test(userAgent) || (/\bMacintosh\b/i.test(userAgent) && isSafari);
+}
+
+function isIphone(userAgent?: string | null) {
+  return Boolean(userAgent && /\biPhone\b/i.test(userAgent));
+}
+
+function configuredPlaybackInstance(profile: YoutarrPlaybackProfile) {
+  const instance = playbackInstances[profile];
+  return isYoutarrInstanceConfigured(instance) ? instance : null;
+}
+
+export function selectYoutarrPlaybackProfile(
+  userAgent?: string | null
+): YoutarrPlaybackProfile {
+  if (
+    configuredPlaybackProfile === "av1" ||
+    configuredPlaybackProfile === "vp9" ||
+    configuredPlaybackProfile === "primary"
+  ) {
+    return configuredPlaybackInstance(configuredPlaybackProfile)
+      ? configuredPlaybackProfile
+      : "primary";
+  }
+
+  if (isIpadOrMacSafari(userAgent) && configuredPlaybackInstance("vp9")) {
+    return "vp9";
+  }
+  if (isIphone(userAgent) && configuredPlaybackInstance("av1")) {
+    return "av1";
+  }
+  return "primary";
+}
+
+export function getYoutarrPlaybackTarget(userAgent?: string | null) {
+  const profile = selectYoutarrPlaybackProfile(userAgent);
+  const instance = configuredPlaybackInstance(profile) || primaryInstance;
+  return {
+    profile: instance.key,
+    label: instance.label,
+    configured: isYoutarrInstanceConfigured(instance),
+    media: {
+      mediaDirectory: instance.mediaDirectory,
+      sourceMediaDirectory: instance.sourceMediaDirectory,
+    },
+  };
+}
+
+function playbackInstanceForProfile(profile: YoutarrPlaybackProfile) {
+  return configuredPlaybackInstance(profile) || primaryInstance;
+}
+
+function cacheKey(instanceKey: string, youtubeId: string) {
+  return `${instanceKey}:${youtubeId}`;
+}
+
 async function login() {
   if (authDisabled) return "";
   if (cachedToken && Date.now() < tokenExpiresAt - 60_000) return cachedToken;
+  if (configuredApiKey && !configuredUser && !configuredPassword) return "";
   if (!configuredUser || !configuredPassword) {
     throw new Error("Youtarr-inloggegevens ontbreken");
   }
@@ -151,6 +303,7 @@ async function requestYoutarr(
   const token = await login();
   const headers = new Headers(init.headers);
   if (token) headers.set("x-access-token", token);
+  if (!token && configuredApiKey) headers.set("x-api-key", configuredApiKey);
   if (init.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
@@ -169,10 +322,102 @@ async function requestYoutarr(
   return response;
 }
 
+async function loginInstance(instance: YoutarrInstanceConfig) {
+  if (instance.authDisabled) return "";
+  const cached = instanceTokenCache.get(instance.key);
+  if (cached && Date.now() < cached.expiresAt - 60_000) return cached.token;
+  if (instance.sessionToken) {
+    instanceTokenCache.set(instance.key, {
+      token: instance.sessionToken,
+      expiresAt: Number.POSITIVE_INFINITY,
+    });
+    return instance.sessionToken;
+  }
+  if (instance.apiKey && (!instance.username || !instance.password)) return "";
+  if (!instance.username || !instance.password) {
+    throw new Error(`${instance.label} login credentials are missing`);
+  }
+
+  const response = await fetch(`${instance.url}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      username: instance.username,
+      password: instance.password,
+    }),
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      response.status === 401
+        ? `${instance.label} rejected the login credentials`
+        : `${instance.label} login failed (${response.status})`
+    );
+  }
+
+  const data = (await response.json()) as { token?: string; expires?: string };
+  if (!data.token) throw new Error(`${instance.label} did not return a session`);
+  instanceTokenCache.set(instance.key, {
+    token: data.token,
+    expiresAt: data.expires
+      ? new Date(data.expires).getTime()
+      : Date.now() + 6 * 24 * 60 * 60 * 1000,
+  });
+  return data.token;
+}
+
+async function requestYoutarrInstance(
+  instance: YoutarrInstanceConfig,
+  path: string,
+  init: RequestInit = {},
+  retry = true
+) {
+  if (instance.key === "primary") {
+    return requestYoutarr(path, init, retry);
+  }
+  if (!instance.url) throw new Error(`${instance.label} URL is missing`);
+  const token = await loginInstance(instance);
+  const headers = new Headers(init.headers);
+  if (token) headers.set("x-access-token", token);
+  if (!token && instance.apiKey) headers.set("x-api-key", instance.apiKey);
+  if (init.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(`${instance.url}${path}`, {
+    ...init,
+    headers,
+    cache: "no-store",
+  });
+
+  if (
+    retry &&
+    !instance.authDisabled &&
+    !instance.sessionToken &&
+    (response.status === 401 || response.status === 403)
+  ) {
+    instanceTokenCache.delete(instance.key);
+    return requestYoutarrInstance(instance, path, init, false);
+  }
+  return response;
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await requestYoutarr(path);
   if (!response.ok) {
     throw new Error(`Youtarr request failed (${response.status})`);
+  }
+  return (await response.json()) as T;
+}
+
+async function getJsonFromInstance<T>(
+  instance: YoutarrInstanceConfig,
+  path: string
+): Promise<T> {
+  const response = await requestYoutarrInstance(instance, path);
+  if (!response.ok) {
+    throw new Error(`${instance.label} request failed (${response.status})`);
   }
   return (await response.json()) as T;
 }
@@ -228,11 +473,12 @@ function isValidYoutubeId(value: string) {
 
 function rememberYoutarrVideoLocation(
   youtubeId: string,
-  location: YoutarrVideoLocation
+  location: YoutarrVideoLocation,
+  instanceKey: YoutarrPlaybackProfile = "primary"
 ) {
   if (!isValidYoutubeId(youtubeId)) return;
   const hasUsablePath = Boolean(location.filePath || location.audioFilePath);
-  youtarrLocationCache.set(youtubeId, {
+  youtarrLocationCache.set(cacheKey(instanceKey, youtubeId), {
     ...location,
     expiresAt:
       Date.now() + (hasUsablePath ? locationCacheHitTtlMs : locationCacheMissTtlMs),
@@ -250,13 +496,18 @@ function fromYoutarrVideoLocation(video: YoutarrVideo): YoutarrVideoLocation {
   };
 }
 
-function cacheAndReturnLocation(youtubeId: string, location: YoutarrVideoLocation) {
-  rememberYoutarrVideoLocation(youtubeId, location);
-  return location;
+export function clearYoutarrVideoLocationCache(youtubeId: string) {
+  if (!isValidYoutubeId(youtubeId)) return;
+  for (const key of youtarrLocationCache.keys()) {
+    if (key.endsWith(`:${youtubeId}`)) youtarrLocationCache.delete(key);
+  }
 }
 
-function readCachedYoutarrVideoLocation(youtubeId: string) {
-  const cached = youtarrLocationCache.get(youtubeId);
+function readCachedYoutarrVideoLocationForInstance(
+  instance: YoutarrInstanceConfig,
+  youtubeId: string
+) {
+  const cached = youtarrLocationCache.get(cacheKey(instance.key, youtubeId));
   if (!cached || cached.expiresAt <= Date.now()) return null;
   return {
     filePath: cached.filePath,
@@ -266,26 +517,28 @@ function readCachedYoutarrVideoLocation(youtubeId: string) {
   };
 }
 
-export function clearYoutarrVideoLocationCache(youtubeId: string) {
-  if (!isValidYoutubeId(youtubeId)) return;
-  youtarrLocationCache.delete(youtubeId);
-}
-
-async function scanYoutarrVideoLocations() {
+async function scanYoutarrVideoLocations(instance = primaryInstance) {
   const pageSize = 250;
   const maxPages = 20;
 
   for (let page = 1; page <= maxPages; page += 1) {
-    const data = await getJson<{
+    const data = await getJsonFromInstance<{
       videos?: YoutarrVideo[];
       totalPages?: number;
     }>(
+      instance,
       `/getVideos?page=${page}&limit=${pageSize}&sortBy=added&sortOrder=desc&missingFilter=off`
     );
 
     for (const video of data.videos || []) {
       const youtubeId = video.youtubeId || video.youtube_id || "";
-      if (youtubeId) rememberYoutarrVideoLocation(youtubeId, fromYoutarrVideoLocation(video));
+      if (youtubeId) {
+        rememberYoutarrVideoLocation(
+          youtubeId,
+          fromYoutarrVideoLocation(video),
+          instance.key
+        );
+      }
     }
 
     const totalPages = Math.max(1, data.totalPages || 1);
@@ -293,31 +546,41 @@ async function scanYoutarrVideoLocations() {
   }
 }
 
-async function refreshYoutarrVideoLocationCache() {
-  youtarrLocationScanPromise ||= scanYoutarrVideoLocations().finally(() => {
-    youtarrLocationScanPromise = null;
+async function refreshYoutarrVideoLocationCache(instance = primaryInstance) {
+  const key = instance.key;
+  const existing = youtarrLocationScanPromises.get(key);
+  if (existing) return existing;
+  const next = scanYoutarrVideoLocations(instance).finally(() => {
+    youtarrLocationScanPromises.delete(key);
   });
-  return youtarrLocationScanPromise;
+  youtarrLocationScanPromises.set(key, next);
+  return next;
 }
 
 export async function getYoutarrVideoLocation(
-  youtubeId: string
+  youtubeId: string,
+  profile: YoutarrPlaybackProfile = "primary"
 ): Promise<YoutarrVideoLocation | null> {
-  if (!isValidYoutubeId(youtubeId) || !isYoutarrConfigured()) return null;
+  const instance = playbackInstanceForProfile(profile);
+  if (!isValidYoutubeId(youtubeId) || !isYoutarrInstanceConfigured(instance)) {
+    return null;
+  }
 
-  const cached = readCachedYoutarrVideoLocation(youtubeId);
+  const cached = readCachedYoutarrVideoLocationForInstance(instance, youtubeId);
   if (cached) return cached;
 
-  await refreshYoutarrVideoLocationCache();
-  const refreshed = readCachedYoutarrVideoLocation(youtubeId);
+  await refreshYoutarrVideoLocationCache(instance);
+  const refreshed = readCachedYoutarrVideoLocationForInstance(instance, youtubeId);
   if (refreshed) return refreshed;
 
-  return cacheAndReturnLocation(youtubeId, {
+  const missing = {
     filePath: null,
     audioFilePath: null,
     downloaded: false,
     removed: false,
-  });
+  };
+  rememberYoutarrVideoLocation(youtubeId, missing, instance.key);
+  return missing;
 }
 
 export async function getYoutarrVideoMetadata(
@@ -634,7 +897,26 @@ export async function deleteDownload(youtubeId: string) {
   if (!/^[A-Za-z0-9_-]{11}$/.test(youtubeId)) {
     throw new Error("Invalid video ID");
   }
-  const response = await requestYoutarr("/api/videos", {
+
+  const result = await deleteDownloadFromInstance(primaryInstance, youtubeId);
+  const secondaryDeletes = Object.values(playbackInstances)
+    .filter(
+      (instance): instance is YoutarrInstanceConfig =>
+        Boolean(instance) &&
+        instance.key !== "primary" &&
+        isYoutarrInstanceConfigured(instance)
+    )
+    .map((instance) => deleteDownloadFromInstance(instance, youtubeId));
+  await Promise.allSettled(secondaryDeletes);
+  clearYoutarrVideoLocationCache(youtubeId);
+  return result;
+}
+
+async function deleteDownloadFromInstance(
+  instance: YoutarrInstanceConfig,
+  youtubeId: string
+) {
+  const response = await requestYoutarrInstance(instance, "/api/videos", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ youtubeIds: [youtubeId] }),
@@ -647,7 +929,6 @@ export async function deleteDownload(youtubeId: string) {
   if (!response.ok || data.success === false) {
     throw new Error(data.error || data.message || `Could not delete download (${response.status})`);
   }
-  clearYoutarrVideoLocationCache(youtubeId);
   return data;
 }
 
@@ -750,10 +1031,15 @@ export async function getDownloadActivity(): Promise<DownloadActivity> {
   return summarizeActivity((await response.json()) as YoutarrActivitySnapshot);
 }
 
-export async function getStream(youtubeId: string, range?: string | null) {
+export async function getStream(
+  youtubeId: string,
+  range?: string | null,
+  profile: YoutarrPlaybackProfile = "primary"
+) {
   const headers = new Headers();
   if (range) headers.set("Range", range);
-  return requestYoutarr(
+  return requestYoutarrInstance(
+    playbackInstanceForProfile(profile),
     `/api/videos/${encodeURIComponent(youtubeId)}/stream`,
     { headers }
   );

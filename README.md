@@ -64,6 +64,28 @@ items, so you can see the expected playback path before opening the video.
 Direct local streaming does not change delete behavior. Deletes still go
 through Youtarr, so Youtarr remains the owner of the library.
 
+### Optional Multi-Youtarr Playback
+
+You can run a second Youtarr instance for a different downloaded codec. A common
+setup is:
+
+- main `YOUTARR_URL`: normal feed/download owner, often highest quality or AV1.
+- `YOUTARR_VP9_URL`: second Youtarr instance that downloads VP9 copies.
+
+With `YOUTARR_PLAYBACK_PROFILE=auto`, Youtarr Feed keeps the UI simple and
+chooses the playback source server-side:
+
+- iPad and Mac Safari use the VP9 instance when `YOUTARR_VP9_URL` is configured.
+- iPhone and other clients use the main instance unless `YOUTARR_AV1_URL` is
+  explicitly configured.
+
+The thumbnail badge still only shows `Direct` or `Youtarr`; the codec routing is
+intentionally hidden. For best results, make both Youtarr instances subscribe to
+the same channels or otherwise download the same videos. Feed, channel
+management, and manual download actions still use the main `YOUTARR_URL`.
+Deleting from Youtarr Feed removes the video from the main instance and also
+best-effort deletes it from configured AV1/VP9 playback instances.
+
 The Local tab uses Youtarr's downloaded-video state as its source of truth. It
 shows all videos Youtarr reports as downloaded and lets you play or delete them
 from one overview.
@@ -168,6 +190,12 @@ Data Directory:
 
 Media Directory:
   /usr/src/app/data
+
+Optional VP9 Youtarr URL:
+  http://host.docker.internal:3088
+
+Optional VP9 Youtarr Media Path:
+  /mnt/user/Media/Youtarr-VP9 -> /usr/src/app/data-vp9:ro
 ```
 
 The App Data path is important. Watch progress, cached feed data, and single
@@ -328,6 +356,21 @@ docker run -d \
 | `YOUTARR_FEED_CACHE_TTL_SECONDS` | Optional | Server-side feed/local-video cache duration. Defaults to `300`. |
 | `YOUTARR_MEDIA_DIR` | Recommended | Mount of the Youtarr output folder for direct streaming. |
 | `YOUTARR_SOURCE_MEDIA_DIR` | Optional | Media path prefix as stored by Youtarr. Defaults to `/usr/src/app/data`. Set this when Youtarr stores a different container path than Youtarr Feed uses for the same host folder. |
+| `YOUTARR_PLAYBACK_PROFILE` | Optional | Playback routing mode. Defaults to `auto`; advanced values are `primary`, `av1`, or `vp9`. |
+| `YOUTARR_VP9_URL` | Optional | Second Youtarr instance used automatically for iPad and Mac Safari playback. |
+| `YOUTARR_VP9_USERNAME` / `YOUTARR_VP9_PASSWORD` | Optional | Credentials for the VP9 instance. If omitted, the main Youtarr credentials are reused unless only `YOUTARR_VP9_API_KEY` is set. |
+| `YOUTARR_VP9_API_KEY` | Optional | API key for the VP9 instance. If it is the only VP9 credential, it is used directly. |
+| `YOUTARR_VP9_SESSION_TOKEN` | Optional | Session token for the VP9 instance. If omitted, the main session token is reused. |
+| `YOUTARR_VP9_AUTH_DISABLED` | Optional | Set to `true` only if auth is disabled on the VP9 instance. |
+| `YOUTARR_VP9_MEDIA_DIR` | Optional | Mount of the VP9 Youtarr output folder for direct local streaming. |
+| `YOUTARR_VP9_SOURCE_MEDIA_DIR` | Optional | Media path prefix as stored by the VP9 Youtarr instance. Defaults to `/usr/src/app/data`. |
+| `YOUTARR_AV1_URL` | Optional | Explicit AV1 playback instance. Usually not needed when the main Youtarr instance already owns AV1/highest-quality files. |
+| `YOUTARR_AV1_USERNAME` / `YOUTARR_AV1_PASSWORD` | Optional | Credentials for the AV1 instance. If omitted, the main Youtarr credentials are reused. |
+| `YOUTARR_AV1_API_KEY` | Optional | API key for the AV1 instance. |
+| `YOUTARR_AV1_SESSION_TOKEN` | Optional | Session token for the AV1 instance. If omitted, the main session token is reused. |
+| `YOUTARR_AV1_AUTH_DISABLED` | Optional | Set to `true` only if auth is disabled on the AV1 instance. |
+| `YOUTARR_AV1_MEDIA_DIR` | Optional | Mount of the AV1 Youtarr output folder for direct local streaming. |
+| `YOUTARR_AV1_SOURCE_MEDIA_DIR` | Optional | Media path prefix as stored by the AV1 Youtarr instance. Defaults to `/usr/src/app/data`. |
 | `PLEX_URL` | Optional | Plex server URL for refresh requests. |
 | `PLEX_TOKEN` | Optional | Plex token. |
 | `PLEX_LIBRARY_ID` | Optional | Numeric Plex library section ID. |
