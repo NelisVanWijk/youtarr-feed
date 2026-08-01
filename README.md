@@ -83,8 +83,10 @@ The thumbnail badge still only shows `Direct` or `Youtarr`; the codec routing is
 intentionally hidden. For best results, make both Youtarr instances subscribe to
 the same channels or otherwise download the same videos. Feed, channel
 management, and manual download actions still use the main `YOUTARR_URL`.
-Deleting from Youtarr Feed removes the video from the main instance and also
-best-effort deletes it from configured AV1/VP9 playback instances.
+Adding a channel from Youtarr Feed adds it to the main instance and every
+configured AV1/VP9 playback instance, so subscriptions stay aligned. Deleting
+from Youtarr Feed removes the video from the main instance and also best-effort
+deletes it from configured AV1/VP9 playback instances.
 
 The Local tab uses Youtarr's downloaded-video state as its source of truth. It
 shows all videos Youtarr reports as downloaded and lets you play or delete them

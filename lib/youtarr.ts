@@ -936,7 +936,37 @@ export async function addChannel(url: string) {
   const normalized = url.trim();
   if (!normalized) throw new Error("Channel URL is required");
 
-  const infoResponse = await requestYoutarr("/addchannelinfo", {
+  const primaryChannel = await addChannelToInstance(primaryInstance, normalized);
+  const secondaryInstances = Object.values(playbackInstances).filter(
+    (instance): instance is YoutarrInstanceConfig =>
+      Boolean(instance) &&
+      instance.key !== "primary" &&
+      isYoutarrInstanceConfigured(instance)
+  );
+  const secondaryResults = await Promise.allSettled(
+    secondaryInstances.map((instance) => addChannelToInstance(instance, normalized))
+  );
+  const failures = secondaryResults
+    .map((result, index) =>
+      result.status === "rejected"
+        ? `${secondaryInstances[index].label}: ${
+            result.reason instanceof Error ? result.reason.message : "unknown error"
+          }`
+        : ""
+    )
+    .filter(Boolean);
+  if (failures.length > 0) {
+    throw new Error(`Channel was not added to every Youtarr instance. ${failures.join("; ")}`);
+  }
+
+  return primaryChannel;
+}
+
+async function addChannelToInstance(
+  instance: YoutarrInstanceConfig,
+  normalized: string
+) {
+  const infoResponse = await requestYoutarrInstance(instance, "/addchannelinfo", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ url: normalized }),
@@ -947,26 +977,29 @@ export async function addChannel(url: string) {
     channelInfo?: YoutarrChannelInfo;
   };
   if (!infoResponse.ok || infoData.status !== "success" || !infoData.channelInfo) {
-    throw new Error(infoData.message || `Could not add channel (${infoResponse.status})`);
-  }
-  if (infoData.channelInfo.enabled) {
-    throw new Error("This channel is already in Youtarr");
+    throw new Error(
+      infoData.message || `Could not add channel (${infoResponse.status})`
+    );
   }
 
   const channelId = infoData.channelInfo.channel_id || infoData.channelInfo.id || "";
-  const updateResponse = await requestYoutarr("/updatechannels", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      add: [{ url: normalized, channel_id: channelId }],
-    }),
-  });
-  const updateData = (await updateResponse.json().catch(() => ({}))) as {
-    status?: string;
-    message?: string;
-  };
-  if (!updateResponse.ok || updateData.status !== "success") {
-    throw new Error(updateData.message || `Could not save channel (${updateResponse.status})`);
+  if (!infoData.channelInfo.enabled) {
+    const updateResponse = await requestYoutarrInstance(instance, "/updatechannels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        add: [{ url: normalized, channel_id: channelId }],
+      }),
+    });
+    const updateData = (await updateResponse.json().catch(() => ({}))) as {
+      status?: string;
+      message?: string;
+    };
+    if (!updateResponse.ok || updateData.status !== "success") {
+      throw new Error(
+        updateData.message || `Could not save channel (${updateResponse.status})`
+      );
+    }
   }
 
   return {
