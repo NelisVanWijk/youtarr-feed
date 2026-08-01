@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { syncPlexWatchProgress } from "../../../lib/plex";
 import {
   clearWatchProgress,
   readWatchProgress,
@@ -26,8 +27,10 @@ export async function POST(request: Request) {
   };
 
   try {
+    const progress = await updateWatchProgress(body);
+    void syncPlexWatchProgress(body).catch(() => undefined);
     return NextResponse.json({
-      progress: await updateWatchProgress(body),
+      progress,
     });
   } catch (error) {
     return NextResponse.json(

@@ -59,4 +59,5 @@
   <Config Name="Plex URL" Target="PLEX_URL" Default="http://host.docker.internal:32400" Mode="" Description="Optional. Internal Plex address for a library scan after a download completes." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="Plex Token" Target="PLEX_TOKEN" Default="" Mode="" Description="Optional Plex token. Used server-side only and never sent to your phone." Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="Plex Library ID" Target="PLEX_LIBRARY_ID" Default="" Mode="" Description="Optional numeric ID of your Youtarr library in Plex." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Plex Watch Sync" Target="PLEX_WATCH_SYNC_ENABLED" Default="true" Mode="" Description="Sync Youtarr Feed watch progress to Plex when Plex is configured. Set to false if you only want Plex library scans." Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
 </Container>
