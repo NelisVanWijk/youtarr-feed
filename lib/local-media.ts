@@ -59,15 +59,37 @@ function pathInsideDirectory(directory: string, filePath: string) {
   return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
+function normalizeYoutarrPath(filePath: string) {
+  return filePath.replaceAll("\\", path.sep);
+}
+
+function isUnsafeRelativePath(filePath: string) {
+  return filePath
+    .split(/[\\/]+/)
+    .some((part) => part === ".." || part === "");
+}
+
 function mappedExpectedPaths(expectedFilePath?: string | null) {
   if (!mediaDirectory || !expectedFilePath) return [];
 
   const candidates = new Set<string>();
-  candidates.add(expectedFilePath);
+  const normalizedExpectedPath = normalizeYoutarrPath(expectedFilePath);
 
-  if (sourceMediaDirectory && pathInsideDirectory(sourceMediaDirectory, expectedFilePath)) {
+  if (!path.isAbsolute(normalizedExpectedPath)) {
+    if (!isUnsafeRelativePath(normalizedExpectedPath)) {
+      candidates.add(path.join(mediaDirectory, normalizedExpectedPath));
+    }
+  } else {
+    candidates.add(normalizedExpectedPath);
+  }
+
+  if (
+    path.isAbsolute(normalizedExpectedPath) &&
+    sourceMediaDirectory &&
+    pathInsideDirectory(sourceMediaDirectory, normalizedExpectedPath)
+  ) {
     candidates.add(
-      path.join(mediaDirectory, path.relative(sourceMediaDirectory, expectedFilePath))
+      path.join(mediaDirectory, path.relative(sourceMediaDirectory, normalizedExpectedPath))
     );
   }
 
