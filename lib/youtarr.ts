@@ -66,6 +66,11 @@ type YoutarrVideoLocation = {
   removed: boolean;
 };
 
+type QueueDownloadOptions = {
+  allowRedownload?: boolean;
+  channelId?: string;
+};
+
 export type YoutarrPlaybackProfile = "primary" | "av1" | "vp9";
 
 type YoutarrInstanceConfig = {
@@ -844,20 +849,26 @@ export async function getDownloadedVideos(): Promise<{
 
 export async function queueDownload(
   youtubeId: string,
-  options: {
-    allowRedownload?: boolean;
-    channelId?: string;
-  } = {}
+  options: QueueDownloadOptions = {}
 ) {
   if (!/^[A-Za-z0-9_-]{11}$/.test(youtubeId)) {
     throw new Error("Invalid video ID");
   }
-  const result = await queueDownloadOnInstance(primaryInstance, youtubeId, options);
+  const result = await queueDownloadOnInstance(
+    primaryInstance,
+    youtubeId,
+    await queueOptionsForInstance(primaryInstance, youtubeId, options)
+  );
   const secondaryInstances = configuredSecondaryPlaybackInstances();
   const secondaryResults = await Promise.allSettled(
-    secondaryInstances.map((instance) =>
-      queueDownloadOnInstance(instance, youtubeId, options)
-    )
+    secondaryInstances.map(async (instance) => {
+      const instanceOptions = await queueOptionsForInstance(
+        instance,
+        youtubeId,
+        options
+      );
+      return queueDownloadOnInstance(instance, youtubeId, instanceOptions);
+    })
   );
   const failures = secondaryResults
     .map((secondaryResult, index) =>
@@ -870,6 +881,7 @@ export async function queueDownload(
         : ""
     )
     .filter(Boolean);
+  clearYoutarrVideoLocationCache(youtubeId);
   if (failures.length > 0) {
     throw new Error(
       `Download was queued on the main Youtarr instance, but not every playback instance. ${failures.join("; ")}`
@@ -878,13 +890,32 @@ export async function queueDownload(
   return result;
 }
 
+function locationNeedsRedownload(location: YoutarrVideoLocation | null) {
+  if (!location) return false;
+  return (
+    location.removed ||
+    (location.downloaded && !location.filePath && !location.audioFilePath)
+  );
+}
+
+async function queueOptionsForInstance(
+  instance: YoutarrInstanceConfig,
+  youtubeId: string,
+  options: QueueDownloadOptions
+): Promise<QueueDownloadOptions> {
+  if (options.allowRedownload) return options;
+
+  const location = await getYoutarrVideoLocation(youtubeId, instance.key).catch(
+    () => null
+  );
+  if (!locationNeedsRedownload(location)) return options;
+  return { ...options, allowRedownload: true };
+}
+
 async function queueDownloadOnInstance(
   instance: YoutarrInstanceConfig,
   youtubeId: string,
-  options: {
-    allowRedownload?: boolean;
-    channelId?: string;
-  } = {}
+  options: QueueDownloadOptions = {}
 ) {
   const url = `https://www.youtube.com/watch?v=${youtubeId}`;
   const body =

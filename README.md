@@ -84,9 +84,12 @@ intentionally hidden. Feed data comes from the main `YOUTARR_URL`. Adding a
 channel from Youtarr Feed adds it to the main instance and every configured
 AV1/VP9 playback instance, so subscriptions stay aligned. Starting a download
 from Youtarr Feed queues that video on the main instance and every configured
-AV1/VP9 playback instance. Deleting from Youtarr Feed removes the video from the
-main instance and also best-effort deletes it from configured AV1/VP9 playback
-instances.
+AV1/VP9 playback instance. Each instance uses its own video state for this:
+if the main instance sees a new video but the VP9 instance already marks that
+same video as missing, the main instance gets a normal download request while
+the VP9 instance gets a re-download request. Deleting from Youtarr Feed removes
+the video from the main instance and also best-effort deletes it from configured
+AV1/VP9 playback instances.
 
 If you already have channels in the main instance, open the Channels tab in
 Youtarr Feed and click `Export CSV`. The downloaded
