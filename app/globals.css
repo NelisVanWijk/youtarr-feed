@@ -866,6 +866,10 @@ main {
   gap: 20px;
 }
 
+.channel-hero .export-link {
+  margin-left: auto;
+}
+
 .channel-hero h1 {
   font-size: clamp(27px, 3.5vw, 38px);
 }
@@ -1845,6 +1849,10 @@ main {
   .channel-hero {
     margin-bottom: 24px;
     gap: 15px;
+  }
+
+  .channel-hero .export-link {
+    margin-left: 0;
   }
 
   .bottom-nav {

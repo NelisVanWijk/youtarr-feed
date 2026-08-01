@@ -116,6 +116,20 @@ function NavIcon({ view }: { view: View }) {
   );
 }
 
+function ChannelExportLink({ copy }: { copy: AppCopy }) {
+  return (
+    <a
+      className="settings-link export-link"
+      href="/api/channels/export"
+      download="youtarr-subscriptions.csv"
+      aria-label={copy.channels.exportCsvAria}
+    >
+      <FontAwesomeIcon icon={faDownload} aria-hidden="true" />
+      {copy.channels.exportCsv}
+    </a>
+  );
+}
+
 function initials(value: string) {
   return value
     .split(/\s+/)
@@ -1986,15 +2000,7 @@ export default function FeedApp() {
                 <h1>{copy.channels.title}</h1>
                 <p>{copy.channels.subscriptions(feed?.channels.length || 0)}</p>
               </div>
-              <a
-                className="settings-link export-link"
-                href="/api/channels/export"
-                download="youtarr-subscriptions.csv"
-                aria-label={copy.channels.exportCsvAria}
-              >
-                <FontAwesomeIcon icon={faDownload} aria-hidden="true" />
-                {copy.channels.exportCsv}
-              </a>
+              <ChannelExportLink copy={copy} />
             </section>
             <form className="add-channel-form" onSubmit={submitChannel}>
               <input
@@ -2068,6 +2074,7 @@ export default function FeedApp() {
                     : copy.channels.manualDownloadHint}
                 </p>
               </div>
+              <ChannelExportLink copy={copy} />
             </section>
             <div className="filter-row" role="group" aria-label={copy.feed.title}>
               {[
