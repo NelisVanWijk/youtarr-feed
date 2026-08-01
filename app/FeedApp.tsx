@@ -21,6 +21,7 @@ import {
   faPause,
   faPlay,
   faRotateRight,
+  faTrash,
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -1585,7 +1586,9 @@ export default function FeedApp() {
   const descriptionExpanded = selectedVideo
     ? expandedDescriptions[selectedVideo.id] === true
     : false;
-  const descriptionCanCollapse = selectedDescription.length > 280;
+  const descriptionCanCollapse =
+    selectedDescription.length > 110 ||
+    selectedDescription.split(/\r?\n/).filter(Boolean).length > 2;
 
   return (
     <div className={`app-shell ${selectedVideo ? "has-player" : ""}`}>
@@ -2324,6 +2327,7 @@ export default function FeedApp() {
                   {descriptionCanCollapse && (
                     <button
                       type="button"
+                      className="watch-description-toggle"
                       onClick={() => {
                         setExpandedDescriptions((current) => ({
                           ...current,
@@ -2372,11 +2376,17 @@ export default function FeedApp() {
               {selectedVideo.downloaded && (
                 <div className="modal-actions">
                   <button
-                    className="danger-button"
-                    onClick={() => void removeDownload(selectedVideo)}
+                    className="icon-danger-button"
+                    onClick={() => {
+                      if (window.confirm(copy.player.confirmDelete(selectedVideo.title))) {
+                        void removeDownload(selectedVideo);
+                      }
+                    }}
                     disabled={deleteState === "deleting"}
+                    title={copy.common.deleteDownload}
+                    aria-label={copy.common.deleteDownload}
                   >
-                    {deleteState === "deleting" ? copy.player.deleting : copy.common.deleteDownload}
+                    <FontAwesomeIcon icon={faTrash} aria-hidden="true" />
                   </button>
                   {deleteState === "error" && <small>{deleteError}</small>}
                 </div>

@@ -165,6 +165,7 @@ export const translations = {
       sourceCheckingBody: "Checking which stream path is being used.",
       descriptionShowMore: "Show more",
       descriptionShowLess: "Show less",
+      confirmDelete: (title: string) => `Delete the download for "${title}"?`,
       deleting: "Deleting",
     },
     settings: {
@@ -340,6 +341,7 @@ export const translations = {
       sourceCheckingBody: "Even kijken welk stream-pad wordt gebruikt.",
       descriptionShowMore: "Meer weergeven",
       descriptionShowLess: "Minder weergeven",
+      confirmDelete: (title: string) => `Download verwijderen voor "${title}"?`,
       deleting: "Verwijderen",
     },
     settings: {

@@ -1402,7 +1402,9 @@ main {
   overflow: visible;
 }
 
-.watch-description button {
+.watch-description-toggle {
+  display: inline-flex;
+  align-items: center;
   margin-top: 8px;
   color: #fff;
   font-size: 12px;
@@ -1463,7 +1465,24 @@ main {
   font-weight: 750;
 }
 
+.icon-danger-button {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 74, 61, 0.12);
+  border: 1px solid rgba(255, 74, 61, 0.32);
+  border-radius: 50%;
+  color: #ffb7b1;
+}
+
+.icon-danger-button .svg-inline--fa {
+  width: 16px;
+  height: 16px;
+}
+
 .danger-button:disabled,
+.icon-danger-button:disabled,
 .primary-button:disabled {
   cursor: wait;
   opacity: 0.62;
