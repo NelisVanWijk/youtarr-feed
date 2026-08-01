@@ -1,154 +1,65 @@
 # Youtarr Feed
 
-Youtarr Feed is a mobile-first web app for [Youtarr](https://github.com/DialmasterOrg/Youtarr).
-It is designed to feel good as an iPhone homescreen app: one chronological feed
-for your subscriptions, channel views, server-side watch progress, a Continue
-Watching tab, a local downloads tab, direct download actions, and local playback
-of downloaded videos.
+Youtarr Feed is a mobile-first web app for
+[Youtarr](https://github.com/DialmasterOrg/Youtarr). It gives you a YouTube-like
+feed for your Youtarr subscriptions, with server-side watch progress, Continue
+Watching, local playback, single-video links, download/delete actions, optional
+multi-instance playback routing, and optional Plex integration.
 
-The app talks to Youtarr from the server side. Your Youtarr password, session
-token, API key, and optional Plex token are never sent to the browser.
+The app talks to Youtarr and Plex from the server side. Passwords, session
+tokens, API keys, and Plex tokens are never sent to the browser.
 
 ## Features
 
-- Chronological feed of Youtarr channel videos.
-- Separate channel view.
-- Filters for all, not downloaded, and downloaded videos.
+- Chronological feed for Youtarr channels.
+- Channel pages and channel export to Youtarr-compatible CSV.
 - Add channels from the app.
-- Start a Youtarr download by opening a missing video.
-- Re-download videos Youtarr marks as missing after their files were removed.
-- Delete a downloaded video through Youtarr.
-- Server-side watch progress stored in `/data/watch-progress.json`.
-- Server-side feed cache stored in `/data/feed-cache.json` for faster first opens.
-- Continue Watching tab synced across browsers/devices.
-- Local downloads tab with all videos Youtarr currently marks as downloaded.
-- Single Videos tab for one-off YouTube links without subscribing to a channel.
-- Language module with English as the default UI language and Dutch as an option.
-- Optional Plex library refresh after a download completes.
-- Optional direct local file streaming from the mounted Youtarr media folder.
-- Stable feed sorting when Youtarr returns date-only publish values.
+- Add one-off YouTube videos without subscribing to a channel.
+- Start downloads, re-download missing videos, and delete downloads through
+  Youtarr.
+- Watch page with description, fullscreen/mobile player behavior, mini player,
+  and Continue Watching.
+- Server-side watch progress stored under `/data`.
+- Optional Plex watch-state sync: Youtarr Feed pushes progress to Plex, and the
+  refresh button can import Plex progress back into Youtarr Feed.
+- Local downloads tab.
+- Optional direct local file streaming with HTTP Range support.
+- Server-side feed cache for fast app opens.
 - Optional YouTube Data API fallback for exact publish timestamps.
+- English UI by default, with Dutch available.
 - iPhone/PWA manifest with portrait orientation.
 
 ## How Playback Works
 
-By default, playback falls back to Youtarr's own stream endpoint:
+Without a media mount, playback uses Youtarr's stream endpoint:
 
 ```text
 browser -> youtarr-feed -> Youtarr -> video file
 ```
 
-For smoother 4K playback and AirPlay, it is recommended to mount the same
-Youtarr output folder into this container as read-only:
+For the best experience, mount the same Youtarr download folder into Youtarr
+Feed as read-only:
 
 ```text
 browser -> youtarr-feed -> video file
 ```
 
-When `YOUTARR_MEDIA_DIR` is configured, Youtarr Feed asks Youtarr for the
-downloaded video's stored `filePath` and treats that as the source of truth.
-If needed, it maps that path from `YOUTARR_SOURCE_MEDIA_DIR` to
-`YOUTARR_MEDIA_DIR`, then falls back to searching the media folder by filename.
-If it finds a playable file, it streams it directly with HTTP Range support. If
-it does not find one, it falls back to Youtarr.
+Youtarr Feed asks Youtarr for the video's stored file path, maps that path from
+`YOUTARR_SOURCE_MEDIA_DIR` to `YOUTARR_MEDIA_DIR` when needed, and falls back to
+searching the media mount by filename. If a local file is found, it is streamed
+directly with Range support. If not, playback falls back to Youtarr.
 
-The player shows the active source for downloaded videos:
+Downloaded thumbnails show a compact badge:
 
-- `Direct file`: streaming from the read-only media mount.
-- `Via Youtarr`: local file was not found, so playback uses Youtarr's stream
-  endpoint.
+- `Direct`: streamed from the local media mount.
+- `Youtarr`: streamed through Youtarr.
 
-Video thumbnails also show a compact `Direct` or `Youtarr` badge for downloaded
-items, so you can see the expected playback path before opening the video.
+Deletes still go through Youtarr, even when playback is direct. Youtarr remains
+the owner of downloads and library state.
 
-Direct local streaming does not change delete behavior. Deletes still go
-through Youtarr, so Youtarr remains the owner of the library.
+## Recommended Mount Layout
 
-### Optional Multi-Youtarr Playback
-
-You can run a second Youtarr instance for a different downloaded codec. A common
-setup is:
-
-- main `YOUTARR_URL`: normal feed/download owner, often highest quality or AV1.
-- `YOUTARR_VP9_URL`: second Youtarr instance that downloads VP9 copies.
-
-With `YOUTARR_PLAYBACK_PROFILE=auto`, Youtarr Feed keeps the UI simple and
-chooses the playback source server-side:
-
-- iPad and Mac Safari use the VP9 instance when `YOUTARR_VP9_URL` is configured.
-- iPhone and other clients use the main instance unless `YOUTARR_AV1_URL` is
-  explicitly configured.
-
-The thumbnail badge still only shows `Direct` or `Youtarr`; the codec routing is
-intentionally hidden. Feed data comes from the main `YOUTARR_URL`. Adding a
-channel from Youtarr Feed adds it to the main instance and every configured
-AV1/VP9 playback instance, so subscriptions stay aligned. Starting a download
-from Youtarr Feed queues that video on the main instance and every configured
-AV1/VP9 playback instance. Each instance uses its own video state for this:
-if the main instance sees a new video but the VP9 instance already marks that
-same video as missing, the main instance gets a normal download request while
-the VP9 instance gets a re-download request. Deleting from Youtarr Feed removes
-the video from the main instance and also best-effort deletes it from configured
-AV1/VP9 playback instances.
-
-If you already have channels in the main instance, open the Channels tab in
-Youtarr Feed and click `Export CSV`. The downloaded
-`youtarr-subscriptions.csv` uses the Google Takeout subscriptions format
-accepted by Youtarr's Import Channels screen:
-
-```text
-Channel Id,Channel Url,Channel Title
-```
-
-The Local tab uses Youtarr's downloaded-video state as its source of truth. It
-shows all videos Youtarr reports as downloaded and lets you play or delete them
-from one overview.
-
-## Feed Ordering
-
-Youtarr Feed sorts by the `publishedAt` value it receives from Youtarr. If
-Youtarr returns a full timestamp, that timestamp is used directly. If Youtarr
-only returns a date such as `2026-07-30`, or a date converted to a synthetic
-whole-hour timestamp such as `2026-07-30T02:00:00.000Z`, videos from the same
-date keep a stable Youtarr source order so the feed does not reshuffle on
-refresh.
-
-For the most accurate chronological feed, add a YouTube Data API key in
-Youtarr's own Configuration page under Integrations. Youtarr uses its
-`youtubeApiKey` setting for channel and video metadata.
-
-As a fallback, this app can also use `YOUTUBE_API_KEY`. When set, Youtarr Feed
-enriches date-only or missing publish values server-side through the official
-YouTube `videos.list` endpoint and then sorts using the returned
-`snippet.publishedAt` timestamp. Requests are batched in groups of up to 50
-video IDs; `videos.list` costs 1 quota unit per call.
-
-## Server-Side Cache
-
-The feed and Local tab use a small server-side cache so opening the app does not
-need to wait for every Youtarr channel request each time. By default cached
-results are reused for 300 seconds and stored in the persistent app data
-directory:
-
-```text
-/data/feed-cache.json
-/data/local-videos-cache.json
-/data/single-videos.json
-```
-
-When a cache entry is older than the TTL, the app returns the old result
-immediately and refreshes it in the background. The cache is not discarded just
-because it is older than the TTL, so opening the app hours later can still show
-the last known feed quickly as long as `/data` is persistent. Manual refreshes,
-deletes, downloads, channel adds, and single-video changes invalidate or bypass
-the relevant data.
-
-Set `YOUTARR_FEED_CACHE_TTL_SECONDS` to tune this. Higher values make first open
-faster for longer, lower values keep the feed closer to Youtarr on every open.
-
-## Recommended Youtarr Mount Layout
-
-Use the same container path in both containers. For example:
+Use the same container path in Youtarr and Youtarr Feed:
 
 ```text
 Youtarr:
@@ -162,18 +73,14 @@ Then set:
 
 ```env
 YOUTARR_MEDIA_DIR=/usr/src/app/data
+YOUTARR_SOURCE_MEDIA_DIR=/usr/src/app/data
 ```
 
-This keeps paths simple and avoids having to translate between different
-container paths.
+If Youtarr stores a different container path in its database, keep
+`YOUTARR_MEDIA_DIR` as the Youtarr Feed mount and set
+`YOUTARR_SOURCE_MEDIA_DIR` to the path Youtarr stores.
 
 ## Unraid Installation
-
-The Unraid template is in:
-
-```text
-unraid/youtarr-feed.xml
-```
 
 Template URL:
 
@@ -181,7 +88,7 @@ Template URL:
 https://raw.githubusercontent.com/NelisVanWijk/youtarr-feed/main/unraid/youtarr-feed.xml
 ```
 
-Typical Unraid settings:
+Typical settings:
 
 ```text
 Repository:
@@ -197,7 +104,7 @@ App Data:
   /mnt/user/appdata/youtarr-feed -> /data
 
 Youtarr Media Path:
-  /mnt/user/Media/Youtarr -> /usr/src/app/data:rw
+  /mnt/user/Media/Youtarr -> /usr/src/app/data:ro
 
 Data Directory:
   /data
@@ -205,39 +112,39 @@ Data Directory:
 Media Directory:
   /usr/src/app/data
 
-Optional VP9 Youtarr URL:
-  http://host.docker.internal:3088
-
-Optional VP9 Youtarr Media Path:
-  /mnt/user/Media/Youtarr-VP9 -> /usr/src/app/data-vp9:ro
+Youtarr Source Media Directory:
+  /usr/src/app/data
 ```
 
-The App Data path is important. Watch progress, cached feed data, and single
-video links are stored there and survive container updates:
+The App Data path is important. Watch progress, cached feeds, and single videos
+are stored there and survive container updates:
 
 ```text
 /mnt/user/appdata/youtarr-feed/watch-progress.json
+/mnt/user/appdata/youtarr-feed/feed-cache.json
+/mnt/user/appdata/youtarr-feed/local-videos-cache.json
 /mnt/user/appdata/youtarr-feed/single-videos.json
 ```
 
-If watch progress or single videos disappear after updates, check that `/data`
-is mapped to a persistent host path.
+The template includes:
 
-The in-app Settings panel includes backend diagnostics. Use `Check connections`
-to verify the active environment variables, masked secret presence, media path
-mappings, playback routing, and live connectivity to the main, VP9, AV1, and
-Plex services.
+```text
+--add-host=host.docker.internal:host-gateway
+```
+
+This lets the container reach other containers on the Unraid host through
+`host.docker.internal`.
 
 ### Youtarr Permissions On Unraid
 
-For Youtarr itself, the upstream Unraid documentation recommends running as
-Unraid's `nobody:users` user by adding this to Youtarr's Extra Parameters:
+Youtarr must be able to create and delete files in its own output folder. A
+common Unraid setup is to run Youtarr as `nobody:users`:
 
 ```bash
 --user 99:100
 ```
 
-Then repair ownership/modes on the Youtarr output folder:
+Then repair the media folder permissions:
 
 ```bash
 chown -R 99:100 /mnt/user/Media/Youtarr
@@ -245,19 +152,8 @@ find /mnt/user/Media/Youtarr -type d -exec chmod 775 {} \;
 find /mnt/user/Media/Youtarr -type f -exec chmod 664 {} \;
 ```
 
-Youtarr Feed only needs read access to stream local files.
-
-### Updating On Unraid
-
-The container image is published to GitHub Container Registry:
-
-```text
-ghcr.io/nelisvanwijk/youtarr-feed:latest
-```
-
-Update the container in Unraid when a new version is published. If PWA manifest
-changes such as orientation do not appear on iPhone, remove the homescreen app
-and add it again from Safari. iOS can cache manifests aggressively.
+Youtarr Feed only needs read access to stream files. Downloading and deleting
+still happen through Youtarr.
 
 ## Docker Compose Installation
 
@@ -267,7 +163,7 @@ Copy the example environment file:
 cp .env.example .env
 ```
 
-Edit `.env`:
+Minimal `.env`:
 
 ```env
 YOUTARR_URL=http://host.docker.internal:3087
@@ -275,9 +171,10 @@ YOUTARR_USERNAME=your-username
 YOUTARR_PASSWORD=your-password
 YOUTARR_FEED_DATA_DIR=/data
 YOUTARR_MEDIA_DIR=/usr/src/app/data
+YOUTARR_SOURCE_MEDIA_DIR=/usr/src/app/data
 ```
 
-Edit `docker-compose.yml` so the media mount matches your host:
+Example `docker-compose.yml`:
 
 ```yaml
 services:
@@ -310,118 +207,126 @@ http://SERVER-IP:3090
 
 On iPhone, open the site in Safari and use Share -> Add to Home Screen.
 
-## Native iOS App
-
-An experimental SwiftUI iOS client lives in:
-
-```text
-ios/YoutarrFeed/YoutarrFeed.xcodeproj
-```
-
-Open that project in Xcode on a Mac, select the `Youtarr Feed` target, choose
-your Apple development team under Signing & Capabilities, and run it on an
-iPhone or simulator.
-
-The iOS app uses the same Youtarr Feed server API as the web app:
-
-- Feed, Continue Watching, Local, Offline, Channels, and Settings tabs.
-- Native `AVPlayer` playback with AirPlay, PiP, and lock screen metadata hooks.
-- Server-side watch progress sync through `/api/watch-progress`.
-- Offline playback progress is kept locally and synced back when the server is
-  reachable.
-- Server download and delete actions through Youtarr Feed.
-- Offline iPhone downloads stored in the app sandbox through background
-  `URLSession` downloads.
-
-On a real iPhone, set the server URL in the app settings to a LAN-reachable
-address, for example:
-
-```text
-http://192.168.1.50:3090
-```
-
-Do not use `localhost` on a real iPhone; that points to the phone itself.
-
-## Docker Run Example
-
-```bash
-docker run -d \
-  --name youtarr-feed \
-  --restart unless-stopped \
-  --add-host=host.docker.internal:host-gateway \
-  -p 3090:3000 \
-  -e YOUTARR_URL=http://host.docker.internal:3087 \
-  -e YOUTARR_USERNAME=your-username \
-  -e YOUTARR_PASSWORD=your-password \
-  -e YOUTARR_FEED_DATA_DIR=/data \
-  -e YOUTARR_MEDIA_DIR=/usr/src/app/data \
-  -v ./data:/data \
-  -v /path/to/youtarr/output:/usr/src/app/data:ro \
-  ghcr.io/nelisvanwijk/youtarr-feed:latest
-```
-
 ## Environment Variables
 
 | Variable | Required | Description |
 | --- | --- | --- |
 | `YOUTARR_URL` | Yes for live mode | URL reachable from the Youtarr Feed container. |
 | `YOUTARR_USERNAME` | Usually | Youtarr username. Not needed when using a session token or disabled auth. |
-| `YOUTARR_PASSWORD` | Usually | Youtarr password. Kept server-side only. |
+| `YOUTARR_PASSWORD` | Usually | Youtarr password. |
 | `YOUTARR_SESSION_TOKEN` | Optional | Alternative to username/password. Sessions may expire. |
-| `YOUTARR_AUTH_DISABLED` | Optional | Set to `true` only if your Youtarr auth is intentionally disabled. |
+| `YOUTARR_AUTH_DISABLED` | Optional | Set to `true` only if Youtarr auth is intentionally disabled. |
 | `YOUTARR_API_KEY` | Optional | Optional Youtarr API key for download commands. |
-| `YOUTUBE_API_KEY` | Optional | Fallback YouTube Data API key for enriching date-only publish values with exact timestamps. Prefer setting the key in Youtarr first. |
 | `YOUTARR_FEED_DATA_DIR` | Recommended | Persistent app data directory. Defaults to `/data` in production. |
-| `YOUTARR_FEED_CACHE_TTL_SECONDS` | Optional | Server-side feed/local-video cache duration. Defaults to `300`. |
-| `YOUTARR_MEDIA_DIR` | Recommended | Mount of the Youtarr output folder for direct streaming. |
-| `YOUTARR_SOURCE_MEDIA_DIR` | Optional | Media path prefix as stored by Youtarr. Defaults to `/usr/src/app/data`. Set this when Youtarr stores a different container path than Youtarr Feed uses for the same host folder. |
-| `YOUTARR_PLAYBACK_PROFILE` | Optional | Playback routing mode. Defaults to `auto`; advanced values are `primary`, `av1`, or `vp9`. |
-| `YOUTARR_VP9_URL` | Optional | Second Youtarr instance used automatically for iPad and Mac Safari playback. |
-| `YOUTARR_VP9_USERNAME` / `YOUTARR_VP9_PASSWORD` | Optional | Credentials for the VP9 instance. If omitted, the main Youtarr credentials are reused unless only `YOUTARR_VP9_API_KEY` is set. |
-| `YOUTARR_VP9_API_KEY` | Optional | API key for the VP9 instance. If it is the only VP9 credential, it is used directly. |
-| `YOUTARR_VP9_SESSION_TOKEN` | Optional | Session token for the VP9 instance. If omitted, the main session token is reused. |
-| `YOUTARR_VP9_AUTH_DISABLED` | Optional | Set to `true` only if auth is disabled on the VP9 instance. |
-| `YOUTARR_VP9_MEDIA_DIR` | Optional | Mount of the VP9 Youtarr output folder for direct local streaming. |
-| `YOUTARR_VP9_SOURCE_MEDIA_DIR` | Optional | Media path prefix as stored by the VP9 Youtarr instance. Defaults to `/usr/src/app/data`. |
-| `YOUTARR_AV1_URL` | Optional | Explicit AV1 playback instance. Usually not needed when the main Youtarr instance already owns AV1/highest-quality files. |
-| `YOUTARR_AV1_USERNAME` / `YOUTARR_AV1_PASSWORD` | Optional | Credentials for the AV1 instance. If omitted, the main Youtarr credentials are reused. |
-| `YOUTARR_AV1_API_KEY` | Optional | API key for the AV1 instance. |
-| `YOUTARR_AV1_SESSION_TOKEN` | Optional | Session token for the AV1 instance. If omitted, the main session token is reused. |
-| `YOUTARR_AV1_AUTH_DISABLED` | Optional | Set to `true` only if auth is disabled on the AV1 instance. |
-| `YOUTARR_AV1_MEDIA_DIR` | Optional | Mount of the AV1 Youtarr output folder for direct local streaming. |
-| `YOUTARR_AV1_SOURCE_MEDIA_DIR` | Optional | Media path prefix as stored by the AV1 Youtarr instance. Defaults to `/usr/src/app/data`. |
-| `PLEX_URL` | Optional | Plex server URL for refresh requests. |
-| `PLEX_TOKEN` | Optional | Plex token. |
-| `PLEX_LIBRARY_ID` | Optional | Numeric Plex library section ID. |
-| `PLEX_WATCH_SYNC_ENABLED` | Optional | Sync Youtarr Feed watch progress to Plex and import Plex progress when refreshing. Defaults to `true`; set to `false` to only use Plex library scans. |
+| `YOUTARR_FEED_CACHE_TTL_SECONDS` | Optional | Feed/local-video cache duration in seconds. Defaults to `300`. |
+| `YOUTARR_MEDIA_DIR` | Recommended | Youtarr Feed container path for the mounted Youtarr output folder. |
+| `YOUTARR_SOURCE_MEDIA_DIR` | Optional | Path prefix stored by Youtarr. Defaults to `/usr/src/app/data`. |
+| `YOUTARR_PLAYBACK_PROFILE` | Optional | Playback routing mode: `auto`, `primary`, `av1`, or `vp9`. Defaults to `auto`. |
+| `YOUTUBE_API_KEY` | Optional | Fallback YouTube Data API key for exact publish timestamps. Prefer setting this in Youtarr first. |
+
+### Optional Multi-Youtarr Playback
+
+You can run extra Youtarr instances for codec-specific playback. The main
+`YOUTARR_URL` remains the feed and download owner. Optional AV1/VP9 instances
+are used for playback routing, channel sync, download queueing, and best-effort
+delete sync.
+
+| Variable | Description |
+| --- | --- |
+| `YOUTARR_VP9_URL` | Optional VP9 playback instance. In `auto` mode, iPad and Mac Safari use it when configured. |
+| `YOUTARR_VP9_USERNAME` / `YOUTARR_VP9_PASSWORD` | Optional VP9 credentials. If omitted, main credentials are reused unless only `YOUTARR_VP9_API_KEY` is set. |
+| `YOUTARR_VP9_API_KEY` | Optional VP9 API key. |
+| `YOUTARR_VP9_SESSION_TOKEN` | Optional VP9 session token. |
+| `YOUTARR_VP9_AUTH_DISABLED` | Set to `true` only if auth is disabled on the VP9 instance. |
+| `YOUTARR_VP9_MEDIA_DIR` | Youtarr Feed container path for the VP9 media mount, for example `/usr/src/app/data-vp9`. |
+| `YOUTARR_VP9_SOURCE_MEDIA_DIR` | Path prefix stored by the VP9 Youtarr instance. Defaults to `/usr/src/app/data`. |
+| `YOUTARR_AV1_URL` | Optional explicit AV1 playback instance. |
+| `YOUTARR_AV1_USERNAME` / `YOUTARR_AV1_PASSWORD` | Optional AV1 credentials. If omitted, main credentials are reused. |
+| `YOUTARR_AV1_API_KEY` | Optional AV1 API key. |
+| `YOUTARR_AV1_SESSION_TOKEN` | Optional AV1 session token. |
+| `YOUTARR_AV1_AUTH_DISABLED` | Set to `true` only if auth is disabled on the AV1 instance. |
+| `YOUTARR_AV1_MEDIA_DIR` | Youtarr Feed container path for the AV1 media mount. |
+| `YOUTARR_AV1_SOURCE_MEDIA_DIR` | Path prefix stored by the AV1 Youtarr instance. Defaults to `/usr/src/app/data`. |
+
+If you already have channels in the main instance, open the Channels tab and use
+`Export CSV`. The exported `youtarr-subscriptions.csv` can be imported into
+another Youtarr instance.
+
+### Optional Plex Integration
+
+| Variable | Description |
+| --- | --- |
+| `PLEX_URL` | Plex server URL reachable from this container, for example `http://host.docker.internal:32400`. |
+| `PLEX_TOKEN` | Plex token. Kept server-side only. |
+| `PLEX_LIBRARY_ID` | Numeric Plex library section ID for the Youtarr library. |
+| `PLEX_WATCH_SYNC_ENABLED` | Defaults to `true`. When Plex is configured, Youtarr Feed pushes watch progress to Plex and imports Plex progress when refreshing. Set to `false` to only use Plex library scans. |
+
+Youtarr Feed matches Plex items by the YouTube video ID in the Youtarr file or
+folder name, for example `[v5Et1hTPlTk]`. No Plex path mapping is required.
+
+## Feed Ordering And Cache
+
+Youtarr Feed sorts by `publishedAt` from Youtarr. If Youtarr only returns a date,
+the app keeps a stable source order so videos from the same date do not reshuffle
+on every refresh.
+
+For exact ordering, add a YouTube Data API key in Youtarr's own integrations
+settings. As a fallback, Youtarr Feed can use `YOUTUBE_API_KEY`.
+
+The feed and Local tab are cached server-side under `/data`. Cached results are
+reused for 300 seconds by default. When stale, the old result is returned quickly
+and refreshed in the background. Manual refresh bypasses the cache and also
+refreshes local playback badges and watch progress.
 
 ## iPhone, AirPlay, And Codecs
 
-Direct local streaming can reduce buffering because it removes the Youtarr
-stream proxy from the playback path. It does not fix codec compatibility by
-itself.
-
-For Apple devices and AirPlay, the safest high-quality target is usually:
+Direct local streaming can reduce buffering, but it does not change codec
+compatibility. Apple devices are most reliable with:
 
 ```text
-MP4 container + HEVC/H.265 video + AAC audio
+MP4 container + HEVC/H.265 or H.264 video + AAC audio
 ```
 
-4K is possible on Apple TV with HEVC, but many YouTube 4K files are VP9 or AV1.
-Those may show black video, audio-only playback, or unstable AirPlay depending
-on the device, browser, and container.
+Many YouTube 4K files are VP9 or AV1. Depending on the Apple device, browser,
+and AirPlay target, those may show black video, audio-only playback, or fail to
+play.
 
-In Youtarr's yt-dlp custom arguments, Apple-friendly examples are:
+Useful Youtarr yt-dlp examples:
 
 ```bash
 -S "res,codec:hevc:h264,acodec:aac" --merge-output-format mp4
 ```
 
-Stricter compatibility, often lower than 4K:
+Maximum compatibility, often lower than 4K:
 
 ```bash
 -S vcodec:h264,acodec:aac --merge-output-format mp4
 ```
+
+## Updating
+
+The container image is published to GitHub Container Registry:
+
+```text
+ghcr.io/nelisvanwijk/youtarr-feed:latest
+```
+
+Update the container in Unraid or run:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+If iPhone PWA manifest changes such as orientation do not appear, remove the
+homescreen app and add it again from Safari. iOS can cache manifests
+aggressively.
+
+## Diagnostics
+
+The in-app Settings panel includes backend diagnostics. Use `Check connections`
+to verify active environment variables, masked secrets, media mounts, playback
+routing, and live connectivity to Youtarr, optional AV1/VP9 instances, and Plex.
 
 ## Development
 
@@ -449,7 +354,8 @@ Without Youtarr configuration the app starts in demo mode.
 ## Security
 
 Do not expose Youtarr or Youtarr Feed directly to the internet over plain HTTP.
-Use HTTPS through a reverse proxy or private access such as Tailscale/WireGuard.
+Use HTTPS through a reverse proxy or private access such as Tailscale or
+WireGuard.
 
 Mount the Youtarr media folder read-only in Youtarr Feed. Let Youtarr handle
 downloads and deletes.

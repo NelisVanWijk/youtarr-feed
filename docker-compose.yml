@@ -9,9 +9,6 @@ services:
       - "host.docker.internal:host-gateway"
     ports:
       - "3090:3000"
-    devices:
-      # Optional: Intel Quick Sync / VAAPI for Apple-compatible HLS transcoding.
-      - /dev/dri:/dev/dri
     volumes:
       - ./data:/data
       # Use the same host folder as Youtarr, read-only.
