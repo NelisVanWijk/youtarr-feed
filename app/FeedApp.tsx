@@ -21,6 +21,7 @@ import {
   faPause,
   faPlay,
   faRotateRight,
+  faThumbsUp,
   faTrash,
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
@@ -75,6 +76,7 @@ type StreamSourceInfo = {
 };
 type VideoMetadataInfo = {
   description?: string | null;
+  likeCount?: number | null;
   webpageUrl?: string | null;
 };
 type PlayerDragState = {
@@ -128,6 +130,13 @@ function formatDuration(seconds: number) {
   return hours
     ? `${hours}:${String(minutes).padStart(2, "0")}:${String(remaining).padStart(2, "0")}`
     : `${minutes}:${String(remaining).padStart(2, "0")}`;
+}
+
+function formatCompactNumber(value: number, copy: AppCopy) {
+  return new Intl.NumberFormat(copy.locale, {
+    notation: "compact",
+    maximumFractionDigits: 1,
+  }).format(value);
 }
 
 function relativeDate(value: string | null, copy: AppCopy) {
@@ -1589,6 +1598,9 @@ export default function FeedApp() {
   const descriptionCanCollapse =
     selectedDescription.length > 110 ||
     selectedDescription.split(/\r?\n/).filter(Boolean).length > 2;
+  const selectedLikeCount = selectedVideo
+    ? videoMetadata[selectedVideo.id]?.likeCount
+    : null;
 
   return (
     <div className={`app-shell ${selectedVideo ? "has-player" : ""}`}>
@@ -2316,7 +2328,15 @@ export default function FeedApp() {
               >
                 {selectedVideo.channelName}
               </button>
-              <span>{relativeDate(selectedVideo.publishedAt, copy)}</span>
+              <div className="watch-meta">
+                <span>{relativeDate(selectedVideo.publishedAt, copy)}</span>
+                {typeof selectedLikeCount === "number" && selectedLikeCount > 0 && (
+                  <span className="watch-like-count">
+                    <FontAwesomeIcon icon={faThumbsUp} aria-hidden="true" />
+                    {formatCompactNumber(selectedLikeCount, copy)}
+                  </span>
+                )}
+              </div>
               {selectedDescription && (
                 <div
                   className={`watch-description ${

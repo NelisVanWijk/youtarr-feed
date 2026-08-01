@@ -1376,6 +1376,27 @@ main {
   text-align: right;
 }
 
+.watch-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  color: var(--quiet);
+  font-size: 11px;
+}
+
+.watch-like-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.watch-like-count .svg-inline--fa {
+  width: 12px;
+  height: 12px;
+}
+
 .watch-description {
   grid-column: 1 / -1;
   margin-top: 8px;

@@ -22,6 +22,10 @@ export async function GET(
     const metadata = await getYoutarrVideoMetadata(id);
     return NextResponse.json({
       description: metadata.description || null,
+      likeCount:
+        typeof metadata.likeCount === "number" && Number.isFinite(metadata.likeCount)
+          ? metadata.likeCount
+          : null,
       webpageUrl: metadata.webpageUrl || null,
     });
   } catch (error) {

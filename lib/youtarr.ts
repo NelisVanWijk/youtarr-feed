@@ -68,6 +68,7 @@ type YoutarrVideoLocation = {
 
 export type YoutarrVideoMetadata = {
   description?: string | null;
+  likeCount?: number | null;
   webpageUrl?: string | null;
 };
 
