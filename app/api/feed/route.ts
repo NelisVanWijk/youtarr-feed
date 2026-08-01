@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { demoChannels, demoVideos } from "../../../lib/demo-data";
 import { getCachedVideoList } from "../../../lib/server-cache";
-import { getFeed, isYoutarrConfigured } from "../../../lib/youtarr";
+import {
+  clearAllYoutarrVideoLocationCache,
+  getFeed,
+  isYoutarrConfigured,
+} from "../../../lib/youtarr";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +20,9 @@ export async function GET(request: Request) {
 
   try {
     const refresh = new URL(request.url).searchParams.get("refresh") === "1";
+    if (refresh) {
+      clearAllYoutarrVideoLocationCache();
+    }
     const result = await getCachedVideoList("feed", getFeed, { refresh });
     return NextResponse.json(
       { mode: "live", ...result.data },

@@ -616,6 +616,10 @@ export default function FeedApp() {
   const loadFeed = useCallback(async (quiet = false, refresh = false) => {
     if (quiet) setRefreshing(true);
     else setLoading(true);
+    if (refresh) {
+      setStreamSources({});
+      setStreamSource(null);
+    }
     setError("");
     try {
       const [feedResponse, statusResponse] = await Promise.all([

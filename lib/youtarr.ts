@@ -705,6 +705,11 @@ export function clearYoutarrVideoLocationCache(youtubeId: string) {
   }
 }
 
+export function clearAllYoutarrVideoLocationCache() {
+  youtarrLocationCache.clear();
+  youtarrLocationScanPromises.clear();
+}
+
 function readCachedYoutarrVideoLocationForInstance(
   instance: YoutarrInstanceConfig,
   youtubeId: string
