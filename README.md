@@ -88,6 +88,15 @@ configured AV1/VP9 playback instance, so subscriptions stay aligned. Deleting
 from Youtarr Feed removes the video from the main instance and also best-effort
 deletes it from configured AV1/VP9 playback instances.
 
+If you already have channels in the main instance, open the Channels tab in
+Youtarr Feed and click `Export CSV`. The downloaded
+`youtarr-subscriptions.csv` uses the Google Takeout subscriptions format
+accepted by Youtarr's Import Channels screen:
+
+```text
+Channel Id,Channel Url,Channel Title
+```
+
 The Local tab uses Youtarr's downloaded-video state as its source of truth. It
 shows all videos Youtarr reports as downloaded and lets you play or delete them
 from one overview.

@@ -1986,6 +1986,15 @@ export default function FeedApp() {
                 <h1>{copy.channels.title}</h1>
                 <p>{copy.channels.subscriptions(feed?.channels.length || 0)}</p>
               </div>
+              <a
+                className="settings-link export-link"
+                href="/api/channels/export"
+                download="youtarr-subscriptions.csv"
+                aria-label={copy.channels.exportCsvAria}
+              >
+                <FontAwesomeIcon icon={faDownload} aria-hidden="true" />
+                {copy.channels.exportCsv}
+              </a>
             </section>
             <form className="add-channel-form" onSubmit={submitChannel}>
               <input

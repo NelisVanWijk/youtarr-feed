@@ -358,6 +358,18 @@ main {
   color: var(--text);
 }
 
+.export-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.export-link .svg-inline--fa {
+  width: 13px;
+  height: 13px;
+}
+
 .filter-row {
   max-width: 1480px;
   margin: 0 auto 25px;
@@ -1751,6 +1763,11 @@ main {
   .page-heading {
     margin-bottom: 20px;
     align-items: end;
+  }
+
+  .page-heading .export-link {
+    padding-right: 0;
+    white-space: nowrap;
   }
 
   .page-heading h1,
