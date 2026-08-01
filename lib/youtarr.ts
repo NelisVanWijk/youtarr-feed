@@ -255,6 +255,15 @@ function playbackInstanceForProfile(profile: YoutarrPlaybackProfile) {
   return configuredPlaybackInstance(profile) || primaryInstance;
 }
 
+function configuredSecondaryPlaybackInstances() {
+  return Object.values(playbackInstances).filter(
+    (instance): instance is YoutarrInstanceConfig =>
+      Boolean(instance) &&
+      instance.key !== "primary" &&
+      isYoutarrInstanceConfigured(instance)
+  );
+}
+
 function cacheKey(instanceKey: string, youtubeId: string) {
   return `${instanceKey}:${youtubeId}`;
 }
@@ -843,6 +852,40 @@ export async function queueDownload(
   if (!/^[A-Za-z0-9_-]{11}$/.test(youtubeId)) {
     throw new Error("Invalid video ID");
   }
+  const result = await queueDownloadOnInstance(primaryInstance, youtubeId, options);
+  const secondaryInstances = configuredSecondaryPlaybackInstances();
+  const secondaryResults = await Promise.allSettled(
+    secondaryInstances.map((instance) =>
+      queueDownloadOnInstance(instance, youtubeId, options)
+    )
+  );
+  const failures = secondaryResults
+    .map((secondaryResult, index) =>
+      secondaryResult.status === "rejected"
+        ? `${secondaryInstances[index].label}: ${
+            secondaryResult.reason instanceof Error
+              ? secondaryResult.reason.message
+              : "unknown error"
+          }`
+        : ""
+    )
+    .filter(Boolean);
+  if (failures.length > 0) {
+    throw new Error(
+      `Download was queued on the main Youtarr instance, but not every playback instance. ${failures.join("; ")}`
+    );
+  }
+  return result;
+}
+
+async function queueDownloadOnInstance(
+  instance: YoutarrInstanceConfig,
+  youtubeId: string,
+  options: {
+    allowRedownload?: boolean;
+    channelId?: string;
+  } = {}
+) {
   const url = `https://www.youtube.com/watch?v=${youtubeId}`;
   const body =
     options.allowRedownload
@@ -861,21 +904,13 @@ export async function queueDownload(
   const headers = new Headers({ "Content-Type": "application/json" });
   let response: Response;
   if (options.allowRedownload) {
-    response = await requestYoutarr("/triggerspecificdownloads", {
+    response = await requestYoutarrInstance(instance, "/triggerspecificdownloads", {
       method: "POST",
       headers,
       body: JSON.stringify(body),
-    });
-  } else if (configuredApiKey) {
-    headers.set("x-api-key", configuredApiKey);
-    response = await fetch(`${configuredUrl}/api/videos/download`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      cache: "no-store",
     });
   } else {
-    response = await requestYoutarr("/api/videos/download", {
+    response = await requestYoutarrInstance(instance, "/api/videos/download", {
       method: "POST",
       headers,
       body: JSON.stringify(body),
@@ -888,7 +923,9 @@ export async function queueDownload(
     message?: string;
   };
   if (!response.ok || data.success === false || data.status === "error") {
-    throw new Error(data.error || `Could not start download (${response.status})`);
+    throw new Error(
+      data.error || data.message || `Could not start download (${response.status})`
+    );
   }
   return data;
 }
@@ -899,14 +936,9 @@ export async function deleteDownload(youtubeId: string) {
   }
 
   const result = await deleteDownloadFromInstance(primaryInstance, youtubeId);
-  const secondaryDeletes = Object.values(playbackInstances)
-    .filter(
-      (instance): instance is YoutarrInstanceConfig =>
-        Boolean(instance) &&
-        instance.key !== "primary" &&
-        isYoutarrInstanceConfigured(instance)
-    )
-    .map((instance) => deleteDownloadFromInstance(instance, youtubeId));
+  const secondaryDeletes = configuredSecondaryPlaybackInstances().map((instance) =>
+    deleteDownloadFromInstance(instance, youtubeId)
+  );
   await Promise.allSettled(secondaryDeletes);
   clearYoutarrVideoLocationCache(youtubeId);
   return result;
@@ -937,12 +969,7 @@ export async function addChannel(url: string) {
   if (!normalized) throw new Error("Channel URL is required");
 
   const primaryChannel = await addChannelToInstance(primaryInstance, normalized);
-  const secondaryInstances = Object.values(playbackInstances).filter(
-    (instance): instance is YoutarrInstanceConfig =>
-      Boolean(instance) &&
-      instance.key !== "primary" &&
-      isYoutarrInstanceConfigured(instance)
-  );
+  const secondaryInstances = configuredSecondaryPlaybackInstances();
   const secondaryResults = await Promise.allSettled(
     secondaryInstances.map((instance) => addChannelToInstance(instance, normalized))
   );

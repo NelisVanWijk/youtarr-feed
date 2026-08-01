@@ -80,13 +80,13 @@ chooses the playback source server-side:
   explicitly configured.
 
 The thumbnail badge still only shows `Direct` or `Youtarr`; the codec routing is
-intentionally hidden. For best results, make both Youtarr instances subscribe to
-the same channels or otherwise download the same videos. Feed, channel
-management, and manual download actions still use the main `YOUTARR_URL`.
-Adding a channel from Youtarr Feed adds it to the main instance and every
-configured AV1/VP9 playback instance, so subscriptions stay aligned. Deleting
-from Youtarr Feed removes the video from the main instance and also best-effort
-deletes it from configured AV1/VP9 playback instances.
+intentionally hidden. Feed data comes from the main `YOUTARR_URL`. Adding a
+channel from Youtarr Feed adds it to the main instance and every configured
+AV1/VP9 playback instance, so subscriptions stay aligned. Starting a download
+from Youtarr Feed queues that video on the main instance and every configured
+AV1/VP9 playback instance. Deleting from Youtarr Feed removes the video from the
+main instance and also best-effort deletes it from configured AV1/VP9 playback
+instances.
 
 If you already have channels in the main instance, open the Channels tab in
 Youtarr Feed and click `Export CSV`. The downloaded
