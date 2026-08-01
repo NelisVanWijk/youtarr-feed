@@ -66,6 +66,11 @@ type YoutarrVideoLocation = {
   removed: boolean;
 };
 
+export type YoutarrVideoMetadata = {
+  description?: string | null;
+  webpageUrl?: string | null;
+};
+
 const configuredUrl = process.env.YOUTARR_URL?.trim().replace(/\/+$/, "") || "";
 const configuredSession = process.env.YOUTARR_SESSION_TOKEN?.trim() || "";
 const configuredUser = process.env.YOUTARR_USERNAME?.trim() || "";
@@ -307,6 +312,19 @@ export async function getYoutarrVideoLocation(
     downloaded: false,
     removed: false,
   });
+}
+
+export async function getYoutarrVideoMetadata(
+  youtubeId: string
+): Promise<YoutarrVideoMetadata> {
+  if (!isValidYoutubeId(youtubeId)) throw new Error("Invalid video ID");
+  const response = await requestYoutarr(
+    `/api/videos/${encodeURIComponent(youtubeId)}/metadata`
+  );
+  if (!response.ok) {
+    throw new Error(`Youtarr metadata request failed (${response.status})`);
+  }
+  return (await response.json()) as YoutarrVideoMetadata;
 }
 
 function toOrderedVideo(

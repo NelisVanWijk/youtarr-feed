@@ -9,6 +9,7 @@ import {
   faClone,
   faDownload,
   faEllipsisVertical,
+  faExpand,
   faFolderOpen,
   faHouse,
   faInbox,
@@ -24,7 +25,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, PointerEvent as ReactPointerEvent } from "react";
 import {
   defaultLanguage,
   isLanguage,
@@ -70,6 +71,17 @@ type StreamSourceInfo = {
     };
   };
   youtarrConfigured: boolean;
+};
+type VideoMetadataInfo = {
+  description?: string | null;
+  webpageUrl?: string | null;
+};
+type PlayerDragState = {
+  startX: number;
+  startY: number;
+  lastX: number;
+  lastY: number;
+  startedAt: number;
 };
 type DownloadJob = {
   state: "queueing" | "queued" | "error";
@@ -515,8 +527,11 @@ export default function FeedApp() {
   const [standaloneMode, setStandaloneMode] = useState(false);
   const [streamSource, setStreamSource] = useState<StreamSourceInfo | null>(null);
   const [streamSources, setStreamSources] = useState<Record<string, StreamSourceInfo>>({});
+  const [videoMetadata, setVideoMetadata] = useState<Record<string, VideoMetadataInfo>>({});
+  const [expandedDescriptions, setExpandedDescriptions] = useState<Record<string, boolean>>({});
   const progressSaveRef = useRef<Record<string, number>>({});
   const playerRef = useRef<HTMLVideoElement | null>(null);
+  const playerDragRef = useRef<PlayerDragState | null>(null);
   const intendedPlaybackRef = useRef(false);
   const pauseIntentTimerRef = useRef<number | null>(null);
   const mode: AppMode = feed?.mode || "demo";
@@ -736,6 +751,70 @@ export default function FeedApp() {
       void requestNativeFullscreen(playerRef.current);
     }
   }, [mode, playerMode, selectedVideo, shouldUseInlineWatchPage]);
+
+  useEffect(() => {
+    if (!selectedVideo || videoMetadata[selectedVideo.id]) return;
+
+    let stopped = false;
+    async function loadVideoMetadata() {
+      try {
+        const response = await fetch(
+          `/api/video-metadata/${encodeURIComponent(selectedVideo.id)}`,
+          { cache: "no-store" }
+        );
+        if (!response.ok) return;
+        const data = (await response.json()) as VideoMetadataInfo;
+        if (!stopped) {
+          setVideoMetadata((current) => ({
+            ...current,
+            [selectedVideo.id]: data,
+          }));
+        }
+      } catch {
+        // Metadata is optional; playback should not depend on it.
+      }
+    }
+
+    void loadVideoMetadata();
+    return () => {
+      stopped = true;
+    };
+  }, [selectedVideo, videoMetadata]);
+
+  useEffect(() => {
+    if (
+      !selectedVideo?.downloaded ||
+      mode !== "live" ||
+      playerMode !== "full" ||
+      !shouldUseInlineWatchPage()
+    ) {
+      return;
+    }
+
+    const requestLandscapeFullscreen = () => {
+      const isPhoneLandscape =
+        window.innerWidth <= 900 &&
+        window.matchMedia("(orientation: landscape)").matches;
+      if (isPhoneLandscape && playerRef.current) {
+        void requestNativeFullscreen(playerRef.current);
+      }
+    };
+
+    const timer = window.setTimeout(requestLandscapeFullscreen, 120);
+    window.addEventListener("orientationchange", requestLandscapeFullscreen);
+    window.addEventListener("resize", requestLandscapeFullscreen);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("orientationchange", requestLandscapeFullscreen);
+      window.removeEventListener("resize", requestLandscapeFullscreen);
+    };
+  }, [
+    mode,
+    playerMode,
+    selectedVideo?.downloaded,
+    selectedVideo?.id,
+    shouldUseInlineWatchPage,
+  ]);
 
   useEffect(() => {
     const refreshSourceLabels = () => {
@@ -1089,6 +1168,45 @@ export default function FeedApp() {
     setPlayerPlaying(false);
     setDeleteState("idle");
     setDeleteError("");
+  }
+
+  function handlePlayerDragStart(event: ReactPointerEvent<HTMLDivElement>) {
+    if (playerMode !== "full" || !selectedVideo?.downloaded) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    playerDragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      startedAt: Date.now(),
+    };
+  }
+
+  function handlePlayerDragMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = playerDragRef.current;
+    if (!drag) return;
+    drag.lastX = event.clientX;
+    drag.lastY = event.clientY;
+  }
+
+  function handlePlayerDragEnd() {
+    const drag = playerDragRef.current;
+    playerDragRef.current = null;
+    if (!drag || playerMode !== "full" || !selectedVideo?.downloaded) return;
+
+    const deltaX = drag.lastX - drag.startX;
+    const deltaY = drag.lastY - drag.startY;
+    const elapsed = Math.max(1, Date.now() - drag.startedAt);
+    const velocity = deltaY / elapsed;
+    if (deltaY > 78 && Math.abs(deltaX) < 110 && velocity > 0.18) {
+      setPlayerMode("mini");
+    }
+  }
+
+  function requestPlayerFullscreen() {
+    if (playerRef.current) {
+      void requestNativeFullscreen(playerRef.current);
+    }
   }
 
   function closePlayer() {
@@ -1461,9 +1579,16 @@ export default function FeedApp() {
     ? `/api/stream/${selectedVideoId}`
     : "";
   const inlineWatchPage = selectedVideo ? shouldUseInlineWatchPage() : false;
+  const selectedDescription = selectedVideo
+    ? videoMetadata[selectedVideo.id]?.description?.trim() || ""
+    : "";
+  const descriptionExpanded = selectedVideo
+    ? expandedDescriptions[selectedVideo.id] === true
+    : false;
+  const descriptionCanCollapse = selectedDescription.length > 280;
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${selectedVideo ? "has-player" : ""}`}>
       <header className="topbar">
         <button className="brand" onClick={() => switchView("feed")}>
           <span className="brand-mark">
@@ -2003,39 +2128,63 @@ export default function FeedApp() {
             aria-modal="true"
             aria-label={selectedVideo.title}
           >
-            <button
-              className={`modal-close ${
-                playerMode === "mini" ? "modal-close-x" : "modal-close-minimize"
-              }`}
-              onMouseDown={(event) => event.stopPropagation()}
-              onClick={closePlayer}
-              aria-label={playerMode === "mini" ? copy.common.close : copy.common.minimize}
-            >
-              <FontAwesomeIcon
-                icon={playerMode === "mini" ? faXmark : faMinus}
-                aria-hidden="true"
-              />
-            </button>
-            {playerMode === "full" &&
-              standaloneMode &&
-              selectedVideo.downloaded &&
-              mode === "live" && (
+            {playerMode === "mini" ? (
+              <button
+                className="modal-close modal-close-x"
+                onMouseDown={(event) => event.stopPropagation()}
+                onClick={closePlayer}
+                aria-label={copy.common.close}
+              >
+                <FontAwesomeIcon icon={faXmark} aria-hidden="true" />
+              </button>
+            ) : (
+              <div
+                className="player-actions"
+                onMouseDown={(event) => event.stopPropagation()}
+                onPointerDown={(event) => event.stopPropagation()}
+              >
                 <button
-                  className="modal-pip"
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onClick={() => {
-                    if (playerRef.current) {
-                      void requestManualPictureInPicture(playerRef.current);
-                    }
-                  }}
-                  aria-label={copy.player.pip}
+                  className="player-action-button"
+                  onClick={closePlayer}
+                  aria-label={copy.common.minimize}
                 >
-                  <FontAwesomeIcon icon={faClone} aria-hidden="true" />
+                  <FontAwesomeIcon icon={faMinus} aria-hidden="true" />
                 </button>
-              )}
+                {selectedVideo.downloaded && mode === "live" && (
+                  <button
+                    className="player-action-button"
+                    onClick={requestPlayerFullscreen}
+                    aria-label={copy.common.fullscreen}
+                  >
+                    <FontAwesomeIcon icon={faExpand} aria-hidden="true" />
+                  </button>
+                )}
+                {standaloneMode && selectedVideo.downloaded && mode === "live" && (
+                  <button
+                    className="player-action-button"
+                    onClick={() => {
+                      if (playerRef.current) {
+                        void requestManualPictureInPicture(playerRef.current);
+                      }
+                    }}
+                    aria-label={copy.player.pip}
+                  >
+                    <FontAwesomeIcon icon={faClone} aria-hidden="true" />
+                  </button>
+                )}
+              </div>
+            )}
             {selectedVideo.downloaded && mode === "live" ? (
               <>
-                <div className="player-frame">
+                <div
+                  className="player-frame"
+                  onPointerDown={handlePlayerDragStart}
+                  onPointerMove={handlePlayerDragMove}
+                  onPointerUp={handlePlayerDragEnd}
+                  onPointerCancel={() => {
+                    playerDragRef.current = null;
+                  }}
+                >
                   <video
                     ref={playerRef}
                     className="player"
@@ -2165,6 +2314,30 @@ export default function FeedApp() {
                 {selectedVideo.channelName}
               </button>
               <span>{relativeDate(selectedVideo.publishedAt, copy)}</span>
+              {selectedDescription && (
+                <div
+                  className={`watch-description ${
+                    descriptionExpanded ? "watch-description-expanded" : ""
+                  }`}
+                >
+                  <p>{selectedDescription}</p>
+                  {descriptionCanCollapse && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setExpandedDescriptions((current) => ({
+                          ...current,
+                          [selectedVideo.id]: !descriptionExpanded,
+                        }));
+                      }}
+                    >
+                      {descriptionExpanded
+                        ? copy.player.descriptionShowLess
+                        : copy.player.descriptionShowMore}
+                    </button>
+                  )}
+                </div>
+              )}
               {selectedVideo.downloaded && (
                 <p
                   className={`stream-source stream-source-${streamSource?.source || "unknown"}`}

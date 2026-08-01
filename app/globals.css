@@ -1043,13 +1043,14 @@ main {
   box-shadow: none;
 }
 
-.modal-close {
+.modal-close,
+.player-action-button {
   position: absolute;
   z-index: 5;
   top: 12px;
   right: 12px;
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   display: grid;
   place-items: center;
   background: rgba(11, 11, 12, 0.74);
@@ -1061,34 +1062,24 @@ main {
   backdrop-filter: blur(8px);
 }
 
-.modal-close .svg-inline--fa {
+.modal-close .svg-inline--fa,
+.player-action-button .svg-inline--fa {
   width: 14px;
   height: 14px;
 }
 
-.modal-pip {
+.player-actions {
   position: absolute;
   z-index: 5;
-  top: 12px;
-  right: 54px;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  display: grid;
-  place-items: center;
-  background: rgba(11, 11, 12, 0.74);
-  border: 1px solid rgba(255, 255, 255, 0.11);
-  border-radius: 999px;
-  color: #fff;
-  font-size: 11px;
-  font-weight: 800;
-  line-height: 1;
-  backdrop-filter: blur(8px);
+  top: max(12px, var(--safe-top));
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.modal-pip .svg-inline--fa {
-  width: 14px;
-  height: 14px;
+.player-actions .player-action-button {
+  position: static;
 }
 
 .player-frame {
@@ -1096,6 +1087,7 @@ main {
   width: 100%;
   background: #000;
   border-radius: 18px 18px 0 0;
+  touch-action: pan-y;
 }
 
 .player {
@@ -1382,6 +1374,39 @@ main {
   color: var(--quiet);
   font-size: 11px;
   text-align: right;
+}
+
+.watch-description {
+  grid-column: 1 / -1;
+  margin-top: 8px;
+  padding: 11px 12px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 10px;
+}
+
+.watch-description p {
+  margin: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: #e7e7e8;
+  font-size: 13px;
+  line-height: 1.48;
+  white-space: pre-wrap;
+}
+
+.watch-description-expanded p {
+  display: block;
+  overflow: visible;
+}
+
+.watch-description button {
+  margin-top: 8px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .stream-source {
@@ -1886,6 +1911,29 @@ main {
     padding: 70px 18px calc(22px + var(--safe-bottom));
   }
 
+  .player-actions {
+    top: calc(10px + var(--safe-top));
+    right: 10px;
+    gap: 7px;
+  }
+
+  .player-action-button {
+    width: 42px;
+    height: 42px;
+  }
+
+  .player-backdrop .video-modal-watch-page .modal-copy {
+    padding: 14px 14px calc(28px + var(--safe-bottom));
+  }
+
+  .video-modal-watch-page .modal-copy h2 {
+    font-size: 19px;
+  }
+
+  .watch-description {
+    padding: 10px;
+  }
+
   .video-modal-mini .player,
   .video-modal-mini .player-frame {
     border-radius: 13px;
@@ -1906,6 +1954,22 @@ main {
 }
 
 @media (max-width: 900px) and (orientation: landscape) {
+  .app-shell.has-player .orientation-guard {
+    display: none;
+  }
+
+  .app-shell.has-player .watch-page-backdrop {
+    overflow: hidden;
+  }
+
+  .app-shell.has-player .player-backdrop .video-modal-watch-page .player-frame {
+    height: 100dvh;
+  }
+
+  .app-shell.has-player .player-backdrop .video-modal-watch-page .modal-copy {
+    display: none;
+  }
+
   .orientation-guard {
     position: fixed;
     z-index: 220;

@@ -49,6 +49,7 @@ export const translations = {
       pause: "Pause",
       close: "Close",
       minimize: "Minimize",
+      fullscreen: "Fullscreen",
       deleteDownload: "Delete download",
       removeFromSingles: "Remove from single videos",
       connected: "Connected",
@@ -162,6 +163,8 @@ export const translations = {
           mediaDir || "media mount"
         }.`,
       sourceCheckingBody: "Checking which stream path is being used.",
+      descriptionShowMore: "Show more",
+      descriptionShowLess: "Show less",
       deleting: "Deleting",
     },
     settings: {
@@ -221,6 +224,7 @@ export const translations = {
       pause: "Pauzeren",
       close: "Sluiten",
       minimize: "Klein maken",
+      fullscreen: "Volledig scherm",
       deleteDownload: "Download verwijderen",
       removeFromSingles: "Uit losse video's verwijderen",
       connected: "Verbonden",
@@ -334,6 +338,8 @@ export const translations = {
           mediaDir || "media-mount"
         }.`,
       sourceCheckingBody: "Even kijken welk stream-pad wordt gebruikt.",
+      descriptionShowMore: "Meer weergeven",
+      descriptionShowLess: "Minder weergeven",
       deleting: "Verwijderen",
     },
     settings: {
