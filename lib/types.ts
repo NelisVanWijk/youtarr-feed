@@ -7,6 +7,43 @@ export interface FeedStatus {
   server?: string;
   plexConfigured?: boolean;
   plexServer?: string;
+  diagnostics?: AppDiagnostics;
+}
+
+export interface SettingValue {
+  key: string;
+  label: string;
+  value: string;
+  secret?: boolean;
+}
+
+export interface ConnectionStatus {
+  ok: boolean;
+  status?: number;
+  message: string;
+}
+
+export interface ServiceDiagnostic {
+  key: string;
+  label: string;
+  configured: boolean;
+  connection: ConnectionStatus;
+  settings: SettingValue[];
+}
+
+export interface YoutarrDiagnostics {
+  playbackProfile: string;
+  effectiveProfiles: {
+    ipadMacSafari: string;
+    iphone: string;
+    fallback: string;
+  };
+  instances: ServiceDiagnostic[];
+}
+
+export interface AppDiagnostics {
+  youtarr: YoutarrDiagnostics;
+  plex: ServiceDiagnostic;
 }
 
 export interface Channel {

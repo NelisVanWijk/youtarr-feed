@@ -1,4 +1,12 @@
-import type { Channel, DownloadActivity, FeedVideo } from "./types";
+import type {
+  Channel,
+  ConnectionStatus,
+  DownloadActivity,
+  FeedVideo,
+  ServiceDiagnostic,
+  SettingValue,
+  YoutarrDiagnostics,
+} from "./types";
 
 type YoutarrChannel = {
   channel_id?: string;
@@ -267,6 +275,186 @@ function configuredSecondaryPlaybackInstances() {
       instance.key !== "primary" &&
       isYoutarrInstanceConfigured(instance)
   );
+}
+
+function hasOwnEnv(prefix: "YOUTARR" | "YOUTARR_AV1" | "YOUTARR_VP9", key: string) {
+  return Boolean(process.env[`${prefix}_${key}`]?.trim());
+}
+
+function secretState(value: string) {
+  return value ? "Set" : "Not set";
+}
+
+function authMethod(instance: YoutarrInstanceConfig) {
+  if (instance.authDisabled) return "Auth disabled";
+  if (instance.sessionToken) return "Session token";
+  if (instance.username && instance.password) return "Username/password";
+  if (instance.apiKey) return "API key only";
+  return "Missing";
+}
+
+function inheritedValue(
+  prefix: "YOUTARR_AV1" | "YOUTARR_VP9",
+  key: "USERNAME" | "PASSWORD" | "SESSION_TOKEN" | "API_KEY",
+  value: string
+) {
+  if (!value) return "Not set";
+  return hasOwnEnv(prefix, key) ? "Set" : "Inherited";
+}
+
+function youtarrSettings(
+  instance: YoutarrInstanceConfig,
+  prefix: "YOUTARR" | "YOUTARR_AV1" | "YOUTARR_VP9"
+): SettingValue[] {
+  const ownSecret = (key: "USERNAME" | "PASSWORD" | "SESSION_TOKEN" | "API_KEY", value: string) =>
+    prefix === "YOUTARR" ? secretState(value) : inheritedValue(prefix, key, value);
+
+  return [
+    { key: `${prefix}_URL`, label: "URL", value: instance.url || "Not set" },
+    {
+      key: `${prefix}_AUTH`,
+      label: "Auth method",
+      value: authMethod(instance),
+    },
+    {
+      key: `${prefix}_USERNAME`,
+      label: "Username",
+      value: ownSecret("USERNAME", instance.username),
+      secret: true,
+    },
+    {
+      key: `${prefix}_PASSWORD`,
+      label: "Password",
+      value: ownSecret("PASSWORD", instance.password),
+      secret: true,
+    },
+    {
+      key: `${prefix}_SESSION_TOKEN`,
+      label: "Session token",
+      value: ownSecret("SESSION_TOKEN", instance.sessionToken),
+      secret: true,
+    },
+    {
+      key: `${prefix}_API_KEY`,
+      label: "API key",
+      value: ownSecret("API_KEY", instance.apiKey),
+      secret: true,
+    },
+    {
+      key: `${prefix}_MEDIA_DIR`,
+      label: "Media directory",
+      value: instance.mediaDirectory || "Not set",
+    },
+    {
+      key: `${prefix}_SOURCE_MEDIA_DIR`,
+      label: "Source media directory",
+      value: instance.sourceMediaDirectory || "Not set",
+    },
+  ];
+}
+
+function timeoutSignal(ms: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return {
+    signal: controller.signal,
+    clear: () => clearTimeout(timer),
+  };
+}
+
+async function checkYoutarrInstance(
+  instance: YoutarrInstanceConfig | null
+): Promise<ConnectionStatus> {
+  if (!instance?.url) return { ok: false, message: "URL is not set" };
+  if (!isYoutarrInstanceConfigured(instance)) {
+    return { ok: false, message: "Authentication is not configured" };
+  }
+
+  const timeout = timeoutSignal(8000);
+  try {
+    const response = await requestYoutarrInstance(
+      instance,
+      "/getchannels?page=1&pageSize=1&sortBy=name&sortOrder=asc",
+      { signal: timeout.signal }
+    );
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        message: `Connection failed (${response.status})`,
+      };
+    }
+    const data = (await response.json().catch(() => ({}))) as {
+      totalChannels?: number;
+      channels?: unknown[];
+    };
+    const count =
+      typeof data.totalChannels === "number"
+        ? `${data.totalChannels} channels`
+        : Array.isArray(data.channels)
+          ? `${data.channels.length}+ channels`
+          : "Connected";
+    return { ok: true, status: response.status, message: count };
+  } catch (error) {
+    return {
+      ok: false,
+      message:
+        error instanceof Error && error.name === "AbortError"
+          ? "Connection timed out"
+          : error instanceof Error
+            ? error.message
+            : "Connection failed",
+    };
+  } finally {
+    timeout.clear();
+  }
+}
+
+async function youtarrDiagnostic(
+  instance: YoutarrInstanceConfig | null,
+  prefix: "YOUTARR" | "YOUTARR_AV1" | "YOUTARR_VP9",
+  fallback: YoutarrInstanceConfig
+): Promise<ServiceDiagnostic> {
+  const resolved = instance || fallback;
+  return {
+    key: resolved.key,
+    label: resolved.label,
+    configured: isYoutarrInstanceConfigured(instance),
+    connection: await checkYoutarrInstance(instance),
+    settings: youtarrSettings(resolved, prefix),
+  };
+}
+
+export async function getYoutarrDiagnostics(): Promise<YoutarrDiagnostics> {
+  return {
+    playbackProfile: configuredPlaybackProfile,
+    effectiveProfiles: {
+      ipadMacSafari: selectYoutarrPlaybackProfile(
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15"
+      ),
+      iphone: selectYoutarrPlaybackProfile(
+        "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+      ),
+      fallback: selectYoutarrPlaybackProfile("Mozilla/5.0"),
+    },
+    instances: await Promise.all([
+      youtarrDiagnostic(primaryInstance, "YOUTARR", primaryInstance),
+      youtarrDiagnostic(playbackInstances.vp9, "YOUTARR_VP9", {
+        ...primaryInstance,
+        key: "vp9",
+        label: "Youtarr VP9",
+        url: "",
+        mediaDirectory: "",
+      }),
+      youtarrDiagnostic(playbackInstances.av1, "YOUTARR_AV1", {
+        ...primaryInstance,
+        key: "av1",
+        label: "Youtarr AV1",
+        url: "",
+        mediaDirectory: "",
+      }),
+    ]),
+  };
 }
 
 function cacheKey(instanceKey: string, youtubeId: string) {

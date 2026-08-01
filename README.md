@@ -223,6 +223,11 @@ video links are stored there and survive container updates:
 If watch progress or single videos disappear after updates, check that `/data`
 is mapped to a persistent host path.
 
+The in-app Settings panel includes backend diagnostics. Use `Check connections`
+to verify the active environment variables, masked secret presence, media path
+mappings, playback routing, and live connectivity to the main, VP9, AV1, and
+Plex services.
+
 ### Youtarr Permissions On Unraid
 
 For Youtarr itself, the upstream Unraid documentation recommends running as

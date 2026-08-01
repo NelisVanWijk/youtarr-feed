@@ -43,6 +43,7 @@ import type {
   FeedResponse,
   FeedStatus,
   FeedVideo,
+  ServiceDiagnostic,
   WatchProgressEntry,
   WatchProgressMap,
 } from "../lib/types";
@@ -127,6 +128,47 @@ function ChannelExportLink({ copy }: { copy: AppCopy }) {
       <FontAwesomeIcon icon={faDownload} aria-hidden="true" />
       {copy.channels.exportCsv}
     </a>
+  );
+}
+
+function DiagnosticCard({
+  diagnostic,
+  copy,
+}: {
+  diagnostic: ServiceDiagnostic;
+  copy: AppCopy;
+}) {
+  return (
+    <article className="diagnostic-card">
+      <header>
+        <div>
+          <strong>{diagnostic.label}</strong>
+          <small>
+            {diagnostic.configured
+              ? copy.settings.configured
+              : copy.settings.notConfigured}
+          </small>
+        </div>
+        <span
+          className={`diagnostic-state ${
+            diagnostic.connection.ok ? "diagnostic-ok" : "diagnostic-error"
+          }`}
+        >
+          {diagnostic.connection.ok
+            ? copy.settings.connectionOk
+            : copy.settings.connectionIssue}
+        </span>
+      </header>
+      <p>{diagnostic.connection.message}</p>
+      <div className="diagnostic-settings">
+        {diagnostic.settings.map((setting) => (
+          <div key={setting.key}>
+            <span>{setting.key}</span>
+            <strong>{setting.value}</strong>
+          </div>
+        ))}
+      </div>
+    </article>
   );
 }
 
@@ -551,6 +593,7 @@ export default function FeedApp() {
   >("idle");
   const [singleVideoMessage, setSingleVideoMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsChecking, setSettingsChecking] = useState(false);
   const [standaloneMode, setStandaloneMode] = useState(false);
   const [streamSource, setStreamSource] = useState<StreamSourceInfo | null>(null);
   const [streamSources, setStreamSources] = useState<Record<string, StreamSourceInfo>>({});
@@ -603,6 +646,23 @@ export default function FeedApp() {
     const timer = window.setTimeout(() => void loadFeed(), 0);
     return () => window.clearTimeout(timer);
   }, [loadFeed]);
+
+  const refreshStatus = useCallback(async () => {
+    setSettingsChecking(true);
+    try {
+      const response = await fetch("/api/status", { cache: "no-store" });
+      if (!response.ok) return;
+      setStatus((await response.json()) as FeedStatus);
+    } finally {
+      setSettingsChecking(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!settingsOpen) return undefined;
+    const timer = window.setTimeout(() => void refreshStatus(), 0);
+    return () => window.clearTimeout(timer);
+  }, [refreshStatus, settingsOpen]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadSingleVideos(true), 0);
@@ -2546,6 +2606,58 @@ export default function FeedApp() {
                 </strong>
               </div>
             </div>
+            {status?.diagnostics && (
+              <div className="settings-diagnostics">
+                <div className="settings-diagnostics-heading">
+                  <div>
+                    <span className="eyebrow">{copy.settings.diagnosticsEyebrow}</span>
+                    <h3>{copy.settings.diagnosticsTitle}</h3>
+                  </div>
+                  <button
+                    className={`settings-check-button ${
+                      settingsChecking ? "spinning" : ""
+                    }`}
+                    onClick={() => void refreshStatus()}
+                    disabled={settingsChecking}
+                  >
+                    <FontAwesomeIcon icon={faRotateRight} aria-hidden="true" />
+                    {settingsChecking
+                      ? copy.settings.checkingConnections
+                      : copy.settings.checkConnections}
+                  </button>
+                </div>
+                <div className="playback-routing">
+                  <div>
+                    <span>{copy.settings.playbackProfileLabel}</span>
+                    <strong>{status.diagnostics.youtarr.playbackProfile}</strong>
+                  </div>
+                  <div>
+                    <span>{copy.settings.ipadMacSafariLabel}</span>
+                    <strong>
+                      {status.diagnostics.youtarr.effectiveProfiles.ipadMacSafari}
+                    </strong>
+                  </div>
+                  <div>
+                    <span>{copy.settings.iphoneLabel}</span>
+                    <strong>{status.diagnostics.youtarr.effectiveProfiles.iphone}</strong>
+                  </div>
+                  <div>
+                    <span>{copy.settings.fallbackLabel}</span>
+                    <strong>{status.diagnostics.youtarr.effectiveProfiles.fallback}</strong>
+                  </div>
+                </div>
+                <div className="diagnostic-grid">
+                  {status.diagnostics.youtarr.instances.map((diagnostic) => (
+                    <DiagnosticCard
+                      key={diagnostic.key}
+                      diagnostic={diagnostic}
+                      copy={copy}
+                    />
+                  ))}
+                  <DiagnosticCard diagnostic={status.diagnostics.plex} copy={copy} />
+                </div>
+              </div>
+            )}
             <button className="primary-button" onClick={() => setSettingsOpen(false)}>
               {copy.common.done}
             </button>
