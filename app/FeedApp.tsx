@@ -622,9 +622,12 @@ export default function FeedApp() {
     }
     setError("");
     try {
-      const [feedResponse, statusResponse] = await Promise.all([
+      const [feedResponse, statusResponse, progressResponse] = await Promise.all([
         fetch(`/api/feed${refresh ? "?refresh=1" : ""}`, { cache: "no-store" }),
         fetch("/api/status", { cache: "no-store" }),
+        fetch(`/api/watch-progress${refresh ? "?refresh=1" : ""}`, {
+          cache: "no-store",
+        }),
       ]);
       const feedData = (await feedResponse.json()) as FeedResponse & {
         error?: string;
@@ -633,6 +636,12 @@ export default function FeedApp() {
       if (!feedResponse.ok) throw new Error(feedData.error || copy.errors.loadFeed);
       setFeed(feedData);
       setStatus(statusData);
+      if (progressResponse.ok) {
+        const progressData = (await progressResponse.json()) as {
+          progress?: WatchProgressMap;
+        };
+        setWatchProgress(progressData.progress || {});
+      }
       if (!refresh && feedResponse.headers.get("X-Youtarr-Feed-Cache") === "stale") {
         window.setTimeout(() => void loadFeed(true, true), 500);
       }

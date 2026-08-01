@@ -393,7 +393,7 @@ docker run -d \
 | `PLEX_URL` | Optional | Plex server URL for refresh requests. |
 | `PLEX_TOKEN` | Optional | Plex token. |
 | `PLEX_LIBRARY_ID` | Optional | Numeric Plex library section ID. |
-| `PLEX_WATCH_SYNC_ENABLED` | Optional | Sync Youtarr Feed watch progress to Plex when Plex is configured. Defaults to `true`; set to `false` to only use Plex library scans. |
+| `PLEX_WATCH_SYNC_ENABLED` | Optional | Sync Youtarr Feed watch progress to Plex and import Plex progress when refreshing. Defaults to `true`; set to `false` to only use Plex library scans. |
 
 ## iPhone, AirPlay, And Codecs
 

@@ -1,16 +1,29 @@
 import { NextResponse } from "next/server";
-import { syncPlexWatchProgress } from "../../../lib/plex";
+import { importPlexWatchProgress, syncPlexWatchProgress } from "../../../lib/plex";
 import {
   clearWatchProgress,
   readWatchProgress,
+  replaceWatchProgress,
   updateWatchProgress,
 } from "../../../lib/watch-progress";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    return NextResponse.json({ progress: await readWatchProgress() });
+    const refresh = new URL(request.url).searchParams.get("refresh") === "1";
+    if (!refresh) {
+      return NextResponse.json({ progress: await readWatchProgress() });
+    }
+
+    const [current, plexImport] = await Promise.all([
+      readWatchProgress(),
+      importPlexWatchProgress(),
+    ]);
+    const next = { ...current, ...plexImport.progress };
+    plexImport.watchedVideoIds.forEach((videoId) => delete next[videoId]);
+
+    return NextResponse.json({ progress: await replaceWatchProgress(next) });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Could not load watch progress" },

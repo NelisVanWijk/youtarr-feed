@@ -86,3 +86,20 @@ export function clearWatchProgress(videoId: string): Promise<WatchProgressMap> {
 
   return writeQueue;
 }
+
+export function replaceWatchProgress(
+  progress: WatchProgressMap
+): Promise<WatchProgressMap> {
+  writeQueue = writeQueue.then(async () => {
+    const normalized = Object.fromEntries(
+      Object.entries(progress)
+        .map(([videoId, entry]) => normalizeEntry({ ...entry, videoId }))
+        .filter((entry): entry is WatchProgressEntry => entry !== null)
+        .map((entry) => [entry.videoId, entry])
+    );
+    await writeWatchProgress(normalized);
+    return normalized;
+  });
+
+  return writeQueue;
+}

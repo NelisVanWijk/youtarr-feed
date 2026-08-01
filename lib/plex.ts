@@ -1,4 +1,4 @@
-import type { ServiceDiagnostic, SettingValue } from "./types";
+import type { ServiceDiagnostic, SettingValue, WatchProgressMap } from "./types";
 
 const plexUrl = process.env.PLEX_URL?.trim().replace(/\/+$/, "") || "";
 const plexToken = process.env.PLEX_TOKEN?.trim() || "";
@@ -25,6 +25,9 @@ type PlexMetadata = {
   ratingKey?: string;
   key?: string;
   title?: string;
+  duration?: number;
+  viewOffset?: number;
+  viewCount?: number;
   Media?: PlexMedia[];
 };
 
@@ -36,6 +39,17 @@ type PlexLibraryResponse = {
   };
 };
 
+type PlexImportedProgress =
+  | {
+      videoId: string;
+      watched: true;
+    }
+  | {
+      videoId: string;
+      watched: false;
+      entry: WatchProgressMap[string];
+    };
+
 const plexRatingKeyCache = new Map<
   string,
   { ratingKey: string | null; expiresAt: number }
@@ -44,6 +58,8 @@ const plexProgressSyncCache = new Map<
   string,
   { currentTime: number; syncedAt: number; watched: boolean }
 >();
+
+const youtubeIdPattern = /(?:\[|[-_\s])([A-Za-z0-9_-]{11})(?:\]|\.|$)/;
 
 export function isPlexConfigured() {
   return Boolean(plexUrl && plexToken && /^\d+$/.test(plexLibraryId));
@@ -111,6 +127,11 @@ function isValidYoutubeId(value: string) {
 function plexFileMatchesVideoId(file: string | undefined, videoId: string) {
   if (!file) return false;
   return file.includes(`[${videoId}]`) || file.includes(`-${videoId}`) || file.includes(videoId);
+}
+
+function youtubeIdFromPlexFile(file: string | undefined) {
+  if (!file) return null;
+  return file.match(youtubeIdPattern)?.[1] || null;
 }
 
 function ratingKeyFromMetadata(metadata: PlexMetadata, videoId: string) {
@@ -226,6 +247,82 @@ export async function syncPlexWatchProgress(entry: {
     syncedAt: Date.now(),
     watched,
   });
+}
+
+function progressFromPlexMetadata(
+  metadata: PlexMetadata
+): PlexImportedProgress | null {
+  const videoId = (metadata.Media || [])
+    .flatMap((media) => media.Part || [])
+    .map((part) => youtubeIdFromPlexFile(part.file))
+    .find((id): id is string => Boolean(id));
+  if (!videoId) return null;
+
+  const duration = Number(metadata.duration) / 1000;
+  const currentTime = Number(metadata.viewOffset) / 1000;
+  if (!Number.isFinite(duration) || duration <= 0) return null;
+  if (metadata.viewCount && metadata.viewCount > 0) return { videoId, watched: true };
+  if (!Number.isFinite(currentTime) || currentTime < 5) return null;
+  if (currentTime > duration - 8) {
+    return { videoId, watched: true };
+  }
+
+  return {
+    videoId,
+    watched: false,
+    entry: {
+      videoId,
+      currentTime,
+      duration,
+      updatedAt: Date.now(),
+    },
+  };
+}
+
+export async function importPlexWatchProgress() {
+  if (!isPlexWatchSyncConfigured()) {
+    return { progress: {}, watchedVideoIds: [] };
+  }
+
+  const imported = new Map<string, PlexImportedProgress>();
+  const pageSize = 500;
+  const maxPages = 20;
+
+  for (let page = 0; page < maxPages; page += 1) {
+    const response = await requestPlex(
+      `/library/sections/${encodeURIComponent(plexLibraryId)}/all`,
+      {
+        includeGuids: 1,
+        "X-Plex-Container-Start": page * pageSize,
+        "X-Plex-Container-Size": pageSize,
+      }
+    );
+    if (!response.ok) {
+      throw new Error(`Plex watch progress import failed (${response.status})`);
+    }
+
+    const data = (await response.json()) as PlexLibraryResponse;
+    const container = data.MediaContainer;
+    const metadata = container?.Metadata || [];
+    metadata
+      .map(progressFromPlexMetadata)
+      .filter((item): item is PlexImportedProgress => Boolean(item))
+      .forEach((item) => imported.set(item.videoId, item));
+
+    const totalSize = Number(container?.totalSize) || metadata.length;
+    if ((page + 1) * pageSize >= totalSize || metadata.length === 0) break;
+  }
+
+  return {
+    progress: Object.fromEntries(
+      [...imported.values()]
+        .filter((item) => !item.watched)
+        .map((item) => [item.videoId, item.entry])
+    ),
+    watchedVideoIds: [...imported.values()]
+      .filter((item) => item.watched)
+      .map((item) => item.videoId),
+  };
 }
 
 function secretState(value: string) {
