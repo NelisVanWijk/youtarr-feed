@@ -644,6 +644,11 @@ export default function FeedApp() {
   const [singleVideoMessage, setSingleVideoMessage] = useState("");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsChecking, setSettingsChecking] = useState(false);
+  const [floatplaneSessionToken, setFloatplaneSessionToken] = useState("");
+  const [floatplaneSessionState, setFloatplaneSessionState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const [floatplaneSessionMessage, setFloatplaneSessionMessage] = useState("");
   const [standaloneMode, setStandaloneMode] = useState(false);
   const [streamSource, setStreamSource] = useState<StreamSourceInfo | null>(null);
   const [streamSources, setStreamSources] = useState<Record<string, StreamSourceInfo>>({});
@@ -725,6 +730,58 @@ export default function FeedApp() {
       setSettingsChecking(false);
     }
   }, []);
+
+  async function submitFloatplaneSessionToken(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const token = floatplaneSessionToken.trim();
+    if (!token) {
+      setFloatplaneSessionState("error");
+      setFloatplaneSessionMessage(copy.settings.floatplaneSessionTokenRequired);
+      return;
+    }
+    setFloatplaneSessionState("saving");
+    setFloatplaneSessionMessage("");
+    try {
+      const response = await fetch("/api/floatplane/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const data = (await response.json()) as {
+        diagnostic?: ServiceDiagnostic;
+        error?: string;
+      };
+      if (data.diagnostic) {
+        setStatus((current) =>
+          current?.diagnostics
+            ? {
+                ...current,
+                diagnostics: {
+                  ...current.diagnostics,
+                  floatplane: data.diagnostic,
+                },
+              }
+            : current
+        );
+      }
+      if (!response.ok) {
+        throw new Error(data.error || copy.settings.floatplaneSessionError);
+      }
+      setFloatplaneSessionToken("");
+      setFloatplaneSessionState("saved");
+      setFloatplaneSessionMessage(copy.settings.floatplaneSessionSaved);
+      if (view === "floatplane") {
+        void loadFloatplaneVideos(true, true);
+      }
+    } catch (saveFailure) {
+      setFloatplaneSessionState("error");
+      setFloatplaneSessionMessage(
+        saveFailure instanceof Error
+          ? saveFailure.message
+          : copy.settings.floatplaneSessionError
+      );
+    }
+  }
 
   useEffect(() => {
     if (!settingsOpen) return undefined;
@@ -3125,6 +3182,50 @@ export default function FeedApp() {
                       : copy.settings.checkConnections}
                   </button>
                 </div>
+                <form
+                  className="floatplane-session-form"
+                  onSubmit={submitFloatplaneSessionToken}
+                >
+                  <label htmlFor="floatplane-session-token">
+                    {copy.settings.floatplaneSessionTitle}
+                  </label>
+                  <p>{copy.settings.floatplaneSessionBody}</p>
+                  <div className="floatplane-session-row">
+                    <input
+                      id="floatplane-session-token"
+                      type="password"
+                      value={floatplaneSessionToken}
+                      onChange={(event) => {
+                        setFloatplaneSessionToken(event.target.value);
+                        if (floatplaneSessionState !== "idle") {
+                          setFloatplaneSessionState("idle");
+                          setFloatplaneSessionMessage("");
+                        }
+                      }}
+                      placeholder={copy.settings.floatplaneSessionPlaceholder}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    <button
+                      className="settings-check-button"
+                      type="submit"
+                      disabled={floatplaneSessionState === "saving"}
+                    >
+                      {floatplaneSessionState === "saving"
+                        ? copy.settings.floatplaneSessionSaving
+                        : copy.settings.floatplaneSessionSave}
+                    </button>
+                  </div>
+                  {floatplaneSessionMessage && (
+                    <small
+                      className={`floatplane-session-message ${
+                        floatplaneSessionState === "error" ? "error" : "success"
+                      }`}
+                    >
+                      {floatplaneSessionMessage}
+                    </small>
+                  )}
+                </form>
                 <div className="playback-routing">
                   <div>
                     <span>{copy.settings.playbackProfileLabel}</span>

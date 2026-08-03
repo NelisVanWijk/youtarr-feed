@@ -16,7 +16,7 @@ export async function GET(
 ) {
   const { id } = await context.params;
   if (/^floatplane:[A-Za-z0-9_-]+$/.test(id)) {
-    if (!isFloatplaneConfigured()) {
+    if (!(await isFloatplaneConfigured())) {
       return NextResponse.json({ description: null });
     }
     try {

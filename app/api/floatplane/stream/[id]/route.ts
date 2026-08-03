@@ -41,7 +41,7 @@ export async function GET(
   if (!/^floatplane:[A-Za-z0-9_-]+$/.test(id)) {
     return NextResponse.json({ error: "Invalid Floatplane video" }, { status: 400 });
   }
-  if (!isFloatplaneConfigured()) {
+  if (!(await isFloatplaneConfigured())) {
     return NextResponse.json(
       { error: "Floatplane is not configured" },
       { status: 404 }

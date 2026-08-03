@@ -109,9 +109,12 @@ type FloatplaneVariantSummary = {
   hidden: boolean;
 };
 
+type FloatplaneSessionSource = "login" | "manual";
+
 type FloatplaneSession = {
   cookie: string;
   savedAt: number;
+  source?: FloatplaneSessionSource;
 };
 
 type FloatplanePlaybackMode = "mp4" | "hls";
@@ -168,10 +171,13 @@ const streamCache = new Map<
   { expiresAt: number; stream: FloatplaneStreamInfo }
 >();
 
-export function isFloatplaneConfigured() {
+export async function isFloatplaneConfigured() {
+  const stored = await readStoredSession();
   return Boolean(
     floatplaneEnabled &&
-      (floatplaneSessionToken || (floatplaneUsername && floatplanePassword))
+      (stored?.cookie ||
+        floatplaneSessionToken ||
+        (floatplaneUsername && floatplanePassword))
   );
 }
 
@@ -179,11 +185,21 @@ function secretState(value: string) {
   return value ? "Set" : "Not set";
 }
 
+function normalizeSessionCookie(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    throw new Error("Floatplane session token is required");
+  }
+  const cookie = trimmed.includes("=") ? trimmed : `sails.sid=${trimmed}`;
+  if (!/(^|;\s*)sails\.sid=[^;]+/.test(cookie)) {
+    throw new Error("Floatplane session token must include a sails.sid value");
+  }
+  return cookie;
+}
+
 function sessionCookieFromEnv() {
   if (!floatplaneSessionToken) return "";
-  return floatplaneSessionToken.includes("=")
-    ? floatplaneSessionToken
-    : `sails.sid=${floatplaneSessionToken}`;
+  return normalizeSessionCookie(floatplaneSessionToken);
 }
 
 async function readStoredSession() {
@@ -194,6 +210,7 @@ async function readStoredSession() {
     memorySession = {
       cookie: parsed.cookie,
       savedAt: Number(parsed.savedAt) || Date.now(),
+      source: parsed.source === "manual" ? "manual" : "login",
     };
     return memorySession;
   } catch (error) {
@@ -214,8 +231,8 @@ function cookieFromResponse(response: Response) {
     .join("; ");
 }
 
-async function writeSession(cookie: string) {
-  memorySession = { cookie, savedAt: Date.now() };
+async function writeSession(cookie: string, source: FloatplaneSessionSource = "login") {
+  memorySession = { cookie, savedAt: Date.now(), source };
   await writeJsonAtomic(sessionPath, memorySession);
 }
 
@@ -224,11 +241,22 @@ async function clearSession() {
   await removeAppDataFile(sessionPath);
 }
 
+export async function saveFloatplaneSessionToken(token: string) {
+  if (!floatplaneEnabled) {
+    throw new Error("Floatplane is disabled; set FLOATPLANE_ENABLED=true first");
+  }
+  const cookie = normalizeSessionCookie(token);
+  await writeSession(cookie, "manual");
+  streamCache.clear();
+}
+
 async function login() {
+  const stored = await readStoredSession();
+  if (stored?.source === "manual" && stored.cookie) return stored.cookie;
+
   const envCookie = sessionCookieFromEnv();
   if (envCookie) return envCookie;
 
-  const stored = await readStoredSession();
   if (stored?.cookie) return stored.cookie;
   if (Date.now() < loginBackoffUntil) {
     const seconds = Math.max(1, Math.ceil((loginBackoffUntil - Date.now()) / 1000));
@@ -296,9 +324,11 @@ async function login() {
 }
 
 async function requestFloatplane(path: string, init: RequestInit = {}, retry = true) {
-  if (!isFloatplaneConfigured()) {
-    throw new Error("Floatplane is not configured");
+  if (!floatplaneEnabled) {
+    throw new Error("Floatplane is disabled");
   }
+  const stored = await readStoredSession();
+  const usingManualSession = stored?.source === "manual" && Boolean(stored.cookie);
   const cookie = await login();
   const response = await fetch(`${floatplaneBaseUrl}${path}`, {
     ...init,
@@ -311,17 +341,32 @@ async function requestFloatplane(path: string, init: RequestInit = {}, retry = t
     cache: "no-store",
   });
 
-  if (response.status === 401 && retry && !floatplaneSessionToken) {
+  if (
+    response.status === 401 &&
+    retry &&
+    !floatplaneSessionToken &&
+    !usingManualSession
+  ) {
     await clearSession();
     return requestFloatplane(path, init, false);
   }
   return response;
 }
 
+function floatplaneRequestError(status: number) {
+  if (status === 401 || status === 403) {
+    return `Floatplane session token expired or invalid (${status}); paste a fresh sails.sid in Settings`;
+  }
+  if (status === 429) {
+    return "Floatplane is rate limiting login or API requests (429); wait before retrying";
+  }
+  return `Floatplane request failed (${status})`;
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await requestFloatplane(path);
   if (!response.ok) {
-    throw new Error(`Floatplane request failed (${response.status})`);
+    throw new Error(floatplaneRequestError(response.status));
   }
   return (await response.json()) as T;
 }
@@ -593,7 +638,7 @@ export async function getFloatplaneStreamUrl(
 
 async function checkFloatplaneConnection(): Promise<ConnectionStatus> {
   if (!floatplaneEnabled) return { ok: false, message: "Disabled" };
-  if (!isFloatplaneConfigured()) {
+  if (!(await isFloatplaneConfigured())) {
     return { ok: false, message: "Authentication is not configured" };
   }
   try {
@@ -616,6 +661,8 @@ async function checkFloatplaneConnection(): Promise<ConnectionStatus> {
 export async function getFloatplaneDiagnostics(
   options: { checkConnection?: boolean } = {}
 ): Promise<ServiceDiagnostic> {
+  const configured = await isFloatplaneConfigured();
+  const stored = await readStoredSession();
   const settings: SettingValue[] = [
     {
       key: "FLOATPLANE_ENABLED",
@@ -642,8 +689,14 @@ export async function getFloatplaneDiagnostics(
     },
     {
       key: "FLOATPLANE_SESSION_TOKEN",
-      label: "Session token",
+      label: "Env session token",
       value: secretState(floatplaneSessionToken),
+      secret: true,
+    },
+    {
+      key: "FLOATPLANE_STORED_SESSION",
+      label: "Stored session",
+      value: stored?.cookie ? `Set (${stored.source || "login"})` : "Not set",
       secret: true,
     },
     {
@@ -676,12 +729,12 @@ export async function getFloatplaneDiagnostics(
   return {
     key: "floatplane",
     label: "Floatplane",
-    configured: isFloatplaneConfigured(),
+    configured,
     connection: options.checkConnection
       ? await checkFloatplaneConnection()
       : {
-          ok: isFloatplaneConfigured(),
-          message: isFloatplaneConfigured() ? "Not checked" : "Not configured",
+          ok: configured,
+          message: configured ? "Not checked" : "Not configured",
         },
     settings,
   };

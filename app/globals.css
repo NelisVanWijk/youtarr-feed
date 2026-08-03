@@ -1686,6 +1686,58 @@ main {
   height: 13px;
 }
 
+.floatplane-session-form {
+  margin-bottom: 12px;
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.floatplane-session-form label {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.floatplane-session-form p {
+  margin: 0;
+  color: var(--quiet);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.floatplane-session-row {
+  display: flex;
+  gap: 8px;
+}
+
+.floatplane-session-row input {
+  min-width: 0;
+  width: 100%;
+  height: 36px;
+  padding: 0 11px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.floatplane-session-message {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.floatplane-session-message.success {
+  color: #75d798;
+}
+
+.floatplane-session-message.error {
+  color: #ffc65c;
+}
+
 .playback-routing {
   margin-bottom: 12px;
   display: grid;
@@ -2208,6 +2260,10 @@ main {
   .settings-check-button {
     width: 100%;
     justify-content: center;
+  }
+
+  .floatplane-session-row {
+    flex-direction: column;
   }
 
   .playback-routing {

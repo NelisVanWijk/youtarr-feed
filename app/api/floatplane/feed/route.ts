@@ -8,7 +8,7 @@ import { getCachedVideoList } from "../../../../lib/server-cache";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  if (!isFloatplaneConfigured()) {
+  if (!(await isFloatplaneConfigured())) {
     return NextResponse.json({
       mode: "demo",
       videos: [],

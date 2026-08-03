@@ -266,6 +266,13 @@ session cookie, so normal feed refreshes should not keep logging in. The regular
 status endpoint does not perform a Floatplane login; the Settings `Check
 connections` button and the Floatplane tab do.
 
+If Floatplane username/password login is blocked by CAPTCHA, use a browser
+session cookie instead. Set `FLOATPLANE_SESSION_TOKEN` in Docker/Unraid, or open
+the in-app Settings panel and paste a fresh `sails.sid` value into the
+Floatplane session token field. Tokens saved from the app are stored under
+`/data/floatplane-session.json` and take priority over the Docker environment
+token, so you can renew an expired session without editing the container.
+
 ### Optional Multi-Youtarr Playback
 
 You can run extra Youtarr instances for codec-specific playback. The main
