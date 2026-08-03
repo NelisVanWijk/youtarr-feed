@@ -115,6 +115,7 @@ const sessionPath = appDataPath("floatplane-session.json");
 const userAgent = "YoutarrFeed/0.1.0 CFNetwork/1496 Darwin/23.0.0";
 
 let memorySession: FloatplaneSession | null = null;
+let loginBackoffUntil = 0;
 
 export function isFloatplaneConfigured() {
   return Boolean(
@@ -178,6 +179,12 @@ async function login() {
 
   const stored = await readStoredSession();
   if (stored?.cookie) return stored.cookie;
+  if (Date.now() < loginBackoffUntil) {
+    const seconds = Math.max(1, Math.ceil((loginBackoffUntil - Date.now()) / 1000));
+    throw new Error(
+      `Floatplane login is rate limited; try again in ${seconds} seconds or set FLOATPLANE_SESSION_TOKEN`
+    );
+  }
   if (!floatplaneUsername || !floatplanePassword) {
     throw new Error("Floatplane credentials are not configured");
   }
@@ -223,6 +230,12 @@ async function login() {
     }
     cookie = cookieFromResponse(twoFactorResponse) || cookie;
   } else if (!response.ok) {
+    if (response.status === 429) {
+      loginBackoffUntil = Date.now() + 10 * 60 * 1000;
+      throw new Error(
+        "Floatplane login is rate limited (429); wait before retrying or set FLOATPLANE_SESSION_TOKEN"
+      );
+    }
     throw new Error(`Floatplane login failed (${response.status})`);
   }
 
@@ -469,7 +482,9 @@ async function checkFloatplaneConnection(): Promise<ConnectionStatus> {
   }
 }
 
-export async function getFloatplaneDiagnostics(): Promise<ServiceDiagnostic> {
+export async function getFloatplaneDiagnostics(
+  options: { checkConnection?: boolean } = {}
+): Promise<ServiceDiagnostic> {
   const settings: SettingValue[] = [
     {
       key: "FLOATPLANE_ENABLED",
@@ -516,7 +531,12 @@ export async function getFloatplaneDiagnostics(): Promise<ServiceDiagnostic> {
     key: "floatplane",
     label: "Floatplane",
     configured: isFloatplaneConfigured(),
-    connection: await checkFloatplaneConnection(),
+    connection: options.checkConnection
+      ? await checkFloatplaneConnection()
+      : {
+          ok: isFloatplaneConfigured(),
+          message: isFloatplaneConfigured() ? "Not checked" : "Not configured",
+        },
     settings,
   };
 }

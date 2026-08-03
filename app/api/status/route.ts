@@ -8,13 +8,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const checkConnections = new URL(request.url).searchParams.get("check") === "1";
   const config = getYoutarrPublicConfig();
   const plex = getPlexPublicConfig();
   const [youtarrDiagnostics, plexDiagnostics, floatplaneDiagnostics] = await Promise.all([
     getYoutarrDiagnostics(),
     getPlexDiagnostics(),
-    getFloatplaneDiagnostics(),
+    getFloatplaneDiagnostics({ checkConnection: checkConnections }),
   ]);
   return NextResponse.json({
     mode: config.configured ? "live" : "demo",

@@ -706,7 +706,7 @@ export default function FeedApp() {
   const refreshStatus = useCallback(async () => {
     setSettingsChecking(true);
     try {
-      const response = await fetch("/api/status", { cache: "no-store" });
+      const response = await fetch("/api/status?check=1", { cache: "no-store" });
       if (!response.ok) return;
       setStatus((await response.json()) as FeedStatus);
     } finally {

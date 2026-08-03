@@ -255,6 +255,12 @@ The app logs in server-side, stores the returned Floatplane cookie under
 URLs when a video is opened. If Floatplane requires CAPTCHA or rotating 2FA, use
 `FLOATPLANE_SESSION_TOKEN` instead of username/password.
 
+If Floatplane returns `429`, wait before retrying. This is a Floatplane-side
+login rate limit. After the first successful login the app reuses the stored
+session cookie, so normal feed refreshes should not keep logging in. The regular
+status endpoint does not perform a Floatplane login; the Settings `Check
+connections` button and the Floatplane tab do.
+
 ### Optional Multi-Youtarr Playback
 
 You can run extra Youtarr instances for codec-specific playback. The main
