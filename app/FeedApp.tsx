@@ -20,6 +20,7 @@ import {
   faMobileScreenButton,
   faPause,
   faPlay,
+  faPlane,
   faRotateRight,
   faThumbsUp,
   faTrash,
@@ -48,7 +49,7 @@ import type {
   WatchProgressMap,
 } from "../lib/types";
 
-type View = "feed" | "continue" | "local" | "singles" | "channels";
+type View = "feed" | "continue" | "local" | "singles" | "channels" | "floatplane";
 type Filter = "all" | "new" | "downloaded";
 type PlayerMode = "full" | "mini";
 type WebKitVideoElement = HTMLVideoElement & {
@@ -58,7 +59,7 @@ type WebKitVideoElement = HTMLVideoElement & {
   webkitSupportsPresentationMode?: (mode: "picture-in-picture") => boolean;
 };
 type StreamSourceInfo = {
-  source: "local" | "youtarr";
+  source: "local" | "youtarr" | "floatplane";
   playbackProfile?: "primary" | "av1" | "vp9";
   playbackLabel?: string;
   local?: {
@@ -109,7 +110,9 @@ function NavIcon({ view }: { view: View }) {
           ? faFolderOpen
           : view === "singles"
             ? faLink
-            : faList;
+            : view === "floatplane"
+              ? faPlane
+              : faList;
   return (
     <span className="nav-icon-frame">
       <FontAwesomeIcon className="nav-icon" icon={icon} aria-hidden="true" />
@@ -332,11 +335,20 @@ function Thumbnail({
 }) {
   const [failed, setFailed] = useState(false);
   const localLabel =
-    streamSource?.source === "local"
+    video.sourceLabel ||
+    (streamSource?.source === "local"
       ? copy.common.direct
       : streamSource?.source === "youtarr"
         ? copy.common.youtarr
-        : copy.common.checkingLocal;
+        : copy.common.checkingLocal);
+  const badgeSource =
+    video.provider === "floatplane"
+      ? "floatplane"
+      : streamSource?.source === "local"
+        ? "direct"
+        : streamSource?.source === "youtarr"
+          ? "youtarr"
+          : "checking";
   return (
     <div className={`thumbnail thumbnail-${palette[index % palette.length]}`}>
       {video.thumbnail && !failed ? (
@@ -359,13 +371,7 @@ function Thumbnail({
       <span className="duration">{formatDuration(video.duration)}</span>
       {video.downloaded ? (
         <span
-          className={`local-badge ${
-            streamSource?.source === "local"
-              ? "local-badge-direct"
-              : streamSource?.source === "youtarr"
-                ? "local-badge-youtarr"
-                : "local-badge-checking"
-          }`}
+          className={`local-badge local-badge-${badgeSource}`}
         >
           {localLabel}
         </span>
@@ -421,7 +427,7 @@ function VideoCard({
   downloadJob?: DownloadJob;
   onOpen: (video: FeedVideo) => void;
   onChannel?: (channelId: string) => void;
-  onDelete: (video: FeedVideo) => void;
+  onDelete?: (video: FeedVideo) => void;
   onRedownload?: (video: FeedVideo) => void;
   onRemoveFromList?: (video: FeedVideo) => void;
   onMarkWatched: (video: FeedVideo) => void;
@@ -439,6 +445,7 @@ function VideoCard({
   };
   const displayVideo =
     video.watched === isWatched ? video : { ...video, watched: isWatched };
+  const managesYoutarrDownload = video.provider !== "floatplane";
   return (
     <article className="video-card">
       <button
@@ -458,8 +465,10 @@ function VideoCard({
       <div className="video-details">
         <button
           className="avatar-button"
-          onClick={() => onChannel?.(video.channelId)}
-          disabled={!onChannel}
+          onClick={() => {
+            if (video.provider !== "floatplane") onChannel?.(video.channelId);
+          }}
+          disabled={!onChannel || video.provider === "floatplane"}
           aria-label={video.channelName}
         >
           <ChannelAvatar channel={channel} size="small" />
@@ -504,7 +513,7 @@ function VideoCard({
               </button>
               {video.downloaded && (
                 <>
-                  {onRedownload && (
+                  {managesYoutarrDownload && onRedownload && (
                     <button
                       onClick={() => {
                         setMenuOpen(false);
@@ -525,15 +534,17 @@ function VideoCard({
                   >
                     {isWatched ? copy.common.markUnwatched : copy.common.markWatched}
                   </button>
-                  <button
-                    className="danger-menu-item"
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onDelete(video);
-                    }}
-                  >
-                    {copy.common.deleteDownload}
-                  </button>
+                  {managesYoutarrDownload && onDelete && (
+                    <button
+                      className="danger-menu-item"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onDelete(video);
+                      }}
+                    >
+                      {copy.common.deleteDownload}
+                    </button>
+                  )}
                 </>
               )}
               {onRemoveFromList && (
@@ -596,6 +607,8 @@ export default function FeedApp() {
   const [localLoading, setLocalLoading] = useState(false);
   const [singleVideos, setSingleVideos] = useState<FeedVideo[]>([]);
   const [singleLoading, setSingleLoading] = useState(false);
+  const [floatplaneVideos, setFloatplaneVideos] = useState<FeedVideo[]>([]);
+  const [floatplaneLoading, setFloatplaneLoading] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<FeedVideo | null>(null);
   const [playerMode, setPlayerMode] = useState<PlayerMode>("full");
   const [playerPlaying, setPlayerPlaying] = useState(false);
@@ -843,7 +856,7 @@ export default function FeedApp() {
         completed.forEach((id) => delete next[id]);
         return next;
       });
-      if (status.plexConfigured) {
+      if (status?.plexConfigured) {
         void fetch("/api/plex/refresh", { method: "POST" });
       }
       if (view === "local") {
@@ -871,6 +884,9 @@ export default function FeedApp() {
     if (view === "singles") {
       void loadSingleVideos(singleVideos.length > 0);
     }
+    if (view === "floatplane") {
+      void loadFloatplaneVideos(floatplaneVideos.length > 0);
+    }
     // Local loaders are intentionally local to this component; view changes drive refreshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
@@ -878,8 +894,9 @@ export default function FeedApp() {
   useEffect(() => {
     if (
       playerMode === "full" &&
-      selectedVideo?.downloaded &&
-      mode === "live" &&
+      selectedVideo &&
+      selectedVideo.downloaded &&
+      (mode === "live" || selectedVideo.provider === "floatplane") &&
       playerRef.current &&
       !shouldUseInlineWatchPage()
     ) {
@@ -890,12 +907,13 @@ export default function FeedApp() {
 
   useEffect(() => {
     if (!selectedVideo || videoMetadata[selectedVideo.id]) return;
+    const video = selectedVideo;
 
     let stopped = false;
     async function loadVideoMetadata() {
       try {
         const response = await fetch(
-          `/api/video-metadata/${encodeURIComponent(selectedVideo.id)}`,
+          `/api/video-metadata/${encodeURIComponent(video.id)}`,
           { cache: "no-store" }
         );
         if (!response.ok) return;
@@ -903,7 +921,7 @@ export default function FeedApp() {
         if (!stopped) {
           setVideoMetadata((current) => ({
             ...current,
-            [selectedVideo.id]: data,
+            [video.id]: data,
           }));
         }
       } catch {
@@ -919,8 +937,9 @@ export default function FeedApp() {
 
   useEffect(() => {
     if (
-      !selectedVideo?.downloaded ||
-      mode !== "live" ||
+      !selectedVideo ||
+      !selectedVideo.downloaded ||
+      (mode !== "live" && selectedVideo.provider !== "floatplane") ||
       playerMode !== "full" ||
       !shouldUseInlineWatchPage()
     ) {
@@ -947,8 +966,7 @@ export default function FeedApp() {
   }, [
     mode,
     playerMode,
-    selectedVideo?.downloaded,
-    selectedVideo?.id,
+    selectedVideo,
     shouldUseInlineWatchPage,
   ]);
 
@@ -969,7 +987,11 @@ export default function FeedApp() {
 
   useEffect(() => {
     const player = playerRef.current;
-    if (!player || !selectedVideo?.downloaded || mode !== "live") {
+    if (
+      !player ||
+      !selectedVideo?.downloaded ||
+      (mode !== "live" && selectedVideo.provider !== "floatplane")
+    ) {
       return;
     }
 
@@ -1022,7 +1044,20 @@ export default function FeedApp() {
     }, 0);
 
     async function loadStreamSource() {
-      if (!selectedVideo?.downloaded || mode !== "live") return;
+      if (
+        !selectedVideo?.downloaded ||
+        (mode !== "live" && selectedVideo.provider !== "floatplane")
+      ) {
+        return;
+      }
+      if (selectedVideo.provider === "floatplane") {
+        setStreamSource({
+          source: "floatplane",
+          youtarrConfigured: true,
+          playbackLabel: selectedVideo.sourceLabel || "Floatplane",
+        });
+        return;
+      }
       try {
         const response = await fetch(
           `/api/stream/${encodeURIComponent(selectedVideo.id)}/source?detail=1`,
@@ -1041,7 +1076,13 @@ export default function FeedApp() {
       stopped = true;
       window.clearTimeout(resetTimer);
     };
-  }, [mode, selectedVideo?.downloaded, selectedVideo?.id]);
+  }, [
+    mode,
+    selectedVideo?.downloaded,
+    selectedVideo?.id,
+    selectedVideo?.provider,
+    selectedVideo?.sourceLabel,
+  ]);
 
   const visibleVideos = useMemo(() => {
     const source = selectedChannel ? channelVideos : feed?.videos || [];
@@ -1061,7 +1102,11 @@ export default function FeedApp() {
 
   const continueVideos = useMemo(() => {
     const normalized = query.trim().toLowerCase();
-    const progressVideos = [...(feed?.videos || []), ...singleVideos];
+    const progressVideos = [
+      ...(feed?.videos || []),
+      ...singleVideos,
+      ...floatplaneVideos,
+    ];
     return progressVideos
       .filter((video) => {
         if (!video.downloaded || !watchProgress[video.id]) return false;
@@ -1078,7 +1123,7 @@ export default function FeedApp() {
           (watchProgress[b.id]?.updatedAt || 0) -
           (watchProgress[a.id]?.updatedAt || 0)
       );
-  }, [feed?.videos, query, singleVideos, watchProgress]);
+  }, [feed?.videos, floatplaneVideos, query, singleVideos, watchProgress]);
 
   const filteredLocalVideos = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -1106,6 +1151,19 @@ export default function FeedApp() {
     });
   }, [query, singleVideos]);
 
+  const filteredFloatplaneVideos = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return floatplaneVideos.filter((video) => {
+      if (
+        normalized &&
+        !`${video.title} ${video.channelName}`.toLowerCase().includes(normalized)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [floatplaneVideos, query]);
+
   useEffect(() => {
     if (mode !== "live") return;
     const source =
@@ -1115,9 +1173,16 @@ export default function FeedApp() {
           ? filteredLocalVideos
           : view === "singles"
             ? filteredSingleVideos
+            : view === "floatplane"
+              ? filteredFloatplaneVideos
             : visibleVideos;
     const candidates = source
-      .filter((video) => video.downloaded && !streamSources[video.id])
+      .filter(
+        (video) =>
+          video.provider !== "floatplane" &&
+          video.downloaded &&
+          !streamSources[video.id]
+      )
       .slice(0, 80);
     if (candidates.length === 0) return;
 
@@ -1153,6 +1218,7 @@ export default function FeedApp() {
     };
   }, [
     continueVideos,
+    filteredFloatplaneVideos,
     filteredLocalVideos,
     filteredSingleVideos,
     mode,
@@ -1213,6 +1279,36 @@ export default function FeedApp() {
     }
   }
 
+  async function loadFloatplaneVideos(quiet = false, refresh = false) {
+    if (!quiet) setFloatplaneLoading(true);
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/floatplane/feed${refresh ? "?refresh=1" : ""}`,
+        { cache: "no-store" }
+      );
+      const data = (await response.json()) as {
+        videos?: FeedVideo[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || copy.errors.loadFloatplane);
+      }
+      setFloatplaneVideos(data.videos || []);
+      if (!refresh && response.headers.get("X-Youtarr-Feed-Cache") === "stale") {
+        window.setTimeout(() => void loadFloatplaneVideos(true, true), 500);
+      }
+    } catch (floatplaneError) {
+      setError(
+        floatplaneError instanceof Error
+          ? floatplaneError.message
+          : copy.errors.loadFloatplane
+      );
+    } finally {
+      setFloatplaneLoading(false);
+    }
+  }
+
   function markVideoDownloaded(updatedVideo: FeedVideo) {
     const updated = { ...updatedVideo, downloaded: true };
     const updateList = (videos: FeedVideo[]) =>
@@ -1226,6 +1322,7 @@ export default function FeedApp() {
     setChannelVideos((current) => updateList(current));
     setLocalVideos((current) => updateList(current));
     setSingleVideos((current) => updateList(current));
+    setFloatplaneVideos((current) => updateList(current));
     setStreamSources((current) => {
       if (!current[updated.id]) return current;
       const next = { ...current };
@@ -1254,6 +1351,7 @@ export default function FeedApp() {
     setChannelVideos((current) => updateList(current));
     setLocalVideos((current) => current.filter((item) => item.id !== videoId));
     setSingleVideos((current) => updateList(current));
+    setFloatplaneVideos((current) => updateList(current));
     setStreamSources((current) => {
       if (!current[videoId]) return current;
       const next = { ...current };
@@ -1289,6 +1387,7 @@ export default function FeedApp() {
     setChannelVideos((current) => updateList(current));
     setLocalVideos((current) => updateList(current));
     setSingleVideos((current) => updateList(current));
+    setFloatplaneVideos((current) => updateList(current));
     setSelectedVideo((current) =>
       current?.id === videoId ? { ...current, watched } : current
     );
@@ -1444,7 +1543,11 @@ export default function FeedApp() {
   }
 
   function closePlayer() {
-    if (selectedVideo?.downloaded && mode === "live" && playerMode === "full") {
+    if (
+      selectedVideo?.downloaded &&
+      (mode === "live" || selectedVideo.provider === "floatplane") &&
+      playerMode === "full"
+    ) {
       setPlayerMode("mini");
       return;
     }
@@ -1475,8 +1578,12 @@ export default function FeedApp() {
       playerRef.current.pause();
     }
 
+    const streamPath =
+      video.provider === "floatplane"
+        ? `/api/floatplane/stream/${encodeURIComponent(video.id)}`
+        : `/api/stream/${encodeURIComponent(video.id)}`;
     const streamUrl = new URL(
-      `/api/stream/${encodeURIComponent(video.id)}`,
+      streamPath,
       window.location.origin
     );
     streamUrl.searchParams.set("direct", "1");
@@ -1653,8 +1760,12 @@ export default function FeedApp() {
         if (data.unwatchedVideoIds) setUnwatchedVideoIds(data.unwatchedVideoIds);
       })
       .catch(() => {
-        if (nextEntry) {
-          setWatchProgress((current) => ({ ...current, [videoId]: nextEntry }));
+        const fallbackEntry = nextEntry;
+        if (fallbackEntry) {
+          setWatchProgress((current) => ({
+            ...current,
+            [videoId]: fallbackEntry,
+          }));
         }
       });
   }
@@ -1812,6 +1923,22 @@ export default function FeedApp() {
     }
   }
 
+  function refreshCurrentView() {
+    if (view === "floatplane") {
+      void loadFloatplaneVideos(true, true);
+      return;
+    }
+    if (view === "local") {
+      void loadLocalVideos(true, true);
+      return;
+    }
+    if (view === "singles") {
+      void loadSingleVideos(true);
+      return;
+    }
+    void loadFeed(true, true);
+  }
+
   function switchView(next: View) {
     setView(next);
     setSelectedChannel(null);
@@ -1828,11 +1955,18 @@ export default function FeedApp() {
     ? encodeURIComponent(selectedVideo.id)
     : "";
   const playerSource = selectedVideo
-    ? `/api/stream/${selectedVideoId}`
+    ? selectedVideo.provider === "floatplane"
+      ? `/api/floatplane/stream/${selectedVideoId}`
+      : `/api/stream/${selectedVideoId}`
     : "";
+  const selectedVideoPlayable =
+    Boolean(selectedVideo?.downloaded) &&
+    (mode === "live" || selectedVideo?.provider === "floatplane");
   const inlineWatchPage = selectedVideo ? shouldUseInlineWatchPage() : false;
   const selectedDescription = selectedVideo
-    ? videoMetadata[selectedVideo.id]?.description?.trim() || ""
+    ? videoMetadata[selectedVideo.id]?.description?.trim() ||
+      selectedVideo.description?.trim() ||
+      ""
     : "";
   const descriptionExpanded = selectedVideo
     ? expandedDescriptions[selectedVideo.id] === true
@@ -1885,7 +2019,7 @@ export default function FeedApp() {
           </button>
           <button
             className={`round-button refresh-button ${refreshing ? "spinning" : ""}`}
-            onClick={() => void loadFeed(true, true)}
+            onClick={refreshCurrentView}
             aria-label={copy.common.refresh}
           >
             <FontAwesomeIcon icon={faRotateRight} aria-hidden="true" />
@@ -1929,6 +2063,13 @@ export default function FeedApp() {
           >
             <NavIcon view="singles" />
             <span>{copy.nav.singles}</span>
+          </button>
+          <button
+            className={view === "floatplane" ? "active" : ""}
+            onClick={() => switchView("floatplane")}
+          >
+            <NavIcon view="floatplane" />
+            <span>{copy.nav.floatplane}</span>
           </button>
           <button
             className={view === "channels" ? "active" : ""}
@@ -2195,6 +2336,52 @@ export default function FeedApp() {
           </>
         )}
 
+        {view === "floatplane" && (
+          <>
+            <section className="page-heading">
+              <div>
+                <span className="eyebrow">{copy.floatplane.eyebrow}</span>
+                <h1>{copy.floatplane.title}</h1>
+                <p>{copy.floatplane.subtitle}</p>
+              </div>
+              <button
+                className="settings-link"
+                onClick={() => void loadFloatplaneVideos(true, true)}
+              >
+                {copy.common.refresh}
+              </button>
+            </section>
+            {floatplaneLoading ? (
+              <LoadingGrid copy={copy} />
+            ) : filteredFloatplaneVideos.length ? (
+              <div className="video-grid">
+                {filteredFloatplaneVideos.map((video, index) => (
+                  <VideoCard
+                    key={video.id}
+                    video={video}
+                    index={index}
+                    progress={progressPercent(video.id)}
+                    downloadJob={downloadJobs[video.id]}
+                    onOpen={openVideo}
+                    onMarkWatched={(item) => void setVideoWatched(item, true)}
+                    onMarkUnwatched={(item) => void setVideoWatched(item, false)}
+                    isWatched={isVideoWatched(video)}
+                    copy={copy}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <span className="empty-mark">
+                  <FontAwesomeIcon icon={faInbox} aria-hidden="true" />
+                </span>
+                <h2>{copy.floatplane.emptyTitle}</h2>
+                <p>{copy.floatplane.emptyBody}</p>
+              </div>
+            )}
+          </>
+        )}
+
         {view === "channels" && !selectedChannel && (
           <>
             <section className="page-heading">
@@ -2352,6 +2539,13 @@ export default function FeedApp() {
           <small>{copy.nav.singlesShort}</small>
         </button>
         <button
+          className={view === "floatplane" ? "active" : ""}
+          onClick={() => switchView("floatplane")}
+        >
+          <NavIcon view="floatplane" />
+          <small>{copy.nav.floatplaneShort}</small>
+        </button>
+        <button
           className={view === "channels" ? "active" : ""}
           onClick={() => switchView("channels")}
         >
@@ -2424,7 +2618,7 @@ export default function FeedApp() {
                 >
                   <FontAwesomeIcon icon={faMinus} aria-hidden="true" />
                 </button>
-                {selectedVideo.downloaded && mode === "live" && (
+                {selectedVideoPlayable && (
                   <button
                     className="player-action-button"
                     onClick={requestPlayerFullscreen}
@@ -2433,7 +2627,7 @@ export default function FeedApp() {
                     <FontAwesomeIcon icon={faExpand} aria-hidden="true" />
                   </button>
                 )}
-                {standaloneMode && selectedVideo.downloaded && mode === "live" && (
+                {standaloneMode && selectedVideoPlayable && (
                   <button
                     className="player-action-button"
                     onClick={() => {
@@ -2448,7 +2642,7 @@ export default function FeedApp() {
                 )}
               </div>
             )}
-            {selectedVideo.downloaded && mode === "live" ? (
+            {selectedVideoPlayable ? (
               <>
                 <div
                   className="player-frame"
@@ -2527,7 +2721,10 @@ export default function FeedApp() {
                       intendedPlaybackRef.current =
                         intendedPlaybackRef.current || !event.currentTarget.paused;
                       const fallbackSource: StreamSourceInfo = {
-                        source: "youtarr",
+                        source:
+                          selectedVideo.provider === "floatplane"
+                            ? "floatplane"
+                            : "youtarr",
                         playbackProfile: streamSource?.playbackProfile,
                         playbackLabel: streamSource?.playbackLabel,
                         local: streamSource?.local,
@@ -2582,7 +2779,9 @@ export default function FeedApp() {
             <div className="modal-copy">
               <h2>{selectedVideo.title}</h2>
               <button
+                disabled={selectedVideo.provider === "floatplane"}
                 onClick={() => {
+                  if (selectedVideo.provider === "floatplane") return;
                   const id = selectedVideo.channelId;
                   setSelectedVideo(null);
                   void openChannel(id);
@@ -2624,18 +2823,22 @@ export default function FeedApp() {
                   )}
                 </div>
               )}
-              {selectedVideo.downloaded && (
+              {selectedVideoPlayable && (
                 <p
                   className={`stream-source stream-source-${streamSource?.source || "unknown"}`}
                 >
                   <strong>
-                    {streamSource?.source === "local"
+                    {streamSource?.source === "floatplane"
+                      ? "Floatplane"
+                      : streamSource?.source === "local"
                       ? copy.player.sourceDirect
                       : streamSource?.source === "youtarr"
                         ? copy.player.sourceYoutarr
                         : copy.player.sourceChecking}
                   </strong>
-                  {streamSource?.source === "local" && streamSource.local?.fileName
+                  {streamSource?.source === "floatplane"
+                    ? copy.floatplane.sourceBody
+                    : streamSource?.source === "local" && streamSource.local?.fileName
                     ? copy.player.sourceDirectBody(streamSource.local.fileName)
                     : streamSource?.local?.configured === false
                       ? copy.player.sourceNoMount
@@ -2655,7 +2858,7 @@ export default function FeedApp() {
                     )}
                 </p>
               )}
-              {selectedVideo.downloaded && (
+              {selectedVideoPlayable && (
                 <div className="modal-actions">
                   <button
                     className="icon-secondary-button"
@@ -2686,19 +2889,21 @@ export default function FeedApp() {
                   >
                     <FontAwesomeIcon icon={faUpRightFromSquare} aria-hidden="true" />
                   </button>
-                  <button
-                    className="icon-danger-button"
-                    onClick={() => {
-                      if (window.confirm(copy.player.confirmDelete(selectedVideo.title))) {
-                        void removeDownload(selectedVideo);
-                      }
-                    }}
-                    disabled={deleteState === "deleting"}
-                    title={copy.common.deleteDownload}
-                    aria-label={copy.common.deleteDownload}
-                  >
-                    <FontAwesomeIcon icon={faTrash} aria-hidden="true" />
-                  </button>
+                  {selectedVideo.provider !== "floatplane" && (
+                    <button
+                      className="icon-danger-button"
+                      onClick={() => {
+                        if (window.confirm(copy.player.confirmDelete(selectedVideo.title))) {
+                          void removeDownload(selectedVideo);
+                        }
+                      }}
+                      disabled={deleteState === "deleting"}
+                      title={copy.common.deleteDownload}
+                      aria-label={copy.common.deleteDownload}
+                    >
+                      <FontAwesomeIcon icon={faTrash} aria-hidden="true" />
+                    </button>
+                  )}
                   {deleteState === "error" && <small>{deleteError}</small>}
                 </div>
               )}
@@ -2823,6 +3028,10 @@ export default function FeedApp() {
                     />
                   ))}
                   <DiagnosticCard diagnostic={status.diagnostics.plex} copy={copy} />
+                  <DiagnosticCard
+                    diagnostic={status.diagnostics.floatplane}
+                    copy={copy}
+                  />
                 </div>
               </div>
             )}

@@ -10,7 +10,7 @@ export type VideoListPayload = {
 
 export type CacheStatus = "miss" | "hit" | "stale" | "refresh";
 
-type CacheKey = "feed" | "local-videos";
+type CacheKey = "feed" | "local-videos" | "floatplane-feed";
 
 type CacheEnvelope<T> = {
   version: 1;
@@ -24,6 +24,7 @@ const cacheTtlMs =
 const cacheFiles: Record<CacheKey, string> = {
   feed: appDataPath("feed-cache.json"),
   "local-videos": appDataPath("local-videos-cache.json"),
+  "floatplane-feed": appDataPath("floatplane-feed-cache.json"),
 };
 
 const memoryCache: Partial<Record<CacheKey, CacheEnvelope<VideoListPayload>>> = {};
@@ -32,6 +33,7 @@ const refreshes: Partial<Record<CacheKey, Promise<CacheEnvelope<VideoListPayload
 const cacheGenerations: Record<CacheKey, number> = {
   feed: 0,
   "local-videos": 0,
+  "floatplane-feed": 0,
 };
 
 function isCacheEnvelope(value: unknown): value is CacheEnvelope<VideoListPayload> {

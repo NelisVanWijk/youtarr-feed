@@ -44,6 +44,7 @@ export interface YoutarrDiagnostics {
 export interface AppDiagnostics {
   youtarr: YoutarrDiagnostics;
   plex: ServiceDiagnostic;
+  floatplane: ServiceDiagnostic;
 }
 
 export interface Channel {
@@ -57,6 +58,7 @@ export interface Channel {
 
 export interface FeedVideo {
   id: string;
+  provider?: "youtube" | "floatplane";
   channelId: string;
   channelName: string;
   channelAvatar: string;
@@ -69,6 +71,9 @@ export interface FeedVideo {
   watched: boolean;
   removedFromYouTube?: boolean;
   filePath?: string | null;
+  sourceLabel?: string;
+  description?: string | null;
+  webpageUrl?: string | null;
 }
 
 export interface FeedResponse {

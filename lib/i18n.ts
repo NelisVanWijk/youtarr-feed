@@ -36,6 +36,8 @@ export const translations = {
       singles: "Single Videos",
       singlesShort: "Single",
       channels: "Channels",
+      floatplane: "Floatplane",
+      floatplaneShort: "Float",
     },
     common: {
       refresh: "Refresh",
@@ -92,6 +94,7 @@ export const translations = {
       addChannel: "Could not add channel",
       addSingle: "Could not add single video",
       removeSingle: "Could not remove single video",
+      loadFloatplane: "Could not load Floatplane",
     },
     activityFallback: "Youtarr is working in the background",
     feed: {
@@ -145,6 +148,14 @@ export const translations = {
       channelEyebrow: "Channel",
       autoDownloadHint: "New videos are downloaded automatically",
       manualDownloadHint: "Tap a video to fetch it",
+    },
+    floatplane: {
+      eyebrow: "Separate source",
+      title: "Floatplane",
+      subtitle: "Videos from your active Floatplane subscriptions.",
+      emptyTitle: "No Floatplane videos",
+      emptyBody: "Enable Floatplane in the server environment to show subscribed videos here.",
+      sourceBody: "Streaming from Floatplane.",
     },
     orientation: {
       title: "Turn your iPhone back",
@@ -229,6 +240,8 @@ export const translations = {
       singles: "Losse video's",
       singlesShort: "Los",
       channels: "Kanalen",
+      floatplane: "Floatplane",
+      floatplaneShort: "Float",
     },
     common: {
       refresh: "Verversen",
@@ -285,6 +298,7 @@ export const translations = {
       addChannel: "Kanaal toevoegen mislukte",
       addSingle: "Losse video toevoegen mislukte",
       removeSingle: "Losse video verwijderen mislukte",
+      loadFloatplane: "Floatplane laden mislukte",
     },
     activityFallback: "Youtarr werkt op de achtergrond",
     feed: {
@@ -338,6 +352,14 @@ export const translations = {
       channelEyebrow: "Kanaal",
       autoDownloadHint: "Nieuwe video's worden automatisch opgehaald",
       manualDownloadHint: "Tik op een video om hem op te halen",
+    },
+    floatplane: {
+      eyebrow: "Aparte bron",
+      title: "Floatplane",
+      subtitle: "Video's van je actieve Floatplane-abonnementen.",
+      emptyTitle: "Geen Floatplane-video's",
+      emptyBody: "Zet Floatplane aan in de servervariabelen om abonnementen hier te tonen.",
+      sourceBody: "Streamt vanuit Floatplane.",
     },
     orientation: {
       title: "Draai je iPhone terug",

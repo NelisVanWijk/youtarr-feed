@@ -9,7 +9,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/NelisVanWijk/youtarr-feed/issues</Support>
   <Project>https://github.com/NelisVanWijk/youtarr-feed</Project>
-  <Overview>Mobile-first subscription feed for Youtarr. Browse channels, play local files, start or delete downloads through Youtarr, save single video links, sync watch progress server-side, and optionally sync watch state with Plex.</Overview>
+  <Overview>Mobile-first subscription feed for Youtarr. Browse channels, play local files, start or delete downloads through Youtarr, save single video links, sync watch progress server-side, optionally sync watch state with Plex, and optionally browse Floatplane subscriptions in a separate tab.</Overview>
   <Category>MediaApp:Video:</Category>
   <WebUI>http://[IP]:[PORT:3000]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/NelisVanWijk/youtarr-feed/main/unraid/youtarr-feed.xml</TemplateURL>
@@ -55,6 +55,16 @@
   <Config Name="AV1 Media Directory" Target="YOUTARR_AV1_MEDIA_DIR" Default="/usr/src/app/data-av1" Mode="" Description="Internal container location of the AV1 Youtarr media mount. Keep this equal to the AV1 Media Path container path." Type="Variable" Display="advanced" Required="false" Mask="false">/usr/src/app/data-av1</Config>
   <Config Name="AV1 Source Media Directory" Target="YOUTARR_AV1_SOURCE_MEDIA_DIR" Default="/usr/src/app/data" Mode="" Description="Internal media path as stored by the AV1 Youtarr instance. Keep this equal to that Youtarr container's output path." Type="Variable" Display="advanced" Required="false" Mask="false">/usr/src/app/data</Config>
   <Config Name="Playback Profile" Target="YOUTARR_PLAYBACK_PROFILE" Default="auto" Mode="" Description="Playback routing. auto uses VP9 for iPad/Mac Safari when configured and otherwise uses the main Youtarr instance. Advanced values: primary, av1, vp9." Type="Variable" Display="advanced" Required="false" Mask="false">auto</Config>
+
+  <Config Name="Floatplane Enabled" Target="FLOATPLANE_ENABLED" Default="false" Mode="" Description="Set to true to enable a separate Floatplane tab for subscribed Floatplane videos." Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="Floatplane Username" Target="FLOATPLANE_USERNAME" Default="" Mode="" Description="Optional Floatplane username or email. Used server-side only." Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Floatplane Password" Target="FLOATPLANE_PASSWORD" Default="" Mode="" Description="Optional Floatplane password. Used server-side only." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Floatplane TOTP" Target="FLOATPLANE_TOTP" Default="" Mode="" Description="Optional one-time 2FA token for initial Floatplane login. For recurring 2FA, prefer Floatplane Session Token." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Floatplane Session Token" Target="FLOATPLANE_SESSION_TOKEN" Default="" Mode="" Description="Optional Floatplane session cookie. Use either a full cookie string or the raw sails.sid value." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Floatplane Feed Limit" Target="FLOATPLANE_FEED_LIMIT" Default="80" Mode="" Description="Maximum Floatplane videos shown in the tab. Default is 80." Type="Variable" Display="advanced" Required="false" Mask="false">80</Config>
+  <Config Name="Floatplane Per Creator Limit" Target="FLOATPLANE_PER_CREATOR_LIMIT" Default="12" Mode="" Description="Posts fetched per subscribed Floatplane creator. Default is 12, maximum is 20." Type="Variable" Display="advanced" Required="false" Mask="false">12</Config>
+  <Config Name="Floatplane Preferred Codec" Target="FLOATPLANE_PREFERRED_CODEC" Default="avc1" Mode="" Description="Preferred Floatplane playback codec. avc1 is the default for broad Apple compatibility." Type="Variable" Display="advanced" Required="false" Mask="false">avc1</Config>
+  <Config Name="Floatplane Max Height" Target="FLOATPLANE_MAX_HEIGHT" Default="0" Mode="" Description="Optional maximum Floatplane playback height. Use 0 for no limit." Type="Variable" Display="advanced" Required="false" Mask="false">0</Config>
 
   <Config Name="Plex URL" Target="PLEX_URL" Default="http://host.docker.internal:32400" Mode="" Description="Optional. Internal Plex address for library scans and watch-state sync." Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="Plex Token" Target="PLEX_TOKEN" Default="" Mode="" Description="Optional Plex token. Used server-side only and never sent to your phone." Type="Variable" Display="advanced" Required="false" Mask="true"/>

@@ -536,6 +536,10 @@ main {
   background: rgba(139, 101, 28, 0.92);
 }
 
+.local-badge-floatplane {
+  background: rgba(45, 95, 165, 0.92);
+}
+
 .local-badge-checking {
   background: rgba(20, 20, 22, 0.82);
   color: #dddcd8;
@@ -1486,6 +1490,11 @@ main {
   border-color: rgba(255, 198, 92, 0.26);
 }
 
+.stream-source-floatplane {
+  background: rgba(91, 145, 220, 0.1);
+  border-color: rgba(91, 145, 220, 0.3);
+}
+
 .modal-actions {
   grid-column: 1 / -1;
   margin-top: 10px;
@@ -2036,7 +2045,7 @@ main {
 
   .bottom-nav button {
     position: relative;
-    width: 54px;
+    width: clamp(48px, 14.5vw, 54px);
     height: 52px;
     display: grid;
     grid-template-rows: 25px 12px;

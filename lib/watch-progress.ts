@@ -6,10 +6,16 @@ const storePath = appDataPath("watch-progress.json");
 const watchedStorePath = appDataPath("watched-videos.json");
 const unwatchedStorePath = appDataPath("unwatched-videos.json");
 
-let writeQueue: Promise<unknown> = Promise.resolve();
+type WatchStateResult = {
+  progress: WatchProgressMap;
+  watchedVideoIds: string[];
+  unwatchedVideoIds: string[];
+};
+
+let writeQueue: Promise<WatchStateResult | void> = Promise.resolve();
 
 function isValidVideoId(value: string) {
-  return /^[A-Za-z0-9_-]{11}$/.test(value);
+  return /^[A-Za-z0-9_-]{11}$/.test(value) || /^floatplane:[A-Za-z0-9_-]+$/.test(value);
 }
 
 function normalizeEntry(entry: Partial<WatchProgressEntry>): WatchProgressEntry | null {
@@ -85,17 +91,13 @@ async function writeVideoIdList(filePath: string, videoIds: string[]) {
 
 export function updateWatchProgress(
   entry: Partial<WatchProgressEntry>
-): Promise<{
-  progress: WatchProgressMap;
-  watchedVideoIds: string[];
-  unwatchedVideoIds: string[];
-}> {
+): Promise<WatchStateResult> {
   const normalized = normalizeEntry({ ...entry, updatedAt: Date.now() });
   if (!normalized) {
     return Promise.reject(new Error("Invalid watch progress"));
   }
 
-  writeQueue = writeQueue.then(async () => {
+  const result = writeQueue.then(async () => {
     const progress = await readWatchProgress();
     const watchedVideoIds = new Set(await readWatchedVideoIds());
     const unwatchedVideoIds = new Set(await readUnwatchedVideoIds());
@@ -121,21 +123,16 @@ export function updateWatchProgress(
     };
   });
 
-  return writeQueue;
+  writeQueue = result;
+  return result;
 }
 
-export function clearWatchProgress(
-  videoId: string
-): Promise<{
-  progress: WatchProgressMap;
-  watchedVideoIds: string[];
-  unwatchedVideoIds: string[];
-}> {
+export function clearWatchProgress(videoId: string): Promise<WatchStateResult> {
   if (!isValidVideoId(videoId)) {
     return Promise.reject(new Error("Invalid video ID"));
   }
 
-  writeQueue = writeQueue.then(async () => {
+  const result = writeQueue.then(async () => {
     const progress = await readWatchProgress();
     const watchedVideoIds = new Set(await readWatchedVideoIds());
     const unwatchedVideoIds = new Set(await readUnwatchedVideoIds());
@@ -152,19 +149,16 @@ export function clearWatchProgress(
     };
   });
 
-  return writeQueue;
+  writeQueue = result;
+  return result;
 }
 
 export function replaceWatchProgress(
   progress: WatchProgressMap,
   watchedVideoIds: string[] = [],
   unwatchedVideoIds: string[] = []
-): Promise<{
-  progress: WatchProgressMap;
-  watchedVideoIds: string[];
-  unwatchedVideoIds: string[];
-}> {
-  writeQueue = writeQueue.then(async () => {
+): Promise<WatchStateResult> {
+  const result = writeQueue.then(async () => {
     const normalized = Object.fromEntries(
       Object.entries(progress)
         .map(([videoId, entry]) => normalizeEntry({ ...entry, videoId }))
@@ -189,22 +183,19 @@ export function replaceWatchProgress(
     };
   });
 
-  return writeQueue;
+  writeQueue = result;
+  return result;
 }
 
 export function setVideoWatchedState(
   videoId: string,
   watched: boolean
-): Promise<{
-  progress: WatchProgressMap;
-  watchedVideoIds: string[];
-  unwatchedVideoIds: string[];
-}> {
+): Promise<WatchStateResult> {
   if (!isValidVideoId(videoId)) {
     return Promise.reject(new Error("Invalid video ID"));
   }
 
-  writeQueue = writeQueue.then(async () => {
+  const result = writeQueue.then(async () => {
     const progress = await readWatchProgress();
     const watchedVideoIds = new Set(await readWatchedVideoIds());
     const unwatchedVideoIds = new Set(await readUnwatchedVideoIds());
@@ -226,5 +217,6 @@ export function setVideoWatchedState(
     };
   });
 
-  return writeQueue;
+  writeQueue = result;
+  return result;
 }

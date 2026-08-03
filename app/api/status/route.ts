@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getFloatplaneDiagnostics } from "../../../lib/floatplane";
 import { getPlexDiagnostics, getPlexPublicConfig } from "../../../lib/plex";
 import {
   getYoutarrDiagnostics,
@@ -10,9 +11,10 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const config = getYoutarrPublicConfig();
   const plex = getPlexPublicConfig();
-  const [youtarrDiagnostics, plexDiagnostics] = await Promise.all([
+  const [youtarrDiagnostics, plexDiagnostics, floatplaneDiagnostics] = await Promise.all([
     getYoutarrDiagnostics(),
     getPlexDiagnostics(),
+    getFloatplaneDiagnostics(),
   ]);
   return NextResponse.json({
     mode: config.configured ? "live" : "demo",
@@ -24,6 +26,7 @@ export async function GET() {
     diagnostics: {
       youtarr: youtarrDiagnostics,
       plex: plexDiagnostics,
+      floatplane: floatplaneDiagnostics,
     },
   });
 }

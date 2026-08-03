@@ -4,7 +4,8 @@ Youtarr Feed is a mobile-first web app for
 [Youtarr](https://github.com/DialmasterOrg/Youtarr). It gives you a YouTube-like
 feed for your Youtarr subscriptions, with server-side watch progress, Continue
 Watching, local playback, single-video links, download/delete actions, optional
-multi-instance playback routing, and optional Plex integration.
+multi-instance playback routing, optional Plex integration, and optional
+Floatplane browsing/playback.
 
 The app talks to Youtarr and Plex from the server side. Passwords, session
 tokens, API keys, and Plex tokens are never sent to the browser.
@@ -26,6 +27,8 @@ tokens, API keys, and Plex tokens are never sent to the browser.
 - Optional direct local file streaming with HTTP Range support.
 - Server-side feed cache for fast app opens.
 - Optional YouTube Data API fallback for exact publish timestamps.
+- Optional Floatplane tab for subscribed Floatplane videos, kept separate from
+  YouTube/Youtarr content.
 - English UI by default, with Dutch available.
 - iPhone/PWA manifest with portrait orientation.
 
@@ -53,6 +56,7 @@ Downloaded thumbnails show a compact badge:
 
 - `Direct`: streamed from the local media mount.
 - `Youtarr`: streamed through Youtarr.
+- `Floatplane`: streamed from Floatplane's signed playback URL.
 
 Deletes still go through Youtarr, even when playback is direct. Youtarr remains
 the owner of downloads and library state.
@@ -125,6 +129,8 @@ are stored there and survive container updates:
 /mnt/user/appdata/youtarr-feed/unwatched-videos.json
 /mnt/user/appdata/youtarr-feed/feed-cache.json
 /mnt/user/appdata/youtarr-feed/local-videos-cache.json
+/mnt/user/appdata/youtarr-feed/floatplane-feed-cache.json
+/mnt/user/appdata/youtarr-feed/floatplane-session.json
 /mnt/user/appdata/youtarr-feed/single-videos.json
 ```
 
@@ -225,6 +231,29 @@ On iPhone, open the site in Safari and use Share -> Add to Home Screen.
 | `YOUTARR_SOURCE_MEDIA_DIR` | Optional | Path prefix stored by Youtarr. Defaults to `/usr/src/app/data`. |
 | `YOUTARR_PLAYBACK_PROFILE` | Optional | Playback routing mode: `auto`, `primary`, `av1`, or `vp9`. Defaults to `auto`. |
 | `YOUTUBE_API_KEY` | Optional | Fallback YouTube Data API key for exact publish timestamps. Prefer setting this in Youtarr first. |
+
+### Optional Floatplane Integration
+
+Floatplane support is intentionally separate from Youtarr. It adds a dedicated
+Floatplane tab and uses the same server-side watch progress store, but it does
+not add Youtarr download, re-download, or delete actions to Floatplane videos.
+
+| Variable | Description |
+| --- | --- |
+| `FLOATPLANE_ENABLED` | Set to `true` to enable the Floatplane tab. Defaults to `false`. |
+| `FLOATPLANE_USERNAME` | Floatplane username or email. Kept server-side only. |
+| `FLOATPLANE_PASSWORD` | Floatplane password. Kept server-side only. |
+| `FLOATPLANE_TOTP` | Optional one-time 2FA code for initial login. For recurring 2FA, prefer `FLOATPLANE_SESSION_TOKEN`. |
+| `FLOATPLANE_SESSION_TOKEN` | Optional existing Floatplane session cookie. Use either a full cookie string or the raw `sails.sid` value. |
+| `FLOATPLANE_FEED_LIMIT` | Optional total number of Floatplane videos to show. Defaults to `80`. |
+| `FLOATPLANE_PER_CREATOR_LIMIT` | Optional posts fetched per subscribed creator. Defaults to `12`, maximum `20`. |
+| `FLOATPLANE_PREFERRED_CODEC` | Preferred Floatplane playback codec. Defaults to `avc1` for Apple compatibility. |
+| `FLOATPLANE_MAX_HEIGHT` | Optional maximum playback height. Leave empty or `0` for no limit. |
+
+The app logs in server-side, stores the returned Floatplane cookie under
+`/data/floatplane-session.json`, and requests signed Floatplane HLS playback
+URLs when a video is opened. If Floatplane requires CAPTCHA or rotating 2FA, use
+`FLOATPLANE_SESSION_TOKEN` instead of username/password.
 
 ### Optional Multi-Youtarr Playback
 
