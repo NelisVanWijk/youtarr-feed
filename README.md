@@ -248,12 +248,16 @@ not add Youtarr download, re-download, or delete actions to Floatplane videos.
 | `FLOATPLANE_FEED_LIMIT` | Optional total number of Floatplane videos to show. Defaults to `80`. |
 | `FLOATPLANE_PER_CREATOR_LIMIT` | Optional posts fetched per subscribed creator. Defaults to `12`, maximum `20`. |
 | `FLOATPLANE_PREFERRED_CODEC` | Preferred Floatplane playback codec. Defaults to `h264`; `avc1` is treated as the same codec family. |
-| `FLOATPLANE_OUTPUT_KIND` | Floatplane delivery format. Defaults to `hls.mpegts`, which is usually safer for Apple playback than fragmented MP4 HLS. |
+| `FLOATPLANE_PLAYBACK_MODE` | Floatplane playback mode. Defaults to `mp4`, which proxies direct MP4 delivery with Range support. Set to `hls` only for troubleshooting. |
+| `FLOATPLANE_STREAM_CACHE_TTL_SECONDS` | Optional signed Floatplane stream URL cache duration. Defaults to `600` seconds. |
+| `FLOATPLANE_OUTPUT_KIND` | Floatplane HLS delivery format. Defaults to `hls.mpegts` and is only used when `FLOATPLANE_PLAYBACK_MODE=hls`. |
 | `FLOATPLANE_MAX_HEIGHT` | Optional maximum playback height. Leave empty or `0` for no limit. |
 
 The app logs in server-side, stores the returned Floatplane cookie under
-`/data/floatplane-session.json`, and requests signed Floatplane HLS playback
-URLs when a video is opened. If Floatplane requires CAPTCHA or rotating 2FA, use
+`/data/floatplane-session.json`, and requests signed Floatplane playback URLs
+when a video is opened. By default it asks Floatplane for downloadable MP4
+variants and proxies them through Youtarr Feed so browser seeking and Range
+requests keep working. If Floatplane requires CAPTCHA or rotating 2FA, use
 `FLOATPLANE_SESSION_TOKEN` instead of username/password.
 
 If Floatplane returns `429`, wait before retrying. This is a Floatplane-side

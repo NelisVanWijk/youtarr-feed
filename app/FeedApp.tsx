@@ -84,6 +84,8 @@ type StreamSourceInfo = {
     label?: string;
     codec?: string | null;
     height?: number | null;
+    mimeType?: string | null;
+    playbackMode?: string;
   };
 };
 type VideoMetadataInfo = {
@@ -1048,7 +1050,13 @@ export default function FeedApp() {
 
   useEffect(() => {
     const player = playerRef.current;
-    if (!player || selectedVideo?.provider !== "floatplane") {
+    if (
+      !player ||
+      selectedVideo?.provider !== "floatplane" ||
+      streamSource?.stream?.playbackMode !== "hls"
+    ) {
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
       return undefined;
     }
     const hlsSource = `/api/floatplane/stream/${encodeURIComponent(
@@ -1080,7 +1088,11 @@ export default function FeedApp() {
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
-  }, [selectedVideo?.id, selectedVideo?.provider]);
+  }, [
+    selectedVideo?.id,
+    selectedVideo?.provider,
+    streamSource?.stream?.playbackMode,
+  ]);
 
   useEffect(() => {
     let stopped = false;

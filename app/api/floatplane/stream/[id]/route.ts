@@ -49,19 +49,82 @@ export async function GET(
   }
 
   try {
-    const stream = await getFloatplaneStreamUrl(id);
+    let stream = await getFloatplaneStreamUrl(id);
     const searchParams = new URL(request.url).searchParams;
-    if (searchParams.get("redirect") === "1") {
+    if (
+      searchParams.get("redirect") === "1" ||
+      searchParams.get("direct") === "1"
+    ) {
       return NextResponse.redirect(stream.url, 307);
     }
 
-    const upstream = await fetch(stream.url, {
+    if (stream.playbackMode !== "hls") {
+      const requestHeaders: Record<string, string> = {
+        Accept: request.headers.get("accept") || "*/*",
+        "User-Agent": request.headers.get("user-agent") || "YoutarrFeed/0.1.0",
+      };
+      const range = request.headers.get("range");
+      if (range) requestHeaders.Range = range;
+
+      let upstream = await fetch(stream.url, {
+        headers: requestHeaders,
+        cache: "no-store",
+      });
+      if (upstream.status === 401 || upstream.status === 403) {
+        stream = await getFloatplaneStreamUrl(id, { refresh: true });
+        upstream = await fetch(stream.url, {
+          headers: requestHeaders,
+          cache: "no-store",
+        });
+      }
+      if (!upstream.ok && upstream.status !== 206) {
+        throw new Error(`Floatplane MP4 stream failed (${upstream.status})`);
+      }
+
+      const responseHeaders = new Headers();
+      [
+        "content-type",
+        "content-length",
+        "content-range",
+        "accept-ranges",
+        "cache-control",
+      ].forEach((name) => {
+        const value = upstream.headers.get(name);
+        if (value) responseHeaders.set(name, value);
+      });
+      if (!responseHeaders.has("content-type")) {
+        responseHeaders.set("Content-Type", stream.mimeType || "video/mp4");
+      }
+      responseHeaders.set("Content-Disposition", "inline");
+      responseHeaders.set("Access-Control-Allow-Origin", "*");
+      responseHeaders.set("X-Content-Type-Options", "nosniff");
+      if (!responseHeaders.has("Cache-Control")) {
+        responseHeaders.set("Cache-Control", "no-store");
+      }
+
+      return new Response(upstream.body, {
+        status: upstream.status,
+        headers: responseHeaders,
+      });
+    }
+
+    let upstream = await fetch(stream.url, {
       headers: {
         Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
         "User-Agent": request.headers.get("user-agent") || "YoutarrFeed/0.1.0",
       },
       cache: "no-store",
     });
+    if (upstream.status === 401 || upstream.status === 403) {
+      stream = await getFloatplaneStreamUrl(id, { refresh: true });
+      upstream = await fetch(stream.url, {
+        headers: {
+          Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
+          "User-Agent": request.headers.get("user-agent") || "YoutarrFeed/0.1.0",
+        },
+        cache: "no-store",
+      });
+    }
     if (!upstream.ok) {
       throw new Error(`Floatplane manifest failed (${upstream.status})`);
     }

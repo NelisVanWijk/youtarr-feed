@@ -114,6 +114,18 @@ type FloatplaneSession = {
   savedAt: number;
 };
 
+type FloatplanePlaybackMode = "mp4" | "hls";
+
+type FloatplaneStreamInfo = {
+  url: string;
+  label: string;
+  codec: string | null;
+  height: number | null;
+  mimeType: string | null;
+  playbackMode: FloatplanePlaybackMode;
+  available: FloatplaneVariantSummary[];
+};
+
 const floatplaneBaseUrl = "https://www.floatplane.com";
 const floatplaneEnabled =
   (process.env.FLOATPLANE_ENABLED?.trim().toLowerCase() || "false") === "true";
@@ -135,13 +147,26 @@ const floatplaneMaxHeight = Math.max(
 );
 const floatplanePreferredCodec =
   process.env.FLOATPLANE_PREFERRED_CODEC?.trim().toLowerCase() || "h264";
+const rawFloatplanePlaybackMode =
+  process.env.FLOATPLANE_PLAYBACK_MODE?.trim().toLowerCase() || "mp4";
+const floatplanePlaybackMode: FloatplanePlaybackMode =
+  rawFloatplanePlaybackMode === "hls" ? "hls" : "mp4";
 const floatplaneOutputKind =
   process.env.FLOATPLANE_OUTPUT_KIND?.trim().toLowerCase() || "hls.mpegts";
+const floatplaneStreamCacheTtlMs =
+  Math.max(
+    30,
+    Math.min(3600, Number(process.env.FLOATPLANE_STREAM_CACHE_TTL_SECONDS) || 600)
+  ) * 1000;
 const sessionPath = appDataPath("floatplane-session.json");
 const userAgent = "YoutarrFeed/0.1.0 CFNetwork/1496 Darwin/23.0.0";
 
 let memorySession: FloatplaneSession | null = null;
 let loginBackoffUntil = 0;
+const streamCache = new Map<
+  string,
+  { expiresAt: number; stream: FloatplaneStreamInfo }
+>();
 
 export function isFloatplaneConfigured() {
   return Boolean(
@@ -470,10 +495,6 @@ function codecMatchesPreference(codec: string) {
   return codec.includes(floatplanePreferredCodec);
 }
 
-function requiresPreferredCodec() {
-  return ["h264", "avc1"].includes(floatplanePreferredCodec);
-}
-
 function variantUrl(group: FloatplaneDeliveryGroup, variant: FloatplaneDeliveryVariant) {
   if (!variant.url) return "";
   if (/^https?:\/\//i.test(variant.url)) return variant.url;
@@ -498,18 +519,16 @@ function selectVariant(groups: FloatplaneDeliveryGroup[]): {
     .filter(({ variant }) => {
       const mimeType = (variant.mimeType || "").toLowerCase();
       const name = (variant.name || "").toLowerCase();
-      return mimeType.includes("mpegurl") || name.includes("hls");
+      if (floatplanePlaybackMode === "hls") {
+        return mimeType.includes("mpegurl") || name.includes("hls");
+      }
+      return mimeType.includes("video/mp4") || /\.mp4(?:\?|$)/i.test(variant.url || "");
     });
 
   const playable = candidates.length ? candidates : variants;
   const preferred = playable.filter(({ variant }) =>
     codecMatchesPreference(variantCodec(variant))
   );
-  if (requiresPreferredCodec() && preferred.length === 0) {
-    throw new Error(
-      `No ${floatplanePreferredCodec} Floatplane stream was returned for this video`
-    );
-  }
 
   const sorted = [...(preferred.length ? preferred : playable)].sort((left, right) => {
     const leftPreferred = codecMatchesPreference(variantCodec(left.variant)) ? 1 : 0;
@@ -522,21 +541,54 @@ function selectVariant(groups: FloatplaneDeliveryGroup[]): {
   return { selected, available };
 }
 
-export async function getFloatplaneStreamUrl(videoId: string) {
+function streamCacheKey(rawId: string) {
+  return [
+    rawId,
+    floatplanePlaybackMode,
+    floatplaneOutputKind,
+    floatplanePreferredCodec,
+    String(floatplaneMaxHeight),
+  ].join(":");
+}
+
+export async function getFloatplaneStreamUrl(
+  videoId: string,
+  options: { refresh?: boolean } = {}
+): Promise<FloatplaneStreamInfo> {
   const rawId = rawVideoId(videoId);
+  const cacheKey = streamCacheKey(rawId);
+  const cached = streamCache.get(cacheKey);
+  if (!options.refresh && cached && cached.expiresAt > Date.now()) {
+    return cached.stream;
+  }
+
+  const params = new URLSearchParams({
+    scenario: floatplanePlaybackMode === "hls" ? "onDemand" : "download",
+    entityId: rawId,
+  });
+  if (floatplanePlaybackMode === "hls") {
+    params.set("outputKind", floatplaneOutputKind);
+  }
   const delivery = await getJson<{ groups?: FloatplaneDeliveryGroup[] }>(
-    `/api/v3/delivery/info?scenario=onDemand&outputKind=${encodeURIComponent(floatplaneOutputKind)}&entityId=${encodeURIComponent(rawId)}`
+    `/api/v3/delivery/info?${params.toString()}`
   );
   const { selected, available } = selectVariant(delivery.groups || []);
   const url = variantUrl(selected.group, selected.variant);
   if (!url) throw new Error("No playable Floatplane stream URL was returned");
-  return {
+  const stream = {
     url,
     label: selected.variant.label || selected.variant.name || "Floatplane",
     codec: variantCodec(selected.variant) || null,
     height: variantHeight(selected.variant) || null,
+    mimeType: selected.variant.mimeType || null,
+    playbackMode: floatplanePlaybackMode,
     available,
   };
+  streamCache.set(cacheKey, {
+    expiresAt: Date.now() + floatplaneStreamCacheTtlMs,
+    stream,
+  });
+  return stream;
 }
 
 async function checkFloatplaneConnection(): Promise<ConnectionStatus> {
@@ -598,6 +650,16 @@ export async function getFloatplaneDiagnostics(
       key: "FLOATPLANE_PREFERRED_CODEC",
       label: "Preferred codec",
       value: floatplanePreferredCodec,
+    },
+    {
+      key: "FLOATPLANE_PLAYBACK_MODE",
+      label: "Playback mode",
+      value: floatplanePlaybackMode,
+    },
+    {
+      key: "FLOATPLANE_STREAM_CACHE_TTL_SECONDS",
+      label: "Stream URL cache",
+      value: String(Math.round(floatplaneStreamCacheTtlMs / 1000)),
     },
     {
       key: "FLOATPLANE_OUTPUT_KIND",
