@@ -153,9 +153,11 @@ export const translations = {
       eyebrow: "Separate source",
       title: "Floatplane",
       subtitle: "Videos from your active Floatplane subscriptions.",
+      allChannels: "All channels",
       emptyTitle: "No Floatplane videos",
       emptyBody: "Enable Floatplane in the server environment to show subscribed videos here.",
-      sourceBody: "Streaming from Floatplane.",
+      sourceBody: (detail: string) =>
+        detail ? `Streaming from Floatplane: ${detail}.` : "Streaming from Floatplane.",
     },
     orientation: {
       title: "Turn your iPhone back",
@@ -357,9 +359,11 @@ export const translations = {
       eyebrow: "Aparte bron",
       title: "Floatplane",
       subtitle: "Video's van je actieve Floatplane-abonnementen.",
+      allChannels: "Alle kanalen",
       emptyTitle: "Geen Floatplane-video's",
       emptyBody: "Zet Floatplane aan in de servervariabelen om abonnementen hier te tonen.",
-      sourceBody: "Streamt vanuit Floatplane.",
+      sourceBody: (detail: string) =>
+        detail ? `Streamt vanuit Floatplane: ${detail}.` : "Streamt vanuit Floatplane.",
     },
     orientation: {
       title: "Draai je iPhone terug",

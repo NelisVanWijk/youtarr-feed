@@ -247,7 +247,8 @@ not add Youtarr download, re-download, or delete actions to Floatplane videos.
 | `FLOATPLANE_SESSION_TOKEN` | Optional existing Floatplane session cookie. Use either a full cookie string or the raw `sails.sid` value. |
 | `FLOATPLANE_FEED_LIMIT` | Optional total number of Floatplane videos to show. Defaults to `80`. |
 | `FLOATPLANE_PER_CREATOR_LIMIT` | Optional posts fetched per subscribed creator. Defaults to `12`, maximum `20`. |
-| `FLOATPLANE_PREFERRED_CODEC` | Preferred Floatplane playback codec. Defaults to `avc1` for Apple compatibility. |
+| `FLOATPLANE_PREFERRED_CODEC` | Preferred Floatplane playback codec. Defaults to `h264`; `avc1` is treated as the same codec family. |
+| `FLOATPLANE_OUTPUT_KIND` | Floatplane delivery format. Defaults to `hls.mpegts`, which is usually safer for Apple playback than fragmented MP4 HLS. |
 | `FLOATPLANE_MAX_HEIGHT` | Optional maximum playback height. Leave empty or `0` for no limit. |
 
 The app logs in server-side, stores the returned Floatplane cookie under

@@ -22,6 +22,14 @@ type FloatplaneCreator = {
   card?: FloatplaneImage | null;
 };
 
+type FloatplaneChannel = {
+  id?: string;
+  title?: string;
+  urlname?: string;
+  icon?: FloatplaneImage | null;
+  card?: FloatplaneImage | null;
+};
+
 type FloatplaneSubscription = {
   creator?: string;
 };
@@ -36,6 +44,7 @@ type FloatplanePost = {
   dislikes?: number;
   score?: number;
   creator?: FloatplaneCreator | string;
+  channel?: FloatplaneChannel | string;
   thumbnail?: FloatplaneImage | null;
   isAccessible?: boolean;
   metadata?: {
@@ -110,7 +119,9 @@ const floatplaneMaxHeight = Math.max(
   Number(process.env.FLOATPLANE_MAX_HEIGHT) || 0
 );
 const floatplanePreferredCodec =
-  process.env.FLOATPLANE_PREFERRED_CODEC?.trim().toLowerCase() || "avc1";
+  process.env.FLOATPLANE_PREFERRED_CODEC?.trim().toLowerCase() || "h264";
+const floatplaneOutputKind =
+  process.env.FLOATPLANE_OUTPUT_KIND?.trim().toLowerCase() || "hls.mpegts";
 const sessionPath = appDataPath("floatplane-session.json");
 const userAgent = "YoutarrFeed/0.1.0 CFNetwork/1496 Darwin/23.0.0";
 
@@ -302,6 +313,10 @@ function creatorFromPost(post: FloatplanePost): FloatplaneCreator {
   return typeof post.creator === "object" && post.creator ? post.creator : {};
 }
 
+function channelFromPost(post: FloatplanePost): FloatplaneChannel | null {
+  return typeof post.channel === "object" && post.channel ? post.channel : null;
+}
+
 function videoIdFromAttachment(attachment: string | FloatplaneVideo | undefined) {
   return typeof attachment === "string" ? attachment : attachment?.id || attachment?.guid || "";
 }
@@ -321,13 +336,18 @@ function toFeedVideo(post: FloatplanePost): FeedVideo | null {
   const postId = post.id || post.guid || "";
   if (!videoId || !postId) return null;
   const creator = creatorFromPost(post);
+  const channel = channelFromPost(post);
+  const channelId = channel?.id || creator.id || "creator";
+  const channelName = channel?.title || creator.title || "Floatplane";
+  const channelAvatar =
+    imagePath(channel?.icon) || imagePath(channel?.card) || imagePath(creator.icon);
   const attachmentObject = typeof attachment === "object" ? attachment : null;
   return {
     id: namespacedVideoId(videoId),
     provider: "floatplane",
-    channelId: `floatplane:${creator.id || "creator"}`,
-    channelName: creator.title || "Floatplane",
-    channelAvatar: imagePath(creator.icon),
+    channelId: `floatplane:${channelId}`,
+    channelName,
+    channelAvatar,
     title: post.title || attachmentObject?.title || "Untitled Floatplane video",
     thumbnail: imagePath(post.thumbnail) || imagePath(attachmentObject?.thumbnail) || imagePath(creator.card),
     publishedAt: post.releaseDate || attachmentObject?.releaseDate || null,
@@ -412,6 +432,17 @@ function variantCodec(variant: FloatplaneDeliveryVariant) {
   ).toLowerCase();
 }
 
+function codecMatchesPreference(codec: string) {
+  if (!floatplanePreferredCodec) return false;
+  if (floatplanePreferredCodec === "h264") {
+    return codec.includes("h264") || codec.includes("avc1");
+  }
+  if (floatplanePreferredCodec === "avc1") {
+    return codec.includes("avc1") || codec.includes("h264");
+  }
+  return codec.includes(floatplanePreferredCodec);
+}
+
 function variantUrl(group: FloatplaneDeliveryGroup, variant: FloatplaneDeliveryVariant) {
   if (!variant.url) return "";
   if (/^https?:\/\//i.test(variant.url)) return variant.url;
@@ -435,8 +466,8 @@ function selectVariant(groups: FloatplaneDeliveryGroup[]) {
       return mimeType.includes("mpegurl") || name.includes("hls");
     });
   const sorted = [...(candidates.length ? candidates : variants)].sort((left, right) => {
-    const leftPreferred = variantCodec(left.variant).includes(floatplanePreferredCodec) ? 1 : 0;
-    const rightPreferred = variantCodec(right.variant).includes(floatplanePreferredCodec) ? 1 : 0;
+    const leftPreferred = codecMatchesPreference(variantCodec(left.variant)) ? 1 : 0;
+    const rightPreferred = codecMatchesPreference(variantCodec(right.variant)) ? 1 : 0;
     if (leftPreferred !== rightPreferred) return rightPreferred - leftPreferred;
     return variantHeight(right.variant) - variantHeight(left.variant);
   });
@@ -446,7 +477,7 @@ function selectVariant(groups: FloatplaneDeliveryGroup[]) {
 export async function getFloatplaneStreamUrl(videoId: string) {
   const rawId = rawVideoId(videoId);
   const delivery = await getJson<{ groups?: FloatplaneDeliveryGroup[] }>(
-    `/api/v3/delivery/info?scenario=onDemand&outputKind=hls.fmp4&entityId=${encodeURIComponent(rawId)}`
+    `/api/v3/delivery/info?scenario=onDemand&outputKind=${encodeURIComponent(floatplaneOutputKind)}&entityId=${encodeURIComponent(rawId)}`
   );
   const selected = selectVariant(delivery.groups || []);
   if (!selected) throw new Error("No playable Floatplane stream was returned");
@@ -519,6 +550,11 @@ export async function getFloatplaneDiagnostics(
       key: "FLOATPLANE_PREFERRED_CODEC",
       label: "Preferred codec",
       value: floatplanePreferredCodec,
+    },
+    {
+      key: "FLOATPLANE_OUTPUT_KIND",
+      label: "Output kind",
+      value: floatplaneOutputKind,
     },
     {
       key: "FLOATPLANE_MAX_HEIGHT",

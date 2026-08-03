@@ -30,6 +30,7 @@ import {
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, PointerEvent as ReactPointerEvent } from "react";
+import type Hls from "hls.js";
 import {
   defaultLanguage,
   isLanguage,
@@ -78,6 +79,12 @@ type StreamSourceInfo = {
     };
   };
   youtarrConfigured: boolean;
+  stream?: {
+    url?: string;
+    label?: string;
+    codec?: string | null;
+    height?: number | null;
+  };
 };
 type VideoMetadataInfo = {
   description?: string | null;
@@ -609,6 +616,7 @@ export default function FeedApp() {
   const [singleLoading, setSingleLoading] = useState(false);
   const [floatplaneVideos, setFloatplaneVideos] = useState<FeedVideo[]>([]);
   const [floatplaneLoading, setFloatplaneLoading] = useState(false);
+  const [floatplaneCreatorFilter, setFloatplaneCreatorFilter] = useState("all");
   const [selectedVideo, setSelectedVideo] = useState<FeedVideo | null>(null);
   const [playerMode, setPlayerMode] = useState<PlayerMode>("full");
   const [playerPlaying, setPlayerPlaying] = useState(false);
@@ -640,6 +648,7 @@ export default function FeedApp() {
   const [expandedDescriptions, setExpandedDescriptions] = useState<Record<string, boolean>>({});
   const progressSaveRef = useRef<Record<string, number>>({});
   const playerRef = useRef<HTMLVideoElement | null>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const playerDragRef = useRef<PlayerDragState | null>(null);
   const intendedPlaybackRef = useRef(false);
   const pauseIntentTimerRef = useRef<number | null>(null);
@@ -1038,6 +1047,41 @@ export default function FeedApp() {
   }, [selectedVideo?.id]);
 
   useEffect(() => {
+    const player = playerRef.current;
+    if (!player || selectedVideo?.provider !== "floatplane") {
+      return undefined;
+    }
+    const hlsSource = `/api/floatplane/stream/${encodeURIComponent(
+      selectedVideo.id
+    )}`;
+
+    hlsRef.current?.destroy();
+    hlsRef.current = null;
+    if (player.canPlayType("application/vnd.apple.mpegurl")) {
+      player.src = hlsSource;
+      return undefined;
+    }
+
+    let stopped = false;
+    void import("hls.js").then(({ default: HlsPlayer }) => {
+      if (stopped || !HlsPlayer.isSupported()) return;
+      const hls = new HlsPlayer({
+        enableWorker: true,
+        lowLatencyMode: false,
+      });
+      hls.loadSource(hlsSource);
+      hls.attachMedia(player);
+      hlsRef.current = hls;
+    });
+
+    return () => {
+      stopped = true;
+      hlsRef.current?.destroy();
+      hlsRef.current = null;
+    };
+  }, [selectedVideo?.id, selectedVideo?.provider]);
+
+  useEffect(() => {
     let stopped = false;
     const resetTimer = window.setTimeout(() => {
       if (!stopped) setStreamSource(null);
@@ -1051,11 +1095,28 @@ export default function FeedApp() {
         return;
       }
       if (selectedVideo.provider === "floatplane") {
-        setStreamSource({
-          source: "floatplane",
-          youtarrConfigured: true,
-          playbackLabel: selectedVideo.sourceLabel || "Floatplane",
-        });
+        try {
+          const response = await fetch(
+            `/api/floatplane/stream/${encodeURIComponent(selectedVideo.id)}/source`,
+            { cache: "no-store" }
+          );
+          const data = response.ok
+            ? ((await response.json()) as StreamSourceInfo)
+            : null;
+          setStreamSource(
+            data || {
+              source: "floatplane",
+              youtarrConfigured: true,
+              playbackLabel: selectedVideo.sourceLabel || "Floatplane",
+            }
+          );
+        } catch {
+          setStreamSource({
+            source: "floatplane",
+            youtarrConfigured: true,
+            playbackLabel: selectedVideo.sourceLabel || "Floatplane",
+          });
+        }
         return;
       }
       try {
@@ -1151,9 +1212,27 @@ export default function FeedApp() {
     });
   }, [query, singleVideos]);
 
+  const floatplaneCreators = useMemo(
+    () => [
+      ...new Map(
+        floatplaneVideos.map((video) => [
+          video.channelId,
+          { id: video.channelId, name: video.channelName },
+        ])
+      ).values(),
+    ],
+    [floatplaneVideos]
+  );
+
   const filteredFloatplaneVideos = useMemo(() => {
     const normalized = query.trim().toLowerCase();
     return floatplaneVideos.filter((video) => {
+      if (
+        floatplaneCreatorFilter !== "all" &&
+        video.channelId !== floatplaneCreatorFilter
+      ) {
+        return false;
+      }
       if (
         normalized &&
         !`${video.title} ${video.channelName}`.toLowerCase().includes(normalized)
@@ -1162,7 +1241,7 @@ export default function FeedApp() {
       }
       return true;
     });
-  }, [floatplaneVideos, query]);
+  }, [floatplaneCreatorFilter, floatplaneVideos, query]);
 
   useEffect(() => {
     if (mode !== "live") return;
@@ -1944,6 +2023,7 @@ export default function FeedApp() {
     setSelectedChannel(null);
     setChannelVideos([]);
     setFilter("all");
+    if (next !== "floatplane") setFloatplaneCreatorFilter("all");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -2351,6 +2431,25 @@ export default function FeedApp() {
                 {copy.common.refresh}
               </button>
             </section>
+            {floatplaneCreators.length > 1 && (
+              <div className="filter-row" role="group" aria-label={copy.floatplane.title}>
+                <button
+                  className={floatplaneCreatorFilter === "all" ? "active" : ""}
+                  onClick={() => setFloatplaneCreatorFilter("all")}
+                >
+                  {copy.floatplane.allChannels}
+                </button>
+                {floatplaneCreators.map((creator) => (
+                  <button
+                    key={creator.id}
+                    className={floatplaneCreatorFilter === creator.id ? "active" : ""}
+                    onClick={() => setFloatplaneCreatorFilter(creator.id)}
+                  >
+                    {creator.name}
+                  </button>
+                ))}
+              </div>
+            )}
             {floatplaneLoading ? (
               <LoadingGrid copy={copy} />
             ) : filteredFloatplaneVideos.length ? (
@@ -2662,7 +2761,11 @@ export default function FeedApp() {
                     disableRemotePlayback={false}
                     preload="metadata"
                     poster={selectedVideo.thumbnail || undefined}
-                    src={playerSource}
+                    src={
+                      selectedVideo.provider === "floatplane"
+                        ? undefined
+                        : playerSource
+                    }
                     onLoadedMetadata={(event) => {
                       event.currentTarget.setAttribute("x-webkit-airplay", "allow");
                       event.currentTarget.setAttribute("webkit-playsinline", "true");
@@ -2837,7 +2940,17 @@ export default function FeedApp() {
                         : copy.player.sourceChecking}
                   </strong>
                   {streamSource?.source === "floatplane"
-                    ? copy.floatplane.sourceBody
+                    ? copy.floatplane.sourceBody(
+                        [
+                          streamSource.stream?.label,
+                          streamSource.stream?.codec,
+                          streamSource.stream?.height
+                            ? `${streamSource.stream.height}p`
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      )
                     : streamSource?.source === "local" && streamSource.local?.fileName
                     ? copy.player.sourceDirectBody(streamSource.local.fileName)
                     : streamSource?.local?.configured === false
