@@ -1058,9 +1058,10 @@ export default function FeedApp() {
     hlsRef.current?.destroy();
     hlsRef.current = null;
     if (player.canPlayType("application/vnd.apple.mpegurl")) {
-      player.src = hlsSource;
       return undefined;
     }
+    player.removeAttribute("src");
+    player.load();
 
     let stopped = false;
     void import("hls.js").then(({ default: HlsPlayer }) => {
@@ -2761,11 +2762,7 @@ export default function FeedApp() {
                     disableRemotePlayback={false}
                     preload="metadata"
                     poster={selectedVideo.thumbnail || undefined}
-                    src={
-                      selectedVideo.provider === "floatplane"
-                        ? undefined
-                        : playerSource
-                    }
+                    src={playerSource}
                     onLoadedMetadata={(event) => {
                       event.currentTarget.setAttribute("x-webkit-airplay", "allow");
                       event.currentTarget.setAttribute("webkit-playsinline", "true");

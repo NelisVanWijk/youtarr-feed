@@ -6,19 +6,29 @@ import {
 
 export const dynamic = "force-dynamic";
 
-function rewriteM3u8(content: string, baseUrl: string) {
+function proxiedMediaUrl(request: Request, url: string) {
+  const proxyUrl = new URL("/api/floatplane/proxy", request.url);
+  proxyUrl.searchParams.set("url", url);
+  return proxyUrl.toString();
+}
+
+function rewriteM3u8(content: string, baseUrl: string, request: Request) {
   return content
     .split(/\r?\n/)
     .map((line) => {
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith("#")) {
         return line.replace(/URI="([^"]+)"/g, (_match, uri: string) => {
-          if (/^https?:\/\//i.test(uri)) return `URI="${uri}"`;
-          return `URI="${new URL(uri, baseUrl).toString()}"`;
+          const absoluteUrl = /^https?:\/\//i.test(uri)
+            ? uri
+            : new URL(uri, baseUrl).toString();
+          return `URI="${proxiedMediaUrl(request, absoluteUrl)}"`;
         });
       }
-      if (/^https?:\/\//i.test(trimmed)) return line;
-      return new URL(trimmed, baseUrl).toString();
+      const absoluteUrl = /^https?:\/\//i.test(trimmed)
+        ? trimmed
+        : new URL(trimmed, baseUrl).toString();
+      return proxiedMediaUrl(request, absoluteUrl);
     })
     .join("\n");
 }
@@ -57,7 +67,7 @@ export async function GET(
     }
 
     const content = await upstream.text();
-    return new Response(rewriteM3u8(content, stream.url), {
+    return new Response(rewriteM3u8(content, stream.url, request), {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.apple.mpegurl",
