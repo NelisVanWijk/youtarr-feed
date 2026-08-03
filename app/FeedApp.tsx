@@ -108,6 +108,7 @@ type DownloadJob = {
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
 const languageStorageKey = "youtarr-feed-language";
+const watchResumeRewindSeconds = 5;
 
 function NavIcon({ view }: { view: View }) {
   const icon =
@@ -1869,7 +1870,10 @@ export default function FeedApp() {
     const duration = playerProgressDuration(video, player) || progress.duration;
     if (progress.currentTime < duration - 8) {
       try {
-        player.currentTime = Math.max(0, progress.currentTime);
+        player.currentTime = Math.max(
+          0,
+          progress.currentTime - watchResumeRewindSeconds
+        );
       } catch {
         // Some mobile players reject seeking until enough metadata is available.
       }
