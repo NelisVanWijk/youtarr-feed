@@ -94,6 +94,21 @@ type FloatplaneDeliveryGroup = {
   variants?: FloatplaneDeliveryVariant[];
 };
 
+type FloatplaneVariantChoice = {
+  group: FloatplaneDeliveryGroup;
+  variant: FloatplaneDeliveryVariant;
+};
+
+type FloatplaneVariantSummary = {
+  name: string;
+  label: string;
+  codec: string | null;
+  height: number | null;
+  mimeType: string | null;
+  enabled: boolean;
+  hidden: boolean;
+};
+
 type FloatplaneSession = {
   cookie: string;
   savedAt: number;
@@ -432,6 +447,18 @@ function variantCodec(variant: FloatplaneDeliveryVariant) {
   ).toLowerCase();
 }
 
+function variantSummary(variant: FloatplaneDeliveryVariant): FloatplaneVariantSummary {
+  return {
+    name: variant.name || "",
+    label: variant.label || "",
+    codec: variantCodec(variant) || null,
+    height: variantHeight(variant) || null,
+    mimeType: variant.mimeType || null,
+    enabled: variant.enabled !== false,
+    hidden: variant.hidden === true,
+  };
+}
+
 function codecMatchesPreference(codec: string) {
   if (!floatplanePreferredCodec) return false;
   if (floatplanePreferredCodec === "h264") {
@@ -441,6 +468,10 @@ function codecMatchesPreference(codec: string) {
     return codec.includes("avc1") || codec.includes("h264");
   }
   return codec.includes(floatplanePreferredCodec);
+}
+
+function requiresPreferredCodec() {
+  return ["h264", "avc1"].includes(floatplanePreferredCodec);
 }
 
 function variantUrl(group: FloatplaneDeliveryGroup, variant: FloatplaneDeliveryVariant) {
@@ -453,10 +484,14 @@ function variantUrl(group: FloatplaneDeliveryGroup, variant: FloatplaneDeliveryV
   return new URL(variant.url, origin).toString();
 }
 
-function selectVariant(groups: FloatplaneDeliveryGroup[]) {
+function selectVariant(groups: FloatplaneDeliveryGroup[]): {
+  selected: FloatplaneVariantChoice;
+  available: FloatplaneVariantSummary[];
+} {
   const variants = groups.flatMap((group) =>
     (group.variants || []).map((variant) => ({ group, variant }))
   );
+  const available = variants.map(({ variant }) => variantSummary(variant));
   const candidates = variants
     .filter(({ variant }) => variant.url && variant.enabled !== false && !variant.hidden)
     .filter(({ variant }) => !floatplaneMaxHeight || variantHeight(variant) <= floatplaneMaxHeight)
@@ -465,13 +500,26 @@ function selectVariant(groups: FloatplaneDeliveryGroup[]) {
       const name = (variant.name || "").toLowerCase();
       return mimeType.includes("mpegurl") || name.includes("hls");
     });
-  const sorted = [...(candidates.length ? candidates : variants)].sort((left, right) => {
+
+  const playable = candidates.length ? candidates : variants;
+  const preferred = playable.filter(({ variant }) =>
+    codecMatchesPreference(variantCodec(variant))
+  );
+  if (requiresPreferredCodec() && preferred.length === 0) {
+    throw new Error(
+      `No ${floatplanePreferredCodec} Floatplane stream was returned for this video`
+    );
+  }
+
+  const sorted = [...(preferred.length ? preferred : playable)].sort((left, right) => {
     const leftPreferred = codecMatchesPreference(variantCodec(left.variant)) ? 1 : 0;
     const rightPreferred = codecMatchesPreference(variantCodec(right.variant)) ? 1 : 0;
     if (leftPreferred !== rightPreferred) return rightPreferred - leftPreferred;
     return variantHeight(right.variant) - variantHeight(left.variant);
   });
-  return sorted[0] || null;
+  const selected = sorted[0];
+  if (!selected) throw new Error("No playable Floatplane stream was returned");
+  return { selected, available };
 }
 
 export async function getFloatplaneStreamUrl(videoId: string) {
@@ -479,8 +527,7 @@ export async function getFloatplaneStreamUrl(videoId: string) {
   const delivery = await getJson<{ groups?: FloatplaneDeliveryGroup[] }>(
     `/api/v3/delivery/info?scenario=onDemand&outputKind=${encodeURIComponent(floatplaneOutputKind)}&entityId=${encodeURIComponent(rawId)}`
   );
-  const selected = selectVariant(delivery.groups || []);
-  if (!selected) throw new Error("No playable Floatplane stream was returned");
+  const { selected, available } = selectVariant(delivery.groups || []);
   const url = variantUrl(selected.group, selected.variant);
   if (!url) throw new Error("No playable Floatplane stream URL was returned");
   return {
@@ -488,6 +535,7 @@ export async function getFloatplaneStreamUrl(videoId: string) {
     label: selected.variant.label || selected.variant.name || "Floatplane",
     codec: variantCodec(selected.variant) || null,
     height: variantHeight(selected.variant) || null,
+    available,
   };
 }
 
