@@ -121,6 +121,8 @@ are stored there and survive container updates:
 
 ```text
 /mnt/user/appdata/youtarr-feed/watch-progress.json
+/mnt/user/appdata/youtarr-feed/watched-videos.json
+/mnt/user/appdata/youtarr-feed/unwatched-videos.json
 /mnt/user/appdata/youtarr-feed/feed-cache.json
 /mnt/user/appdata/youtarr-feed/local-videos-cache.json
 /mnt/user/appdata/youtarr-feed/single-videos.json
@@ -263,6 +265,10 @@ another Youtarr instance.
 
 Youtarr Feed matches Plex items by the YouTube video ID in the Youtarr file or
 folder name, for example `[v5Et1hTPlTk]`. No Plex path mapping is required.
+When progress or watched-state is pushed to Plex, the app also tries to set the
+YouTube thumbnail as Plex poster and landscape artwork. This can help Plex
+clients such as Infuse show artwork in Continue Watching, but final rendering is
+still controlled by the Plex/Infuse client.
 
 ## Feed Ordering And Cache
 

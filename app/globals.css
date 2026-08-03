@@ -690,11 +690,11 @@ main {
 }
 
 .more-button {
-  width: 22px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-content: center;
-  border-radius: 6px;
+  border-radius: 50%;
   color: var(--muted);
 }
 
@@ -703,8 +703,8 @@ main {
 }
 
 .more-button .svg-inline--fa {
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
 }
 
 .video-menu-wrap {
@@ -724,6 +724,11 @@ main {
   border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.34);
+}
+
+.video-menu-up {
+  top: auto;
+  bottom: 38px;
 }
 
 .video-menu button {

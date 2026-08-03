@@ -58,6 +58,7 @@ const plexProgressSyncCache = new Map<
   string,
   { currentTime: number; syncedAt: number; watched: boolean }
 >();
+const plexArtworkSyncCache = new Set<string>();
 
 const youtubeIdPattern = /(?:\[|[-_\s])([A-Za-z0-9_-]{11})(?:\]|\.|$)/;
 
@@ -205,6 +206,7 @@ export async function syncPlexWatchProgress(entry: {
   videoId?: string;
   currentTime?: number;
   duration?: number;
+  thumbnail?: string | null;
 }) {
   if (!isPlexWatchSyncConfigured()) return;
 
@@ -227,6 +229,8 @@ export async function syncPlexWatchProgress(entry: {
   const ratingKey = await findPlexRatingKey(videoId);
   if (!ratingKey) return;
 
+  void syncPlexArtwork(ratingKey, videoId, entry.thumbnail).catch(() => undefined);
+
   const response = watched
     ? await requestPlex("/:/scrobble", {
         identifier: plexIdentifier,
@@ -246,6 +250,75 @@ export async function syncPlexWatchProgress(entry: {
     currentTime,
     syncedAt: Date.now(),
     watched,
+  });
+}
+
+async function syncPlexArtwork(
+  ratingKey: string,
+  videoId: string,
+  thumbnail?: string | null
+) {
+  const imageUrl = thumbnail?.trim();
+  if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) return;
+  const cacheKey = `${ratingKey}:${imageUrl}`;
+  if (plexArtworkSyncCache.has(cacheKey)) return;
+
+  const [poster, art] = await Promise.allSettled([
+    requestPlex(`/library/metadata/${encodeURIComponent(ratingKey)}/posters`, {
+      url: imageUrl,
+    }, { method: "POST" }),
+    requestPlex(`/library/metadata/${encodeURIComponent(ratingKey)}/arts`, {
+      url: imageUrl,
+    }, { method: "POST" }),
+  ]);
+
+  if (
+    (poster.status === "fulfilled" && poster.value.ok) ||
+    (art.status === "fulfilled" && art.value.ok)
+  ) {
+    plexArtworkSyncCache.add(cacheKey);
+    plexRatingKeyCache.set(videoId, {
+      ratingKey,
+      expiresAt: Date.now() + plexMatchCacheTtlMs,
+    });
+  }
+}
+
+export async function setPlexWatchedState(entry: {
+  videoId?: string;
+  watched?: boolean;
+  thumbnail?: string | null;
+}) {
+  if (!isPlexWatchSyncConfigured()) return;
+
+  const videoId = entry.videoId?.trim() || "";
+  if (!isValidYoutubeId(videoId)) return;
+
+  const ratingKey = await findPlexRatingKey(videoId);
+  if (!ratingKey) return;
+
+  void syncPlexArtwork(ratingKey, videoId, entry.thumbnail).catch(() => undefined);
+
+  const response = await requestPlex(entry.watched ? "/:/scrobble" : "/:/unscrobble", {
+    identifier: plexIdentifier,
+    key: ratingKey,
+  });
+  if (!response.ok) {
+    throw new Error(`Plex watched-state sync failed (${response.status})`);
+  }
+  if (!entry.watched) {
+    void requestPlex("/:/progress", {
+      identifier: plexIdentifier,
+      key: ratingKey,
+      time: 0,
+      state: "stopped",
+    }).catch(() => undefined);
+  }
+
+  plexProgressSyncCache.set(videoId, {
+    currentTime: 0,
+    syncedAt: Date.now(),
+    watched: entry.watched === true,
   });
 }
 

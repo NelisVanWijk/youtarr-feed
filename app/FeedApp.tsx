@@ -409,6 +409,9 @@ function VideoCard({
   onDelete,
   onRedownload,
   onRemoveFromList,
+  onMarkWatched,
+  onMarkUnwatched,
+  isWatched,
   copy,
 }: {
   video: FeedVideo;
@@ -421,14 +424,21 @@ function VideoCard({
   onDelete: (video: FeedVideo) => void;
   onRedownload?: (video: FeedVideo) => void;
   onRemoveFromList?: (video: FeedVideo) => void;
+  onMarkWatched: (video: FeedVideo) => void;
+  onMarkUnwatched: (video: FeedVideo) => void;
+  isWatched: boolean;
   copy: AppCopy;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuUp, setMenuUp] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null);
   const channel = {
     id: video.channelId,
     name: video.channelName,
     avatar: video.channelAvatar,
   };
+  const displayVideo =
+    video.watched === isWatched ? video : { ...video, watched: isWatched };
   return (
     <article className="video-card">
       <button
@@ -437,7 +447,7 @@ function VideoCard({
         aria-label={video.title}
       >
         <Thumbnail
-          video={video}
+          video={displayVideo}
           index={index}
           progress={progress}
           streamSource={streamSource}
@@ -462,15 +472,20 @@ function VideoCard({
         </button>
         <div className="video-menu-wrap">
           <button
+            ref={menuButtonRef}
             className="more-button"
             aria-label={copy.menu.more}
             aria-expanded={menuOpen}
-            onClick={() => setMenuOpen((open) => !open)}
+            onClick={() => {
+              const rect = menuButtonRef.current?.getBoundingClientRect();
+              setMenuUp(Boolean(rect && window.innerHeight - rect.bottom < 230));
+              setMenuOpen((open) => !open);
+            }}
           >
             <FontAwesomeIcon icon={faEllipsisVertical} aria-hidden="true" />
           </button>
           {menuOpen && (
-            <div className="video-menu">
+            <div className={`video-menu ${menuUp ? "video-menu-up" : ""}`}>
               <button
                 onClick={() => {
                   setMenuOpen(false);
@@ -501,6 +516,15 @@ function VideoCard({
                         : copy.menu.redownload}
                     </button>
                   )}
+                  <button
+                    onClick={() => {
+                      setMenuOpen(false);
+                      if (isWatched) onMarkUnwatched(video);
+                      else onMarkWatched(video);
+                    }}
+                  >
+                    {isWatched ? copy.common.markUnwatched : copy.common.markWatched}
+                  </button>
                   <button
                     className="danger-menu-item"
                     onClick={() => {
@@ -582,6 +606,8 @@ export default function FeedApp() {
   const [deleteError, setDeleteError] = useState("");
   const [activity, setActivity] = useState<DownloadActivity | null>(null);
   const [watchProgress, setWatchProgress] = useState<WatchProgressMap>({});
+  const [watchedVideoIds, setWatchedVideoIds] = useState<string[]>([]);
+  const [unwatchedVideoIds, setUnwatchedVideoIds] = useState<string[]>([]);
   const [channelUrl, setChannelUrl] = useState("");
   const [addChannelState, setAddChannelState] = useState<
     "idle" | "adding" | "added" | "error"
@@ -639,8 +665,12 @@ export default function FeedApp() {
       if (progressResponse.ok) {
         const progressData = (await progressResponse.json()) as {
           progress?: WatchProgressMap;
+          watchedVideoIds?: string[];
+          unwatchedVideoIds?: string[];
         };
         setWatchProgress(progressData.progress || {});
+        setWatchedVideoIds(progressData.watchedVideoIds || []);
+        setUnwatchedVideoIds(progressData.unwatchedVideoIds || []);
       }
       if (!refresh && feedResponse.headers.get("X-Youtarr-Feed-Cache") === "stale") {
         window.setTimeout(() => void loadFeed(true, true), 500);
@@ -705,8 +735,14 @@ export default function FeedApp() {
       try {
         const response = await fetch("/api/watch-progress", { cache: "no-store" });
         if (!response.ok) return;
-        const data = (await response.json()) as { progress?: WatchProgressMap };
+        const data = (await response.json()) as {
+          progress?: WatchProgressMap;
+          watchedVideoIds?: string[];
+          unwatchedVideoIds?: string[];
+        };
         if (!stopped) setWatchProgress(data.progress || {});
+        if (!stopped) setWatchedVideoIds(data.watchedVideoIds || []);
+        if (!stopped) setUnwatchedVideoIds(data.unwatchedVideoIds || []);
       } catch {
         // Watch progress should never block the feed.
       }
@@ -1231,7 +1267,75 @@ export default function FeedApp() {
       delete next[videoId];
       return next;
     });
+    setWatchedVideoIds((current) => current.filter((id) => id !== videoId));
+    setUnwatchedVideoIds((current) => current.filter((id) => id !== videoId));
     setSelectedVideo((current) => (current?.id === videoId ? null : current));
+  }
+
+  function isVideoWatched(video: FeedVideo) {
+    if (unwatchedVideoIds.includes(video.id)) return false;
+    return video.watched || watchedVideoIds.includes(video.id);
+  }
+
+  function markVideoWatchedLocal(videoId: string, watched: boolean) {
+    const updateList = (videos: FeedVideo[]) =>
+      videos.map((video) =>
+        video.id === videoId ? { ...video, watched } : video
+      );
+
+    setFeed((current) =>
+      current ? { ...current, videos: updateList(current.videos) } : current
+    );
+    setChannelVideos((current) => updateList(current));
+    setLocalVideos((current) => updateList(current));
+    setSingleVideos((current) => updateList(current));
+    setSelectedVideo((current) =>
+      current?.id === videoId ? { ...current, watched } : current
+    );
+    setWatchProgress((current) => {
+      if (!current[videoId]) return current;
+      const next = { ...current };
+      delete next[videoId];
+      return next;
+    });
+    setWatchedVideoIds((current) => {
+      const next = new Set(current);
+      if (watched) next.add(videoId);
+      else next.delete(videoId);
+      return [...next];
+    });
+    setUnwatchedVideoIds((current) => {
+      const next = new Set(current);
+      if (watched) next.delete(videoId);
+      else next.add(videoId);
+      return [...next];
+    });
+  }
+
+  async function setVideoWatched(video: FeedVideo, watched: boolean) {
+    markVideoWatchedLocal(video.id, watched);
+    try {
+      const response = await fetch("/api/watch-progress", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          videoId: video.id,
+          watched,
+          thumbnail: video.thumbnail,
+        }),
+      });
+      if (!response.ok) return;
+      const data = (await response.json()) as {
+        progress?: WatchProgressMap;
+        watchedVideoIds?: string[];
+        unwatchedVideoIds?: string[];
+      };
+      if (data.progress) setWatchProgress(data.progress);
+      if (data.watchedVideoIds) setWatchedVideoIds(data.watchedVideoIds);
+      if (data.unwatchedVideoIds) setUnwatchedVideoIds(data.unwatchedVideoIds);
+    } catch {
+      // The next refresh reconciles with the server.
+    }
   }
 
   async function openChannel(channelId: string) {
@@ -1496,24 +1600,26 @@ export default function FeedApp() {
       0,
       Math.min(player.currentTime, duration || player.currentTime)
     );
-    storeWatchProgress(video.id, currentTime, duration, force);
+    storeWatchProgress(video.id, currentTime, duration, force, video.thumbnail);
   }
 
   function storeWatchProgress(
     videoId: string,
     currentTime: number,
     duration: number,
-    force = false
+    force = false,
+    thumbnail?: string
   ) {
     if (!Number.isFinite(duration) || duration <= 0) return;
     const now = Date.now();
     if (!force && now - (progressSaveRef.current[videoId] || 0) < 4000) return;
     progressSaveRef.current[videoId] = now;
+    const watched = currentTime > duration - 8;
 
     let nextEntry: WatchProgressEntry | null = null;
     setWatchProgress((current) => {
       const next = { ...current };
-      if (currentTime < 5 || currentTime > duration - 8) {
+      if (currentTime < 5 || watched) {
         delete next[videoId];
       } else {
         nextEntry = { videoId, currentTime, duration, updatedAt: now };
@@ -1521,6 +1627,9 @@ export default function FeedApp() {
       }
       return next;
     });
+    if (watched) {
+      markVideoWatchedLocal(videoId, true);
+    }
 
     void fetch("/api/watch-progress", {
       method: "POST",
@@ -1529,12 +1638,19 @@ export default function FeedApp() {
         videoId,
         currentTime,
         duration,
+        thumbnail,
       }),
     })
       .then(async (response) => {
         if (!response.ok) return;
-        const data = (await response.json()) as { progress?: WatchProgressMap };
+        const data = (await response.json()) as {
+          progress?: WatchProgressMap;
+          watchedVideoIds?: string[];
+          unwatchedVideoIds?: string[];
+        };
         if (data.progress) setWatchProgress(data.progress);
+        if (data.watchedVideoIds) setWatchedVideoIds(data.watchedVideoIds);
+        if (data.unwatchedVideoIds) setUnwatchedVideoIds(data.unwatchedVideoIds);
       })
       .catch(() => {
         if (nextEntry) {
@@ -1558,6 +1674,8 @@ export default function FeedApp() {
   }
 
   function progressPercent(videoId: string) {
+    if (unwatchedVideoIds.includes(videoId)) return undefined;
+    if (watchedVideoIds.includes(videoId)) return 100;
     const progress = watchProgress[videoId];
     if (!progress?.duration) return undefined;
     return Math.max(2, Math.min(98, (progress.currentTime / progress.duration) * 100));
@@ -1895,6 +2013,9 @@ export default function FeedApp() {
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
                     onRedownload={(item) => void startDownload(item, true)}
+                    onMarkWatched={(item) => void setVideoWatched(item, true)}
+                    onMarkUnwatched={(item) => void setVideoWatched(item, false)}
+                    isWatched={isVideoWatched(video)}
                     copy={copy}
                   />
                 ))}
@@ -1936,6 +2057,9 @@ export default function FeedApp() {
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
                     onRedownload={(item) => void startDownload(item, true)}
+                    onMarkWatched={(item) => void setVideoWatched(item, true)}
+                    onMarkUnwatched={(item) => void setVideoWatched(item, false)}
+                    isWatched={isVideoWatched(video)}
                     copy={copy}
                   />
                 ))}
@@ -1983,6 +2107,9 @@ export default function FeedApp() {
                     onChannel={(id) => void openChannel(id)}
                     onDelete={(item) => void removeDownload(item)}
                     onRedownload={(item) => void startDownload(item, true)}
+                    onMarkWatched={(item) => void setVideoWatched(item, true)}
+                    onMarkUnwatched={(item) => void setVideoWatched(item, false)}
+                    isWatched={isVideoWatched(video)}
                     copy={copy}
                   />
                 ))}
@@ -2049,6 +2176,9 @@ export default function FeedApp() {
                     onDelete={(item) => void removeDownload(item)}
                     onRedownload={(item) => void startDownload(item, true)}
                     onRemoveFromList={(item) => void removeSingleVideo(item)}
+                    onMarkWatched={(item) => void setVideoWatched(item, true)}
+                    onMarkUnwatched={(item) => void setVideoWatched(item, false)}
+                    isWatched={isVideoWatched(video)}
                     copy={copy}
                   />
                 ))}
@@ -2180,6 +2310,9 @@ export default function FeedApp() {
                     onChannel={() => undefined}
                     onDelete={(item) => void removeDownload(item)}
                     onRedownload={(item) => void startDownload(item, true)}
+                    onMarkWatched={(item) => void setVideoWatched(item, true)}
+                    onMarkUnwatched={(item) => void setVideoWatched(item, false)}
+                    isWatched={isVideoWatched(video)}
                     copy={copy}
                   />
                 ))}
@@ -2386,7 +2519,8 @@ export default function FeedApp() {
                         selectedVideo.id,
                         playerProgressDuration(selectedVideo, event.currentTarget),
                         playerProgressDuration(selectedVideo, event.currentTarget),
-                        true
+                        true,
+                        selectedVideo.thumbnail
                       );
                     }}
                     onError={(event) => {
@@ -2523,6 +2657,27 @@ export default function FeedApp() {
               )}
               {selectedVideo.downloaded && (
                 <div className="modal-actions">
+                  <button
+                    className="icon-secondary-button"
+                    onClick={() =>
+                      void setVideoWatched(selectedVideo, !isVideoWatched(selectedVideo))
+                    }
+                    title={
+                      isVideoWatched(selectedVideo)
+                        ? copy.common.markUnwatched
+                        : copy.common.markWatched
+                    }
+                    aria-label={
+                      isVideoWatched(selectedVideo)
+                        ? copy.common.markUnwatched
+                        : copy.common.markWatched
+                    }
+                  >
+                    <FontAwesomeIcon
+                      icon={isVideoWatched(selectedVideo) ? faClockRotateLeft : faCheck}
+                      aria-hidden="true"
+                    />
+                  </button>
                   <button
                     className="icon-secondary-button"
                     onClick={() => openSelectedVideoInVlc(selectedVideo)}
