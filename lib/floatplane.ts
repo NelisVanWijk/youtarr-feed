@@ -25,7 +25,7 @@ type FloatplaneCreator = {
 
 type FloatplaneChannel = {
   id?: string;
-  creator?: string;
+  creator?: string | FloatplaneCreator;
   title?: string;
   urlname?: string;
   icon?: FloatplaneImage | null;
@@ -33,7 +33,7 @@ type FloatplaneChannel = {
 };
 
 type FloatplaneSubscription = {
-  creator?: string;
+  creator?: string | FloatplaneCreator;
 };
 
 type FloatplaneCreatorListResponse = {
@@ -417,6 +417,44 @@ function creatorFromPost(post: FloatplanePost): FloatplaneCreator {
   return typeof post.creator === "object" && post.creator ? post.creator : {};
 }
 
+function creatorIdFromValue(value: FloatplaneCreator | string | undefined) {
+  return typeof value === "string" ? value : value?.id || "";
+}
+
+function creatorFromValue(value: FloatplaneCreator | string | undefined) {
+  return typeof value === "object" && value ? value : null;
+}
+
+function channelCreatorId(channel?: FloatplaneChannel | null) {
+  return creatorIdFromValue(channel?.creator);
+}
+
+function mergeCreator(
+  creatorMap: Map<string, FloatplaneCreator>,
+  creator?: FloatplaneCreator | null,
+  fallbackId = ""
+) {
+  const id = creator?.id || fallbackId;
+  if (!id) return;
+  const existing = creatorMap.get(id) || { id };
+  creatorMap.set(id, {
+    id,
+    title: creator?.title || existing.title,
+    urlname: creator?.urlname || existing.urlname,
+    icon: creator?.icon || existing.icon,
+    card: creator?.card || existing.card,
+  });
+}
+
+function mergePostCreators(
+  creatorMap: Map<string, FloatplaneCreator>,
+  posts: FloatplanePost[]
+) {
+  posts.forEach((post) => {
+    mergeCreator(creatorMap, creatorFromValue(post.creator));
+  });
+}
+
 function channelFromPost(
   post: FloatplanePost,
   channelMap: Map<string, FloatplaneChannel> = new Map()
@@ -435,6 +473,10 @@ function namespacedVideoId(videoId: string) {
   return `floatplane:${videoId}`;
 }
 
+function namespacedCreatorId(creatorId: string) {
+  return `floatplane-creator:${creatorId}`;
+}
+
 function rawVideoId(videoId: string) {
   return videoId.startsWith("floatplane:") ? videoId.slice("floatplane:".length) : videoId;
 }
@@ -443,6 +485,16 @@ function rawChannelId(channelId: string) {
   return channelId.startsWith("floatplane:")
     ? channelId.slice("floatplane:".length)
     : channelId;
+}
+
+function rawCreatorId(creatorId: string) {
+  if (creatorId.startsWith("floatplane-creator:")) {
+    return creatorId.slice("floatplane-creator:".length);
+  }
+  if (creatorId.startsWith("floatplane:")) {
+    return creatorId.slice("floatplane:".length);
+  }
+  return creatorId;
 }
 
 function toFeedVideo(
@@ -456,19 +508,29 @@ function toFeedVideo(
   if (!videoId || !postId) return null;
   const creator = creatorFromPost(post);
   const channel = channelFromPost(post, channelMap);
-  const channelId = channel?.id || creator.id || "creator";
-  const channelName = channel?.title || creator.title || "Floatplane";
+  const channelCreator = creatorFromValue(channel?.creator);
+  const creatorInfo = creator.id || creator.title ? creator : channelCreator || {};
+  const creatorId = creatorInfo.id || channelCreatorId(channel);
+  const creatorAvatar = imagePath(creatorInfo.icon) || imagePath(creatorInfo.card);
+  const channelId = channel?.id || creatorInfo.id || "creator";
+  const channelName = channel?.title || creatorInfo.title || "Floatplane";
   const channelAvatar =
-    imagePath(channel?.icon) || imagePath(channel?.card) || imagePath(creator.icon);
+    imagePath(channel?.icon) || imagePath(channel?.card) || creatorAvatar;
   const attachmentObject = typeof attachment === "object" ? attachment : null;
   return {
     id: namespacedVideoId(videoId),
     provider: "floatplane",
+    creatorId: creatorId ? namespacedCreatorId(creatorId) : null,
+    creatorName: creatorInfo.title || null,
+    creatorAvatar: creatorAvatar || null,
     channelId: `floatplane:${channelId}`,
     channelName,
     channelAvatar,
     title: post.title || attachmentObject?.title || "Untitled Floatplane video",
-    thumbnail: imagePath(post.thumbnail) || imagePath(attachmentObject?.thumbnail) || imagePath(creator.card),
+    thumbnail:
+      imagePath(post.thumbnail) ||
+      imagePath(attachmentObject?.thumbnail) ||
+      imagePath(creatorInfo.card),
     publishedAt: post.releaseDate || attachmentObject?.releaseDate || null,
     duration: Number(post.metadata?.videoDuration || attachmentObject?.duration) || 0,
     downloaded: true,
@@ -480,8 +542,28 @@ function toFeedVideo(
   };
 }
 
-function toAppChannel(channel: FloatplaneChannel): AppChannel | null {
+function toAppCreator(creator: FloatplaneCreator): AppChannel | null {
+  if (!creator.id) return null;
+  return {
+    id: namespacedCreatorId(creator.id),
+    name: creator.title || "Floatplane creator",
+    url: creator.urlname
+      ? `https://www.floatplane.com/channel/${creator.urlname}`
+      : `https://www.floatplane.com/channel/${creator.id}`,
+    avatar: imagePath(creator.icon) || imagePath(creator.card),
+    autoDownload: false,
+    provider: "floatplane",
+    kind: "creator",
+  };
+}
+
+function toAppChannel(
+  channel: FloatplaneChannel,
+  creatorMap: Map<string, FloatplaneCreator> = new Map()
+): AppChannel | null {
   if (!channel.id || !channel.title) return null;
+  const creatorId = channelCreatorId(channel);
+  const creator = creatorId ? creatorMap.get(creatorId) : undefined;
   return {
     id: `floatplane:${channel.id}`,
     name: channel.title,
@@ -490,6 +572,13 @@ function toAppChannel(channel: FloatplaneChannel): AppChannel | null {
       : `https://www.floatplane.com/channel/${channel.id}`,
     avatar: imagePath(channel.icon) || imagePath(channel.card),
     autoDownload: false,
+    provider: "floatplane",
+    kind: "channel",
+    parentId: creatorId ? namespacedCreatorId(creatorId) : null,
+    parentName: creator?.title || null,
+    parentAvatar: creator
+      ? imagePath(creator.icon) || imagePath(creator.card)
+      : null,
   };
 }
 
@@ -500,6 +589,11 @@ function appChannelFromVideo(video: FeedVideo): AppChannel {
     url: video.webpageUrl || "",
     avatar: video.channelAvatar,
     autoDownload: false,
+    provider: video.provider,
+    kind: video.provider === "floatplane" ? "channel" : undefined,
+    parentId: video.creatorId || null,
+    parentName: video.creatorName || null,
+    parentAvatar: video.creatorAvatar || null,
   };
 }
 
@@ -535,8 +629,17 @@ async function getSubscribedFloatplaneContext(warnings: string[]) {
   const subscriptions = await getJson<FloatplaneSubscription[]>(
     "/api/v3/user/subscriptions"
   );
+  const creatorMap = new Map<string, FloatplaneCreator>();
+  subscriptions.forEach((subscription) => {
+    const creator = creatorFromValue(subscription.creator);
+    mergeCreator(creatorMap, creator, creatorIdFromValue(subscription.creator));
+  });
   const creatorIds = [
-    ...new Set(subscriptions.map((subscription) => subscription.creator).filter(Boolean)),
+    ...new Set(
+      subscriptions
+        .map((subscription) => creatorIdFromValue(subscription.creator))
+        .filter(Boolean)
+    ),
   ] as string[];
   const channels = await getFloatplaneChannels(creatorIds).catch((error) => {
     warnings.push(
@@ -546,12 +649,19 @@ async function getSubscribedFloatplaneContext(warnings: string[]) {
     );
     return [];
   });
+  channels.forEach((channel) => {
+    mergeCreator(
+      creatorMap,
+      creatorFromValue(channel.creator),
+      channelCreatorId(channel)
+    );
+  });
   const channelMap = new Map(
     channels
       .filter((channel) => channel.id)
       .map((channel) => [channel.id as string, channel])
   );
-  return { creatorIds, channels, channelMap };
+  return { creatorIds, channels, channelMap, creatorMap };
 }
 
 async function getFloatplanePostsForCreators(creatorIds: string[]) {
@@ -593,9 +703,10 @@ async function getFloatplanePostsByChannel(
   const channelTargets = channels
     .filter((channel) => channel.id && channel.creator)
     .map((channel) => ({
-      creatorId: channel.creator as string,
+      creatorId: channelCreatorId(channel),
       channelId: channel.id as string,
-    }));
+    }))
+    .filter((target) => target.creatorId);
   const creatorsWithChannels = new Set(channelTargets.map((target) => target.creatorId));
   const creatorTargets = creatorIds
     .filter((creatorId) => !creatorsWithChannels.has(creatorId))
@@ -613,13 +724,64 @@ async function getFloatplanePostsByChannel(
   return batches.flat();
 }
 
+function buildFloatplaneNavigation(
+  channels: FloatplaneChannel[],
+  videos: FeedVideo[],
+  creatorMap: Map<string, FloatplaneCreator>
+) {
+  const creatorEntries = new Map<string, AppChannel>();
+  [...creatorMap.values()]
+    .map(toAppCreator)
+    .filter((creator): creator is AppChannel => creator !== null)
+    .forEach((creator) => creatorEntries.set(creator.id, creator));
+  videos.forEach((video) => {
+    if (!video.creatorId) return;
+    const existing = creatorEntries.get(video.creatorId);
+    creatorEntries.set(video.creatorId, {
+      id: video.creatorId,
+      name: video.creatorName || existing?.name || "Floatplane creator",
+      url: existing?.url || "",
+      avatar: video.creatorAvatar || existing?.avatar || "",
+      autoDownload: false,
+      provider: "floatplane",
+      kind: "creator",
+    });
+  });
+  const creators = [...creatorEntries.values()].sort((left, right) =>
+    left.name.localeCompare(right.name)
+  );
+
+  const channelEntries = new Map<string, AppChannel>();
+  channels
+    .map((channel) => toAppChannel(channel, creatorMap))
+    .filter((channel): channel is AppChannel => channel !== null)
+    .forEach((channel) => channelEntries.set(channel.id, channel));
+  videos.map(appChannelFromVideo).forEach((channel) => {
+    const existing = channelEntries.get(channel.id);
+    channelEntries.set(channel.id, {
+      ...channel,
+      url: existing?.url || channel.url,
+      avatar: channel.avatar || existing?.avatar || "",
+      parentId: channel.parentId || existing?.parentId || null,
+      parentName: channel.parentName || existing?.parentName || null,
+      parentAvatar: channel.parentAvatar || existing?.parentAvatar || null,
+    });
+  });
+  const channelList = [...channelEntries.values()].sort((left, right) =>
+    left.name.localeCompare(right.name)
+  );
+
+  return { creators, channelList };
+}
+
 export async function getFloatplaneFeed(): Promise<{
+  creators: AppChannel[];
   channels: AppChannel[];
   videos: FeedVideo[];
   warnings: string[];
 }> {
   const warnings: string[] = [];
-  const { creatorIds, channels, channelMap } =
+  const { creatorIds, channels, channelMap, creatorMap } =
     await getSubscribedFloatplaneContext(warnings);
 
   let posts = await getFloatplanePostsForCreators(creatorIds).catch((error) => {
@@ -658,61 +820,63 @@ export async function getFloatplaneFeed(): Promise<{
       .map((post) => toFeedVideo(post, channelMap))
       .filter((video): video is FeedVideo => video !== null)
   );
+  mergePostCreators(creatorMap, posts);
 
   videos.sort(
     (left, right) =>
       new Date(right.publishedAt || 0).getTime() -
       new Date(left.publishedAt || 0).getTime()
   );
-  const channelList = [
-    ...new Map(
-      [
-        ...channels
-          .map(toAppChannel)
-          .filter((channel): channel is AppChannel => channel !== null),
-        ...videos.map(appChannelFromVideo),
-      ].map((channel) => [channel.id, channel])
-    ).values(),
-  ].sort((left, right) => left.name.localeCompare(right.name));
+  const { creators, channelList } = buildFloatplaneNavigation(
+    channels,
+    videos,
+    creatorMap
+  );
   return {
+    creators,
     channels: channelList,
     videos: videos.slice(0, floatplaneFeedLimit),
     warnings,
   };
 }
 
-export async function getFloatplaneChannelFeedPage(
-  channelId: string,
+export async function getFloatplaneScopedFeedPage(
+  scope: { creatorId?: string; channelId?: string },
   offset: number,
   limit: number
 ): Promise<{
+  creators: AppChannel[];
   channels: AppChannel[];
   videos: FeedVideo[];
   warnings: string[];
 }> {
   const warnings: string[] = [];
-  const { creatorIds, channels, channelMap } =
+  const { creatorIds, channels, channelMap, creatorMap } =
     await getSubscribedFloatplaneContext(warnings);
-  const rawId = rawChannelId(channelId);
-  const targetChannel = channels.find((channel) => channel.id === rawId);
+  const rawScopedCreatorId = scope.creatorId ? rawCreatorId(scope.creatorId) : "";
+  const rawScopedChannelId = scope.channelId ? rawChannelId(scope.channelId) : "";
+  const targetChannel = rawScopedChannelId
+    ? channels.find((channel) => channel.id === rawScopedChannelId)
+    : undefined;
   const creatorId =
-    targetChannel?.creator || creatorIds.find((id) => id === rawId) || "";
-  const channelList = [
-    ...new Map(
-      channels
-        .map(toAppChannel)
-        .filter((channel): channel is AppChannel => channel !== null)
-        .map((channel) => [channel.id, channel])
-    ).values(),
-  ].sort((left, right) => left.name.localeCompare(right.name));
+    rawScopedCreatorId ||
+    channelCreatorId(targetChannel) ||
+    creatorIds.find((id) => id === rawScopedChannelId) ||
+    "";
 
   if (!creatorId) {
+    const { creators, channelList } = buildFloatplaneNavigation(
+      channels,
+      [],
+      creatorMap
+    );
     return {
+      creators,
       channels: channelList,
       videos: [],
       warnings: [
         ...warnings,
-        `Floatplane channel ${channelId} is not available in the current subscriptions.`,
+        "Floatplane creator or channel is not available in the current subscriptions.",
       ],
     };
   }
@@ -744,13 +908,20 @@ export async function getFloatplaneChannelFeedPage(
       .map((post) => toFeedVideo(post, channelMap))
       .filter((video): video is FeedVideo => video !== null)
   );
+  mergePostCreators(creatorMap, posts);
   videos.sort(
     (left, right) =>
       new Date(right.publishedAt || 0).getTime() -
       new Date(left.publishedAt || 0).getTime()
   );
+  const { creators, channelList } = buildFloatplaneNavigation(
+    channels,
+    videos,
+    creatorMap
+  );
 
   return {
+    creators,
     channels: channelList,
     videos,
     warnings,

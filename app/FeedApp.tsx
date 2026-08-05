@@ -89,6 +89,7 @@ type StreamSourceInfo = {
   };
 };
 type FloatplaneFeedPage = FeedResponse & {
+  creators?: Channel[];
   hasMore?: boolean;
   nextOffset?: number | null;
   totalVideos?: number | null;
@@ -130,6 +131,10 @@ function mergeVideosById(existing: FeedVideo[], incoming: FeedVideo[]) {
     }
   });
   return next;
+}
+
+function isFloatplaneCreatorFilter(value: string) {
+  return value.startsWith("floatplane-creator:");
 }
 
 function NavIcon({ view }: { view: View }) {
@@ -640,6 +645,7 @@ export default function FeedApp() {
   const [singleVideos, setSingleVideos] = useState<FeedVideo[]>([]);
   const [singleLoading, setSingleLoading] = useState(false);
   const [floatplaneVideos, setFloatplaneVideos] = useState<FeedVideo[]>([]);
+  const [floatplaneCreatorList, setFloatplaneCreatorList] = useState<Channel[]>([]);
   const [floatplaneChannels, setFloatplaneChannels] = useState<Channel[]>([]);
   const [floatplaneLoading, setFloatplaneLoading] = useState(false);
   const [floatplaneLoadingMore, setFloatplaneLoadingMore] = useState(false);
@@ -1310,27 +1316,54 @@ export default function FeedApp() {
     });
   }, [query, singleVideos]);
 
-  const floatplaneCreators = useMemo(
-    () => [
-      ...new Map(
-        [
-          ...floatplaneChannels.map((channel) => [
-            channel.id,
-            { id: channel.id, name: channel.name, avatar: channel.avatar },
-          ]),
-          ...floatplaneVideos.map((video) => [
-            video.channelId,
-            {
-              id: video.channelId,
-              name: video.channelName,
-              avatar: video.channelAvatar,
-            },
-          ]),
-        ] as Array<[string, Pick<Channel, "id" | "name" | "avatar">]>
-      ).values(),
-    ].sort((left, right) => left.name.localeCompare(right.name)),
-    [floatplaneChannels, floatplaneVideos]
-  );
+  const floatplaneCreators = useMemo(() => {
+    const creators = new Map<string, Pick<Channel, "id" | "name" | "avatar">>();
+    floatplaneCreatorList.forEach((creator) => {
+      creators.set(creator.id, {
+        id: creator.id,
+        name: creator.name,
+        avatar: creator.avatar,
+      });
+    });
+    floatplaneChannels.forEach((channel) => {
+      if (!channel.parentId) return;
+      const existing = creators.get(channel.parentId);
+      creators.set(channel.parentId, {
+        id: channel.parentId,
+        name: channel.parentName || existing?.name || channel.name,
+        avatar: channel.parentAvatar || existing?.avatar || "",
+      });
+    });
+    floatplaneVideos.forEach((video) => {
+      if (!video.creatorId) return;
+      const existing = creators.get(video.creatorId);
+      creators.set(video.creatorId, {
+        id: video.creatorId,
+        name: video.creatorName || existing?.name || video.channelName,
+        avatar: video.creatorAvatar || existing?.avatar || video.channelAvatar,
+      });
+    });
+    return [...creators.values()].sort((left, right) =>
+      left.name.localeCompare(right.name)
+    );
+  }, [floatplaneChannels, floatplaneCreatorList, floatplaneVideos]);
+
+  const activeFloatplaneCreatorId = useMemo(() => {
+    if (isFloatplaneCreatorFilter(floatplaneCreatorFilter)) {
+      return floatplaneCreatorFilter;
+    }
+    return (
+      floatplaneChannels.find((channel) => channel.id === floatplaneCreatorFilter)
+        ?.parentId || null
+    );
+  }, [floatplaneChannels, floatplaneCreatorFilter]);
+
+  const activeFloatplaneChannels = useMemo(() => {
+    if (!activeFloatplaneCreatorId) return [];
+    return floatplaneChannels
+      .filter((channel) => channel.parentId === activeFloatplaneCreatorId)
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }, [activeFloatplaneCreatorId, floatplaneChannels]);
 
   const filteredFloatplaneVideos = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -1482,7 +1515,11 @@ export default function FeedApp() {
         limit: String(floatplanePageSize),
       });
       if (refresh) params.set("refresh", "1");
-      if (channelFilter !== "all") params.set("channel", channelFilter);
+      if (isFloatplaneCreatorFilter(channelFilter)) {
+        params.set("creator", channelFilter);
+      } else if (channelFilter !== "all") {
+        params.set("channel", channelFilter);
+      }
       const response = await fetch(
         `/api/floatplane/feed?${params.toString()}`,
         { cache: "no-store" }
@@ -1492,6 +1529,7 @@ export default function FeedApp() {
         throw new Error(data.error || copy.errors.loadFloatplane);
       }
       const incomingVideos = data.videos || [];
+      setFloatplaneCreatorList(data.creators || []);
       setFloatplaneChannels(data.channels || []);
       setFloatplaneVideos((current) =>
         append ? mergeVideosById(current, incomingVideos) : incomingVideos
@@ -2620,37 +2658,59 @@ export default function FeedApp() {
                 {copy.common.refresh}
               </button>
             </section>
-            {floatplaneCreators.length > 1 && (
-              <div
-                className="filter-row floatplane-channel-row"
-                role="group"
-                aria-label={copy.floatplane.title}
-              >
-                <button
-                  className={`floatplane-channel-filter ${
-                    floatplaneCreatorFilter === "all" ? "active" : ""
-                  }`}
-                  onClick={() => selectFloatplaneCreator("all")}
-                  aria-label={copy.floatplane.allChannels}
-                  title={copy.floatplane.allChannels}
+            {(floatplaneCreators.length > 0 || floatplaneChannels.length > 0) && (
+              <div className="floatplane-filter-stack">
+                <div
+                  className="filter-row floatplane-channel-row"
+                  role="group"
+                  aria-label={copy.floatplane.title}
                 >
-                  <span className="floatplane-filter-all">
-                    <FontAwesomeIcon icon={faList} aria-hidden="true" />
-                  </span>
-                </button>
-                {floatplaneCreators.map((creator) => (
                   <button
-                    key={creator.id}
-                    className={`floatplane-channel-filter ${
-                      floatplaneCreatorFilter === creator.id ? "active" : ""
+                    className={`floatplane-all-filter ${
+                      floatplaneCreatorFilter === "all" ? "active" : ""
                     }`}
-                    onClick={() => selectFloatplaneCreator(creator.id)}
-                    aria-label={creator.name}
-                    title={creator.name}
+                    onClick={() => selectFloatplaneCreator("all")}
                   >
-                    <ChannelAvatar channel={creator} size="small" />
+                    <span className="floatplane-filter-all">
+                      <FontAwesomeIcon icon={faList} aria-hidden="true" />
+                    </span>
+                    {copy.floatplane.allVideos}
                   </button>
-                ))}
+                  {floatplaneCreators.map((creator) => (
+                    <button
+                      key={creator.id}
+                      className={`floatplane-channel-filter ${
+                        activeFloatplaneCreatorId === creator.id ? "active" : ""
+                      }`}
+                      onClick={() => selectFloatplaneCreator(creator.id)}
+                      aria-label={creator.name}
+                      title={creator.name}
+                    >
+                      <ChannelAvatar channel={creator} size="small" />
+                    </button>
+                  ))}
+                </div>
+                {activeFloatplaneCreatorId && activeFloatplaneChannels.length > 0 && (
+                  <div
+                    className="filter-row floatplane-channel-row floatplane-subchannel-row"
+                    role="group"
+                    aria-label={copy.floatplane.channelsForCreator}
+                  >
+                    {activeFloatplaneChannels.map((channel) => (
+                      <button
+                        key={channel.id}
+                        className={`floatplane-channel-filter ${
+                          floatplaneCreatorFilter === channel.id ? "active" : ""
+                        }`}
+                        onClick={() => selectFloatplaneCreator(channel.id)}
+                        aria-label={channel.name}
+                        title={channel.name}
+                      >
+                        <ChannelAvatar channel={channel} size="small" />
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             {floatplaneLoading && !floatplaneVideos.length ? (

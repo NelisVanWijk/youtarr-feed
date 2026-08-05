@@ -4,6 +4,7 @@ import type { Channel, FeedVideo } from "./types";
 
 export type VideoListPayload = {
   channels: Channel[];
+  creators?: Channel[];
   videos: FeedVideo[];
   warnings: string[];
 };
@@ -43,6 +44,8 @@ function isCacheEnvelope(value: unknown): value is CacheEnvelope<VideoListPayloa
     envelope.version === 1 &&
     typeof envelope.savedAt === "number" &&
     Array.isArray(envelope.data?.channels) &&
+    (envelope.data.creators === undefined ||
+      Array.isArray(envelope.data.creators)) &&
     Array.isArray(envelope.data?.videos) &&
     Array.isArray(envelope.data?.warnings)
   );

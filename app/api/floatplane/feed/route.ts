@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import {
-  getFloatplaneChannelFeedPage,
   getFloatplaneFeed,
+  getFloatplaneScopedFeedPage,
   isFloatplaneConfigured,
 } from "../../../../lib/floatplane";
 import { getCachedVideoList } from "../../../../lib/server-cache";
@@ -27,6 +27,7 @@ export async function GET(request: Request) {
       mode: "demo",
       videos: [],
       channels: [],
+      creators: [],
       warnings: ["Floatplane is not configured"],
       hasMore: false,
       nextOffset: null,
@@ -45,11 +46,15 @@ export async function GET(request: Request) {
       requestedLimit === undefined
         ? undefined
         : Math.max(1, Math.min(maxPageSize, requestedLimit));
+    const creatorId = searchParams.get("creator")?.trim() || "";
     const channelId = searchParams.get("channel")?.trim() || "";
-    if (channelId && channelId !== "all") {
+    if (
+      (creatorId && creatorId !== "all") ||
+      (channelId && channelId !== "all")
+    ) {
       const pageLimit = limit || defaultPageSize;
-      const result = await getFloatplaneChannelFeedPage(
-        channelId,
+      const result = await getFloatplaneScopedFeedPage(
+        { creatorId, channelId },
         offset,
         pageLimit + 1
       );

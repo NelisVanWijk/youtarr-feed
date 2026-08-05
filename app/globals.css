@@ -404,9 +404,44 @@ main {
   color: #171719;
 }
 
+.floatplane-filter-stack {
+  max-width: 1480px;
+  margin: 0 auto 25px;
+  display: grid;
+  gap: 10px;
+}
+
+.floatplane-filter-stack .filter-row {
+  margin: 0;
+}
+
 .floatplane-channel-row {
   gap: 11px;
   align-items: center;
+}
+
+.filter-row .floatplane-all-filter {
+  height: 50px;
+  padding: 4px 14px 4px 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-raised);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.filter-row .floatplane-all-filter:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.filter-row .floatplane-all-filter.active {
+  background: var(--surface-raised);
+  border-color: #f1f0eb;
+  color: var(--text);
 }
 
 .filter-row .floatplane-channel-filter {
@@ -448,6 +483,10 @@ main {
 .floatplane-filter-all .svg-inline--fa {
   width: 17px;
   height: 17px;
+}
+
+.floatplane-subchannel-row {
+  padding-left: 63px;
 }
 
 .video-grid {
@@ -2105,6 +2144,14 @@ main {
   .filter-row {
     margin-bottom: 18px;
     padding-right: 10px;
+  }
+
+  .floatplane-filter-stack {
+    margin: 0 16px 18px;
+  }
+
+  .floatplane-subchannel-row {
+    padding-left: 0;
   }
 
   .video-grid {
