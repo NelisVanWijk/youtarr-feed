@@ -412,6 +412,50 @@ main {
   gap: 35px 20px;
 }
 
+.load-more-sentinel {
+  max-width: 1480px;
+  min-height: 70px;
+  margin: 28px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.load-more-button {
+  height: 42px;
+  min-width: 142px;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.load-more-button:hover:not(:disabled) {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: #242426;
+}
+
+.load-more-button:disabled {
+  color: var(--quiet);
+  cursor: default;
+}
+
+.load-more-button .svg-inline--fa {
+  width: 14px;
+  height: 14px;
+}
+
+.load-more-button .spinning {
+  animation: spin 0.85s linear infinite;
+}
+
 .video-card {
   min-width: 0;
 }
@@ -2020,6 +2064,11 @@ main {
   .video-grid {
     grid-template-columns: 1fr;
     gap: 27px;
+  }
+
+  .load-more-sentinel {
+    margin-right: 14px;
+    margin-left: 14px;
   }
 
   .thumbnail-button,

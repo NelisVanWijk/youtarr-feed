@@ -245,7 +245,7 @@ not add Youtarr download, re-download, or delete actions to Floatplane videos.
 | `FLOATPLANE_PASSWORD` | Floatplane password. Kept server-side only. |
 | `FLOATPLANE_TOTP` | Optional one-time 2FA code for initial login. For recurring 2FA, prefer `FLOATPLANE_SESSION_TOKEN`. |
 | `FLOATPLANE_SESSION_TOKEN` | Optional existing Floatplane session cookie. Use either a full cookie string or the raw `sails.sid` value. |
-| `FLOATPLANE_FEED_LIMIT` | Optional total number of Floatplane videos to show. Defaults to `500`, maximum `1000`. |
+| `FLOATPLANE_FEED_LIMIT` | Optional maximum number of Floatplane videos kept in the server cache and made available through infinite scroll. Defaults to `500`, maximum `1000`. |
 | `FLOATPLANE_FETCH_LIMIT` | Optional number of Floatplane posts to fetch before filtering to video posts. Defaults to at least `500`, maximum `1000`. |
 | `FLOATPLANE_PER_CHANNEL_LIMIT` | Optional fallback posts fetched per creator channel when the multi-creator feed is sparse. Defaults to `20`, which is the per-channel endpoint maximum. |
 | `FLOATPLANE_PREFERRED_CODEC` | Preferred Floatplane playback codec. Defaults to `h264`; `avc1` is treated as the same codec family. |
@@ -260,6 +260,10 @@ when a video is opened. By default it asks Floatplane for downloadable MP4
 variants and proxies them through Youtarr Feed so browser seeking and Range
 requests keep working. If Floatplane requires CAPTCHA or rotating 2FA, use
 `FLOATPLANE_SESSION_TOKEN` instead of username/password.
+
+The Floatplane tab loads an initial page of videos and automatically appends
+more when you scroll near the bottom. The server-side cache can still hold a
+larger set so reopening the app does not need to render every thumbnail at once.
 
 If Floatplane returns `429`, wait before retrying. This is a Floatplane-side
 login rate limit. After the first successful login the app reuses the stored

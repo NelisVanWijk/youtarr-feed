@@ -88,6 +88,12 @@ type StreamSourceInfo = {
     playbackMode?: string;
   };
 };
+type FloatplaneFeedPage = FeedResponse & {
+  hasMore?: boolean;
+  nextOffset?: number | null;
+  totalVideos?: number;
+  error?: string;
+};
 type VideoMetadataInfo = {
   description?: string | null;
   likeCount?: number | null;
@@ -109,6 +115,22 @@ type DownloadJob = {
 const palette = ["coral", "blue", "lime", "violet", "gold"];
 const languageStorageKey = "youtarr-feed-language";
 const watchResumeRewindSeconds = 5;
+const floatplanePageSize = 48;
+
+function mergeVideosById(existing: FeedVideo[], incoming: FeedVideo[]) {
+  const next = [...existing];
+  const indices = new Map(next.map((video, index) => [video.id, index]));
+  incoming.forEach((video) => {
+    const index = indices.get(video.id);
+    if (index === undefined) {
+      indices.set(video.id, next.length);
+      next.push(video);
+    } else {
+      next[index] = { ...next[index], ...video };
+    }
+  });
+  return next;
+}
 
 function NavIcon({ view }: { view: View }) {
   const icon =
@@ -620,6 +642,9 @@ export default function FeedApp() {
   const [floatplaneVideos, setFloatplaneVideos] = useState<FeedVideo[]>([]);
   const [floatplaneChannels, setFloatplaneChannels] = useState<Channel[]>([]);
   const [floatplaneLoading, setFloatplaneLoading] = useState(false);
+  const [floatplaneLoadingMore, setFloatplaneLoadingMore] = useState(false);
+  const [floatplaneHasMore, setFloatplaneHasMore] = useState(false);
+  const [floatplaneNextOffset, setFloatplaneNextOffset] = useState(0);
   const [floatplaneCreatorFilter, setFloatplaneCreatorFilter] = useState("all");
   const [selectedVideo, setSelectedVideo] = useState<FeedVideo | null>(null);
   const [playerMode, setPlayerMode] = useState<PlayerMode>("full");
@@ -661,6 +686,7 @@ export default function FeedApp() {
   const playerDragRef = useRef<PlayerDragState | null>(null);
   const intendedPlaybackRef = useRef(false);
   const pauseIntentTimerRef = useRef<number | null>(null);
+  const floatplaneLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const mode: AppMode = feed?.mode || "demo";
   const copy = translations[language];
   const shouldUseInlineWatchPage = useCallback(() => true, []);
@@ -1436,25 +1462,51 @@ export default function FeedApp() {
     }
   }
 
-  async function loadFloatplaneVideos(quiet = false, refresh = false) {
-    if (!quiet) setFloatplaneLoading(true);
+  async function loadFloatplaneVideos(
+    quiet = false,
+    refresh = false,
+    append = false
+  ) {
+    if (append && (floatplaneLoading || floatplaneLoadingMore || !floatplaneHasMore)) {
+      return;
+    }
+    const offset = append ? floatplaneNextOffset : 0;
+    if (append) {
+      setFloatplaneLoadingMore(true);
+    } else if (!quiet) {
+      setFloatplaneLoading(true);
+    }
     setError("");
     try {
+      const params = new URLSearchParams({
+        offset: String(offset),
+        limit: String(floatplanePageSize),
+      });
+      if (refresh) params.set("refresh", "1");
       const response = await fetch(
-        `/api/floatplane/feed${refresh ? "?refresh=1" : ""}`,
+        `/api/floatplane/feed?${params.toString()}`,
         { cache: "no-store" }
       );
-      const data = (await response.json()) as {
-        channels?: Channel[];
-        videos?: FeedVideo[];
-        error?: string;
-      };
+      const data = (await response.json()) as FloatplaneFeedPage;
       if (!response.ok) {
         throw new Error(data.error || copy.errors.loadFloatplane);
       }
+      const incomingVideos = data.videos || [];
       setFloatplaneChannels(data.channels || []);
-      setFloatplaneVideos(data.videos || []);
-      if (!refresh && response.headers.get("X-Youtarr-Feed-Cache") === "stale") {
+      setFloatplaneVideos((current) =>
+        append ? mergeVideosById(current, incomingVideos) : incomingVideos
+      );
+      setFloatplaneHasMore(Boolean(data.hasMore));
+      setFloatplaneNextOffset(
+        typeof data.nextOffset === "number"
+          ? data.nextOffset
+          : offset + incomingVideos.length
+      );
+      if (
+        !append &&
+        !refresh &&
+        response.headers.get("X-Youtarr-Feed-Cache") === "stale"
+      ) {
         window.setTimeout(() => void loadFloatplaneVideos(true, true), 500);
       }
     } catch (floatplaneError) {
@@ -1464,9 +1516,46 @@ export default function FeedApp() {
           : copy.errors.loadFloatplane
       );
     } finally {
-      setFloatplaneLoading(false);
+      if (append) {
+        setFloatplaneLoadingMore(false);
+      } else {
+        setFloatplaneLoading(false);
+      }
     }
   }
+
+  useEffect(() => {
+    if (
+      view !== "floatplane" ||
+      !floatplaneHasMore ||
+      floatplaneLoading ||
+      floatplaneLoadingMore ||
+      typeof IntersectionObserver === "undefined"
+    ) {
+      return undefined;
+    }
+    const target = floatplaneLoadMoreRef.current;
+    if (!target) return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          void loadFloatplaneVideos(true, false, true);
+        }
+      },
+      { rootMargin: "800px 0px" }
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+    // loadFloatplaneVideos is intentionally local; pagination state controls this observer.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    floatplaneHasMore,
+    floatplaneLoading,
+    floatplaneLoadingMore,
+    floatplaneNextOffset,
+    view,
+  ]);
 
   function markVideoDownloaded(updatedVideo: FeedVideo) {
     const updated = { ...updatedVideo, downloaded: true };
@@ -2533,7 +2622,7 @@ export default function FeedApp() {
                 ))}
               </div>
             )}
-            {floatplaneLoading ? (
+            {floatplaneLoading && !floatplaneVideos.length ? (
               <LoadingGrid copy={copy} />
             ) : filteredFloatplaneVideos.length ? (
               <div className="video-grid">
@@ -2559,6 +2648,27 @@ export default function FeedApp() {
                 </span>
                 <h2>{copy.floatplane.emptyTitle}</h2>
                 <p>{copy.floatplane.emptyBody}</p>
+              </div>
+            )}
+            {!floatplaneLoading && floatplaneHasMore && (
+              <div
+                ref={floatplaneLoadMoreRef}
+                className="load-more-sentinel"
+              >
+                <button
+                  className="load-more-button"
+                  onClick={() => void loadFloatplaneVideos(true, false, true)}
+                  disabled={floatplaneLoadingMore}
+                >
+                  <FontAwesomeIcon
+                    className={floatplaneLoadingMore ? "spinning" : ""}
+                    icon={faRotateRight}
+                    aria-hidden="true"
+                  />
+                  {floatplaneLoadingMore
+                    ? copy.floatplane.loadingMore
+                    : copy.floatplane.loadMore}
+                </button>
               </div>
             )}
           </>

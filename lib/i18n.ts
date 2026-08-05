@@ -154,6 +154,8 @@ export const translations = {
       title: "Floatplane",
       subtitle: "Videos from your active Floatplane subscriptions.",
       allChannels: "All channels",
+      loadMore: "Load more",
+      loadingMore: "Loading more",
       emptyTitle: "No Floatplane videos",
       emptyBody: "Enable Floatplane in the server environment to show subscribed videos here.",
       sourceBody: (detail: string) =>
@@ -369,6 +371,8 @@ export const translations = {
       title: "Floatplane",
       subtitle: "Video's van je actieve Floatplane-abonnementen.",
       allChannels: "Alle kanalen",
+      loadMore: "Meer laden",
+      loadingMore: "Meer laden",
       emptyTitle: "Geen Floatplane-video's",
       emptyBody: "Zet Floatplane aan in de servervariabelen om abonnementen hier te tonen.",
       sourceBody: (detail: string) =>
