@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { appDataPath, removeAppDataFile, writeJsonAtomic } from "./app-data";
 import type {
+  Channel as AppChannel,
   ConnectionStatus,
   FeedVideo,
   ServiceDiagnostic,
@@ -24,6 +25,7 @@ type FloatplaneCreator = {
 
 type FloatplaneChannel = {
   id?: string;
+  creator?: string;
   title?: string;
   urlname?: string;
   icon?: FloatplaneImage | null;
@@ -32,6 +34,15 @@ type FloatplaneChannel = {
 
 type FloatplaneSubscription = {
   creator?: string;
+};
+
+type FloatplaneCreatorListResponse = {
+  blogPosts?: FloatplanePost[];
+  lastElements?: Array<{
+    creatorId?: string;
+    blogPostId?: string | null;
+    moreFetchable?: boolean;
+  }>;
 };
 
 type FloatplanePost = {
@@ -138,11 +149,19 @@ const floatplaneTotp = process.env.FLOATPLANE_TOTP?.trim() || "";
 const floatplaneSessionToken = process.env.FLOATPLANE_SESSION_TOKEN?.trim() || "";
 const floatplaneFeedLimit = Math.max(
   5,
-  Math.min(160, Number(process.env.FLOATPLANE_FEED_LIMIT) || 80)
+  Math.min(1000, Number(process.env.FLOATPLANE_FEED_LIMIT) || 500)
 );
-const floatplanePerCreatorLimit = Math.max(
-  3,
-  Math.min(20, Number(process.env.FLOATPLANE_PER_CREATOR_LIMIT) || 12)
+const floatplaneFetchLimit = Math.max(
+  20,
+  Math.min(
+    1000,
+    Number(process.env.FLOATPLANE_FETCH_LIMIT) ||
+      Math.max(floatplaneFeedLimit * 2, 500)
+  )
+);
+const floatplanePerChannelLimit = Math.max(
+  1,
+  Math.min(20, Number(process.env.FLOATPLANE_PER_CHANNEL_LIMIT) || 20)
 );
 const floatplaneMaxHeight = Math.max(
   0,
@@ -398,7 +417,13 @@ function creatorFromPost(post: FloatplanePost): FloatplaneCreator {
   return typeof post.creator === "object" && post.creator ? post.creator : {};
 }
 
-function channelFromPost(post: FloatplanePost): FloatplaneChannel | null {
+function channelFromPost(
+  post: FloatplanePost,
+  channelMap: Map<string, FloatplaneChannel> = new Map()
+): FloatplaneChannel | null {
+  if (typeof post.channel === "string") {
+    return channelMap.get(post.channel) || null;
+  }
   return typeof post.channel === "object" && post.channel ? post.channel : null;
 }
 
@@ -414,14 +439,17 @@ function rawVideoId(videoId: string) {
   return videoId.startsWith("floatplane:") ? videoId.slice("floatplane:".length) : videoId;
 }
 
-function toFeedVideo(post: FloatplanePost): FeedVideo | null {
+function toFeedVideo(
+  post: FloatplanePost,
+  channelMap: Map<string, FloatplaneChannel> = new Map()
+): FeedVideo | null {
   if (post.isAccessible === false || post.metadata?.hasVideo === false) return null;
   const attachment = post.videoAttachments?.[0];
   const videoId = videoIdFromAttachment(attachment);
   const postId = post.id || post.guid || "";
   if (!videoId || !postId) return null;
   const creator = creatorFromPost(post);
-  const channel = channelFromPost(post);
+  const channel = channelFromPost(post, channelMap);
   const channelId = channel?.id || creator.id || "creator";
   const channelName = channel?.title || creator.title || "Floatplane";
   const channelAvatar =
@@ -446,8 +474,118 @@ function toFeedVideo(post: FloatplanePost): FeedVideo | null {
   };
 }
 
+function toAppChannel(channel: FloatplaneChannel): AppChannel | null {
+  if (!channel.id || !channel.title) return null;
+  return {
+    id: `floatplane:${channel.id}`,
+    name: channel.title,
+    url: channel.urlname
+      ? `https://www.floatplane.com/channel/${channel.urlname}`
+      : `https://www.floatplane.com/channel/${channel.id}`,
+    avatar: imagePath(channel.icon) || imagePath(channel.card),
+    autoDownload: false,
+  };
+}
+
+function appChannelFromVideo(video: FeedVideo): AppChannel {
+  return {
+    id: video.channelId,
+    name: video.channelName,
+    url: video.webpageUrl || "",
+    avatar: video.channelAvatar,
+    autoDownload: false,
+  };
+}
+
+function postChannelId(post: FloatplanePost) {
+  if (typeof post.channel === "string") return post.channel;
+  return post.channel?.id || "";
+}
+
+function uniquePosts(posts: FloatplanePost[]) {
+  return [
+    ...new Map(
+      posts.map((post) => [post.id || post.guid || JSON.stringify(post), post])
+    ).values(),
+  ];
+}
+
+function uniqueVideos(videos: FeedVideo[]) {
+  return [...new Map(videos.map((video) => [video.id, video])).values()];
+}
+
+function buildFloatplaneUrl(pathname: string) {
+  return new URL(pathname, floatplaneBaseUrl);
+}
+
+async function getFloatplaneChannels(creatorIds: string[]) {
+  if (!creatorIds.length) return [];
+  const url = buildFloatplaneUrl("/api/v3/creator/channels/list");
+  creatorIds.forEach((creatorId) => url.searchParams.append("ids", creatorId));
+  return getJson<FloatplaneChannel[]>(`${url.pathname}${url.search}`);
+}
+
+async function getFloatplanePostsForCreators(creatorIds: string[]) {
+  if (!creatorIds.length) return [];
+  const url = buildFloatplaneUrl("/api/v3/content/creator/list");
+  creatorIds.forEach((creatorId) => url.searchParams.append("ids", creatorId));
+  url.searchParams.set("limit", String(floatplaneFetchLimit));
+  const response = await getJson<FloatplaneCreatorListResponse>(
+    `${url.pathname}${url.search}`
+  );
+  return response.blogPosts || [];
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T) => Promise<R>
+) {
+  const results: R[] = [];
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await mapper(items[index]);
+      }
+    }
+  );
+  await Promise.all(workers);
+  return results;
+}
+
+async function getFloatplanePostsByChannel(
+  creatorIds: string[],
+  channels: FloatplaneChannel[]
+) {
+  const channelTargets = channels
+    .filter((channel) => channel.id && channel.creator)
+    .map((channel) => ({
+      creatorId: channel.creator as string,
+      channelId: channel.id as string,
+    }));
+  const creatorsWithChannels = new Set(channelTargets.map((target) => target.creatorId));
+  const creatorTargets = creatorIds
+    .filter((creatorId) => !creatorsWithChannels.has(creatorId))
+    .map((creatorId) => ({ creatorId, channelId: "" }));
+  const targets = [...channelTargets, ...creatorTargets];
+  const batches = await mapWithConcurrency(targets, 6, async (target) => {
+    const url = buildFloatplaneUrl("/api/v3/content/creator");
+    url.searchParams.set("id", target.creatorId);
+    if (target.channelId) url.searchParams.set("channel", target.channelId);
+    url.searchParams.set("limit", String(floatplanePerChannelLimit));
+    url.searchParams.set("hasVideo", "true");
+    url.searchParams.set("sort", "DESC");
+    return getJson<FloatplanePost[]>(`${url.pathname}${url.search}`);
+  });
+  return batches.flat();
+}
+
 export async function getFloatplaneFeed(): Promise<{
-  channels: [];
+  channels: AppChannel[];
   videos: FeedVideo[];
   warnings: string[];
 }> {
@@ -458,31 +596,77 @@ export async function getFloatplaneFeed(): Promise<{
     ...new Set(subscriptions.map((subscription) => subscription.creator).filter(Boolean)),
   ] as string[];
   const warnings: string[] = [];
-  const results = await Promise.allSettled(
-    creatorIds.map((creatorId) => {
-      const url = new URL("/api/v3/content/creator", floatplaneBaseUrl);
-      url.searchParams.set("id", creatorId);
-      url.searchParams.set("limit", String(floatplanePerCreatorLimit));
-      url.searchParams.set("hasVideo", "true");
-      url.searchParams.set("sort", "DESC");
-      return getJson<FloatplanePost[]>(`${url.pathname}${url.search}`);
-    })
+  const channels = await getFloatplaneChannels(creatorIds).catch((error) => {
+    warnings.push(
+      error instanceof Error
+        ? `Floatplane channels could not be loaded: ${error.message}`
+        : "Floatplane channels could not be loaded"
+    );
+    return [];
+  });
+  const channelMap = new Map(
+    channels
+      .filter((channel) => channel.id)
+      .map((channel) => [channel.id as string, channel])
   );
 
-  const videos = results.flatMap((result, index) => {
-    if (result.status === "rejected") {
-      warnings.push(`${creatorIds[index]} could not be loaded`);
-      return [];
-    }
-    return result.value.map(toFeedVideo).filter((video): video is FeedVideo => video !== null);
+  let posts = await getFloatplanePostsForCreators(creatorIds).catch((error) => {
+    warnings.push(
+      error instanceof Error
+        ? `Floatplane multi-creator feed failed: ${error.message}`
+        : "Floatplane multi-creator feed failed"
+    );
+    return [];
   });
+
+  const loadedChannelIds = new Set(
+    posts.map(postChannelId).filter((channelId) => channelId)
+  );
+  const missingChannels = channels.filter(
+    (channel) => channel.id && !loadedChannelIds.has(channel.id)
+  );
+
+  if (posts.length < Math.min(floatplaneFeedLimit, 120) || missingChannels.length) {
+    const channelPosts = await getFloatplanePostsByChannel(
+      creatorIds,
+      posts.length < Math.min(floatplaneFeedLimit, 120) ? channels : missingChannels
+    ).catch((error) => {
+      warnings.push(
+        error instanceof Error
+          ? `Floatplane channel feed fallback failed: ${error.message}`
+          : "Floatplane channel feed fallback failed"
+      );
+      return [];
+    });
+    posts = uniquePosts([...posts, ...channelPosts]);
+  }
+
+  const videos = uniqueVideos(
+    posts
+      .map((post) => toFeedVideo(post, channelMap))
+      .filter((video): video is FeedVideo => video !== null)
+  );
 
   videos.sort(
     (left, right) =>
       new Date(right.publishedAt || 0).getTime() -
       new Date(left.publishedAt || 0).getTime()
   );
-  return { channels: [], videos: videos.slice(0, floatplaneFeedLimit), warnings };
+  const channelList = [
+    ...new Map(
+      [
+        ...channels
+          .map(toAppChannel)
+          .filter((channel): channel is AppChannel => channel !== null),
+        ...videos.map(appChannelFromVideo),
+      ].map((channel) => [channel.id, channel])
+    ).values(),
+  ].sort((left, right) => left.name.localeCompare(right.name));
+  return {
+    channels: channelList,
+    videos: videos.slice(0, floatplaneFeedLimit),
+    warnings,
+  };
 }
 
 export async function getFloatplaneVideoMetadata(videoId: string) {
@@ -698,6 +882,21 @@ export async function getFloatplaneDiagnostics(
       label: "Stored session",
       value: stored?.cookie ? `Set (${stored.source || "login"})` : "Not set",
       secret: true,
+    },
+    {
+      key: "FLOATPLANE_FEED_LIMIT",
+      label: "Feed limit",
+      value: String(floatplaneFeedLimit),
+    },
+    {
+      key: "FLOATPLANE_FETCH_LIMIT",
+      label: "Fetch limit",
+      value: String(floatplaneFetchLimit),
+    },
+    {
+      key: "FLOATPLANE_PER_CHANNEL_LIMIT",
+      label: "Per channel fallback",
+      value: String(floatplanePerChannelLimit),
     },
     {
       key: "FLOATPLANE_PREFERRED_CODEC",

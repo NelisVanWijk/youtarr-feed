@@ -618,6 +618,7 @@ export default function FeedApp() {
   const [singleVideos, setSingleVideos] = useState<FeedVideo[]>([]);
   const [singleLoading, setSingleLoading] = useState(false);
   const [floatplaneVideos, setFloatplaneVideos] = useState<FeedVideo[]>([]);
+  const [floatplaneChannels, setFloatplaneChannels] = useState<Channel[]>([]);
   const [floatplaneLoading, setFloatplaneLoading] = useState(false);
   const [floatplaneCreatorFilter, setFloatplaneCreatorFilter] = useState("all");
   const [selectedVideo, setSelectedVideo] = useState<FeedVideo | null>(null);
@@ -1286,13 +1287,19 @@ export default function FeedApp() {
   const floatplaneCreators = useMemo(
     () => [
       ...new Map(
-        floatplaneVideos.map((video) => [
-          video.channelId,
-          { id: video.channelId, name: video.channelName },
-        ])
+        [
+          ...floatplaneChannels.map((channel) => [
+            channel.id,
+            { id: channel.id, name: channel.name },
+          ]),
+          ...floatplaneVideos.map((video) => [
+            video.channelId,
+            { id: video.channelId, name: video.channelName },
+          ]),
+        ] as Array<[string, { id: string; name: string }]>
       ).values(),
-    ],
-    [floatplaneVideos]
+    ].sort((left, right) => left.name.localeCompare(right.name)),
+    [floatplaneChannels, floatplaneVideos]
   );
 
   const filteredFloatplaneVideos = useMemo(() => {
@@ -1438,12 +1445,14 @@ export default function FeedApp() {
         { cache: "no-store" }
       );
       const data = (await response.json()) as {
+        channels?: Channel[];
         videos?: FeedVideo[];
         error?: string;
       };
       if (!response.ok) {
         throw new Error(data.error || copy.errors.loadFloatplane);
       }
+      setFloatplaneChannels(data.channels || []);
       setFloatplaneVideos(data.videos || []);
       if (!refresh && response.headers.get("X-Youtarr-Feed-Cache") === "stale") {
         window.setTimeout(() => void loadFloatplaneVideos(true, true), 500);
