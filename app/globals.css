@@ -404,6 +404,52 @@ main {
   color: #171719;
 }
 
+.floatplane-channel-row {
+  gap: 11px;
+  align-items: center;
+}
+
+.filter-row .floatplane-channel-filter {
+  width: 50px;
+  height: 50px;
+  padding: 3px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 50%;
+}
+
+.filter-row .floatplane-channel-filter:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.filter-row .floatplane-channel-filter.active {
+  background: transparent;
+  border-color: #f1f0eb;
+  color: var(--text);
+}
+
+.floatplane-channel-filter .avatar {
+  width: 40px;
+  height: 40px;
+}
+
+.floatplane-filter-all {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-raised);
+  border-radius: 50%;
+  color: var(--text);
+}
+
+.floatplane-filter-all .svg-inline--fa {
+  width: 17px;
+  height: 17px;
+}
+
 .video-grid {
   max-width: 1480px;
   margin: 0 auto;

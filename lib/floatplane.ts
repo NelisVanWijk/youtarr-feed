@@ -439,6 +439,12 @@ function rawVideoId(videoId: string) {
   return videoId.startsWith("floatplane:") ? videoId.slice("floatplane:".length) : videoId;
 }
 
+function rawChannelId(channelId: string) {
+  return channelId.startsWith("floatplane:")
+    ? channelId.slice("floatplane:".length)
+    : channelId;
+}
+
 function toFeedVideo(
   post: FloatplanePost,
   channelMap: Map<string, FloatplaneChannel> = new Map()
@@ -525,6 +531,29 @@ async function getFloatplaneChannels(creatorIds: string[]) {
   return getJson<FloatplaneChannel[]>(`${url.pathname}${url.search}`);
 }
 
+async function getSubscribedFloatplaneContext(warnings: string[]) {
+  const subscriptions = await getJson<FloatplaneSubscription[]>(
+    "/api/v3/user/subscriptions"
+  );
+  const creatorIds = [
+    ...new Set(subscriptions.map((subscription) => subscription.creator).filter(Boolean)),
+  ] as string[];
+  const channels = await getFloatplaneChannels(creatorIds).catch((error) => {
+    warnings.push(
+      error instanceof Error
+        ? `Floatplane channels could not be loaded: ${error.message}`
+        : "Floatplane channels could not be loaded"
+    );
+    return [];
+  });
+  const channelMap = new Map(
+    channels
+      .filter((channel) => channel.id)
+      .map((channel) => [channel.id as string, channel])
+  );
+  return { creatorIds, channels, channelMap };
+}
+
 async function getFloatplanePostsForCreators(creatorIds: string[]) {
   if (!creatorIds.length) return [];
   const url = buildFloatplaneUrl("/api/v3/content/creator/list");
@@ -589,26 +618,9 @@ export async function getFloatplaneFeed(): Promise<{
   videos: FeedVideo[];
   warnings: string[];
 }> {
-  const subscriptions = await getJson<FloatplaneSubscription[]>(
-    "/api/v3/user/subscriptions"
-  );
-  const creatorIds = [
-    ...new Set(subscriptions.map((subscription) => subscription.creator).filter(Boolean)),
-  ] as string[];
   const warnings: string[] = [];
-  const channels = await getFloatplaneChannels(creatorIds).catch((error) => {
-    warnings.push(
-      error instanceof Error
-        ? `Floatplane channels could not be loaded: ${error.message}`
-        : "Floatplane channels could not be loaded"
-    );
-    return [];
-  });
-  const channelMap = new Map(
-    channels
-      .filter((channel) => channel.id)
-      .map((channel) => [channel.id as string, channel])
-  );
+  const { creatorIds, channels, channelMap } =
+    await getSubscribedFloatplaneContext(warnings);
 
   let posts = await getFloatplanePostsForCreators(creatorIds).catch((error) => {
     warnings.push(
@@ -665,6 +677,82 @@ export async function getFloatplaneFeed(): Promise<{
   return {
     channels: channelList,
     videos: videos.slice(0, floatplaneFeedLimit),
+    warnings,
+  };
+}
+
+export async function getFloatplaneChannelFeedPage(
+  channelId: string,
+  offset: number,
+  limit: number
+): Promise<{
+  channels: AppChannel[];
+  videos: FeedVideo[];
+  warnings: string[];
+}> {
+  const warnings: string[] = [];
+  const { creatorIds, channels, channelMap } =
+    await getSubscribedFloatplaneContext(warnings);
+  const rawId = rawChannelId(channelId);
+  const targetChannel = channels.find((channel) => channel.id === rawId);
+  const creatorId =
+    targetChannel?.creator || creatorIds.find((id) => id === rawId) || "";
+  const channelList = [
+    ...new Map(
+      channels
+        .map(toAppChannel)
+        .filter((channel): channel is AppChannel => channel !== null)
+        .map((channel) => [channel.id, channel])
+    ).values(),
+  ].sort((left, right) => left.name.localeCompare(right.name));
+
+  if (!creatorId) {
+    return {
+      channels: channelList,
+      videos: [],
+      warnings: [
+        ...warnings,
+        `Floatplane channel ${channelId} is not available in the current subscriptions.`,
+      ],
+    };
+  }
+
+  const posts: FloatplanePost[] = [];
+  const targetCount = Math.max(1, limit);
+  let fetchOffset = Math.max(0, offset);
+  while (posts.length < targetCount) {
+    const batchLimit = Math.min(
+      floatplanePerChannelLimit,
+      targetCount - posts.length
+    );
+    const url = buildFloatplaneUrl("/api/v3/content/creator");
+    url.searchParams.set("id", creatorId);
+    if (targetChannel?.id) url.searchParams.set("channel", targetChannel.id);
+    url.searchParams.set("limit", String(batchLimit));
+    if (fetchOffset > 0) url.searchParams.set("fetchAfter", String(fetchOffset));
+    url.searchParams.set("hasVideo", "true");
+    url.searchParams.set("sort", "DESC");
+    const batch = await getJson<FloatplanePost[]>(`${url.pathname}${url.search}`);
+    if (batch.length === 0) break;
+    posts.push(...batch);
+    fetchOffset += batch.length;
+    if (batch.length < batchLimit) break;
+  }
+
+  const videos = uniqueVideos(
+    posts
+      .map((post) => toFeedVideo(post, channelMap))
+      .filter((video): video is FeedVideo => video !== null)
+  );
+  videos.sort(
+    (left, right) =>
+      new Date(right.publishedAt || 0).getTime() -
+      new Date(left.publishedAt || 0).getTime()
+  );
+
+  return {
+    channels: channelList,
+    videos,
     warnings,
   };
 }

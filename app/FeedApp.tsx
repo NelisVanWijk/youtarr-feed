@@ -91,7 +91,7 @@ type StreamSourceInfo = {
 type FloatplaneFeedPage = FeedResponse & {
   hasMore?: boolean;
   nextOffset?: number | null;
-  totalVideos?: number;
+  totalVideos?: number | null;
   error?: string;
 };
 type VideoMetadataInfo = {
@@ -1316,13 +1316,17 @@ export default function FeedApp() {
         [
           ...floatplaneChannels.map((channel) => [
             channel.id,
-            { id: channel.id, name: channel.name },
+            { id: channel.id, name: channel.name, avatar: channel.avatar },
           ]),
           ...floatplaneVideos.map((video) => [
             video.channelId,
-            { id: video.channelId, name: video.channelName },
+            {
+              id: video.channelId,
+              name: video.channelName,
+              avatar: video.channelAvatar,
+            },
           ]),
-        ] as Array<[string, { id: string; name: string }]>
+        ] as Array<[string, Pick<Channel, "id" | "name" | "avatar">]>
       ).values(),
     ].sort((left, right) => left.name.localeCompare(right.name)),
     [floatplaneChannels, floatplaneVideos]
@@ -1332,12 +1336,6 @@ export default function FeedApp() {
     const normalized = query.trim().toLowerCase();
     return floatplaneVideos.filter((video) => {
       if (
-        floatplaneCreatorFilter !== "all" &&
-        video.channelId !== floatplaneCreatorFilter
-      ) {
-        return false;
-      }
-      if (
         normalized &&
         !`${video.title} ${video.channelName}`.toLowerCase().includes(normalized)
       ) {
@@ -1345,7 +1343,7 @@ export default function FeedApp() {
       }
       return true;
     });
-  }, [floatplaneCreatorFilter, floatplaneVideos, query]);
+  }, [floatplaneVideos, query]);
 
   useEffect(() => {
     if (mode !== "live") return;
@@ -1465,7 +1463,8 @@ export default function FeedApp() {
   async function loadFloatplaneVideos(
     quiet = false,
     refresh = false,
-    append = false
+    append = false,
+    channelFilter = floatplaneCreatorFilter
   ) {
     if (append && (floatplaneLoading || floatplaneLoadingMore || !floatplaneHasMore)) {
       return;
@@ -1483,6 +1482,7 @@ export default function FeedApp() {
         limit: String(floatplanePageSize),
       });
       if (refresh) params.set("refresh", "1");
+      if (channelFilter !== "all") params.set("channel", channelFilter);
       const response = await fetch(
         `/api/floatplane/feed?${params.toString()}`,
         { cache: "no-store" }
@@ -1540,7 +1540,7 @@ export default function FeedApp() {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
-          void loadFloatplaneVideos(true, false, true);
+          void loadFloatplaneVideos(true, false, true, floatplaneCreatorFilter);
         }
       },
       { rootMargin: "800px 0px" }
@@ -1554,8 +1554,18 @@ export default function FeedApp() {
     floatplaneLoading,
     floatplaneLoadingMore,
     floatplaneNextOffset,
+    floatplaneCreatorFilter,
     view,
   ]);
+
+  function selectFloatplaneCreator(nextFilter: string) {
+    if (nextFilter === floatplaneCreatorFilter) return;
+    setFloatplaneCreatorFilter(nextFilter);
+    setFloatplaneVideos([]);
+    setFloatplaneHasMore(false);
+    setFloatplaneNextOffset(0);
+    void loadFloatplaneVideos(false, false, false, nextFilter);
+  }
 
   function markVideoDownloaded(updatedVideo: FeedVideo) {
     const updated = { ...updatedVideo, downloaded: true };
@@ -2598,26 +2608,47 @@ export default function FeedApp() {
               </div>
               <button
                 className="settings-link"
-                onClick={() => void loadFloatplaneVideos(true, true)}
+                onClick={() =>
+                  void loadFloatplaneVideos(
+                    true,
+                    true,
+                    false,
+                    floatplaneCreatorFilter
+                  )
+                }
               >
                 {copy.common.refresh}
               </button>
             </section>
             {floatplaneCreators.length > 1 && (
-              <div className="filter-row" role="group" aria-label={copy.floatplane.title}>
+              <div
+                className="filter-row floatplane-channel-row"
+                role="group"
+                aria-label={copy.floatplane.title}
+              >
                 <button
-                  className={floatplaneCreatorFilter === "all" ? "active" : ""}
-                  onClick={() => setFloatplaneCreatorFilter("all")}
+                  className={`floatplane-channel-filter ${
+                    floatplaneCreatorFilter === "all" ? "active" : ""
+                  }`}
+                  onClick={() => selectFloatplaneCreator("all")}
+                  aria-label={copy.floatplane.allChannels}
+                  title={copy.floatplane.allChannels}
                 >
-                  {copy.floatplane.allChannels}
+                  <span className="floatplane-filter-all">
+                    <FontAwesomeIcon icon={faList} aria-hidden="true" />
+                  </span>
                 </button>
                 {floatplaneCreators.map((creator) => (
                   <button
                     key={creator.id}
-                    className={floatplaneCreatorFilter === creator.id ? "active" : ""}
-                    onClick={() => setFloatplaneCreatorFilter(creator.id)}
+                    className={`floatplane-channel-filter ${
+                      floatplaneCreatorFilter === creator.id ? "active" : ""
+                    }`}
+                    onClick={() => selectFloatplaneCreator(creator.id)}
+                    aria-label={creator.name}
+                    title={creator.name}
                   >
-                    {creator.name}
+                    <ChannelAvatar channel={creator} size="small" />
                   </button>
                 ))}
               </div>
@@ -2657,7 +2688,14 @@ export default function FeedApp() {
               >
                 <button
                   className="load-more-button"
-                  onClick={() => void loadFloatplaneVideos(true, false, true)}
+                  onClick={() =>
+                    void loadFloatplaneVideos(
+                      true,
+                      false,
+                      true,
+                      floatplaneCreatorFilter
+                    )
+                  }
                   disabled={floatplaneLoadingMore}
                 >
                   <FontAwesomeIcon

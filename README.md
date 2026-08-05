@@ -262,8 +262,9 @@ requests keep working. If Floatplane requires CAPTCHA or rotating 2FA, use
 `FLOATPLANE_SESSION_TOKEN` instead of username/password.
 
 The Floatplane tab loads an initial page of videos and automatically appends
-more when you scroll near the bottom. The server-side cache can still hold a
-larger set so reopening the app does not need to render every thumbnail at once.
+more when you scroll near the bottom. This also works when a specific channel
+avatar is selected. The server-side cache can still hold a larger set so
+reopening the app does not need to render every thumbnail at once.
 
 If Floatplane returns `429`, wait before retrying. This is a Floatplane-side
 login rate limit. After the first successful login the app reuses the stored

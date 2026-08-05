@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  getFloatplaneChannelFeedPage,
   getFloatplaneFeed,
   isFloatplaneConfigured,
 } from "../../../../lib/floatplane";
@@ -44,6 +45,28 @@ export async function GET(request: Request) {
       requestedLimit === undefined
         ? undefined
         : Math.max(1, Math.min(maxPageSize, requestedLimit));
+    const channelId = searchParams.get("channel")?.trim() || "";
+    if (channelId && channelId !== "all") {
+      const pageLimit = limit || defaultPageSize;
+      const result = await getFloatplaneChannelFeedPage(
+        channelId,
+        offset,
+        pageLimit + 1
+      );
+      const pageVideos = result.videos.slice(0, pageLimit);
+      const hasMore = result.videos.length > pageLimit;
+      const nextOffset = offset + pageVideos.length;
+
+      return NextResponse.json({
+        mode: "live",
+        ...result,
+        videos: pageVideos,
+        hasMore,
+        nextOffset: hasMore ? nextOffset : null,
+        totalVideos: null,
+      });
+    }
+
     const result = await getCachedVideoList("floatplane-feed", getFloatplaneFeed, {
       refresh,
     });
