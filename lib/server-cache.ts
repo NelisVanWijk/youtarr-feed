@@ -11,7 +11,7 @@ export type VideoListPayload = {
 
 export type CacheStatus = "miss" | "hit" | "stale" | "refresh";
 
-type CacheKey = "feed" | "local-videos" | "floatplane-feed";
+export type CacheKey = "feed" | "local-videos" | "floatplane-feed";
 
 type CacheEnvelope<T> = {
   version: 1;

@@ -714,9 +714,7 @@ export default function FeedApp() {
       const [feedResponse, statusResponse, progressResponse] = await Promise.all([
         fetch(`/api/feed${refresh ? "?refresh=1" : ""}`, { cache: "no-store" }),
         fetch("/api/status", { cache: "no-store" }),
-        fetch(`/api/watch-progress${refresh ? "?refresh=1" : ""}`, {
-          cache: "no-store",
-        }),
+        fetch("/api/watch-progress", { cache: "no-store" }),
       ]);
       const feedData = (await feedResponse.json()) as FeedResponse & {
         error?: string;
@@ -848,7 +846,9 @@ export default function FeedApp() {
     let stopped = false;
     async function loadWatchProgress() {
       try {
-        const response = await fetch("/api/watch-progress", { cache: "no-store" });
+        const response = await fetch("/api/watch-progress?refresh=1", {
+          cache: "no-store",
+        });
         if (!response.ok) return;
         const data = (await response.json()) as {
           progress?: WatchProgressMap;

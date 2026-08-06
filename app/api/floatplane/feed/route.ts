@@ -4,6 +4,7 @@ import {
   getFloatplaneScopedFeedPage,
   isFloatplaneConfigured,
 } from "../../../../lib/floatplane";
+import { ensureFeedCacheWarmer } from "../../../../lib/feed-cache-warmer";
 import { getCachedVideoList } from "../../../../lib/server-cache";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +23,7 @@ function numberParam(
 }
 
 export async function GET(request: Request) {
+  ensureFeedCacheWarmer();
   if (!(await isFloatplaneConfigured())) {
     return NextResponse.json({
       mode: "demo",

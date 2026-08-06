@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { ensureFeedCacheWarmer } from "../../../lib/feed-cache-warmer";
 import { getFloatplaneDiagnostics } from "../../../lib/floatplane";
 import { getPlexDiagnostics, getPlexPublicConfig } from "../../../lib/plex";
 import {
@@ -9,6 +10,7 @@ import {
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  ensureFeedCacheWarmer();
   const checkConnections = new URL(request.url).searchParams.get("check") === "1";
   const config = getYoutarrPublicConfig();
   const plex = getPlexPublicConfig();

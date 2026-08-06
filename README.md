@@ -21,8 +21,8 @@ tokens, API keys, and Plex tokens are never sent to the browser.
 - Watch page with description, fullscreen/mobile player behavior, mini player,
   and Continue Watching.
 - Server-side watch progress stored under `/data`.
-- Optional Plex watch-state sync: Youtarr Feed pushes progress to Plex, and the
-  refresh button can import Plex progress back into Youtarr Feed.
+- Optional Plex watch-state sync: Youtarr Feed pushes progress to Plex, and app
+  open imports Plex progress back into Youtarr Feed in the background.
 - Local downloads tab.
 - Optional direct local file streaming with HTTP Range support.
 - Server-side feed cache for fast app opens.
@@ -227,6 +227,8 @@ On iPhone, open the site in Safari and use Share -> Add to Home Screen.
 | `YOUTARR_API_KEY` | Optional | Optional Youtarr API key for download commands. |
 | `YOUTARR_FEED_DATA_DIR` | Recommended | Persistent app data directory. Defaults to `/data` in production. |
 | `YOUTARR_FEED_CACHE_TTL_SECONDS` | Optional | Feed/local-video cache duration in seconds. Defaults to `300`. |
+| `YOUTARR_FEED_BACKGROUND_REFRESH_ENABLED` | Optional | Enables server-side background cache refreshes. Defaults to `true`. |
+| `YOUTARR_FEED_BACKGROUND_REFRESH_SECONDS` | Optional | Background refresh interval for feed/local/Floatplane caches. Defaults to `3600`. |
 | `YOUTARR_MEDIA_DIR` | Recommended | Youtarr Feed container path for the mounted Youtarr output folder. |
 | `YOUTARR_SOURCE_MEDIA_DIR` | Optional | Path prefix stored by Youtarr. Defaults to `/usr/src/app/data`. |
 | `YOUTARR_PLAYBACK_PROFILE` | Optional | Playback routing mode: `auto`, `primary`, `av1`, or `vp9`. Defaults to `auto`. |
@@ -316,7 +318,7 @@ another Youtarr instance.
 | `PLEX_URL` | Plex server URL reachable from this container, for example `http://host.docker.internal:32400`. |
 | `PLEX_TOKEN` | Plex token. Kept server-side only. |
 | `PLEX_LIBRARY_ID` | Numeric Plex library section ID for the Youtarr library. |
-| `PLEX_WATCH_SYNC_ENABLED` | Defaults to `true`. When Plex is configured, Youtarr Feed pushes watch progress to Plex and imports Plex progress when refreshing. Set to `false` to only use Plex library scans. |
+| `PLEX_WATCH_SYNC_ENABLED` | Defaults to `true`. When Plex is configured, Youtarr Feed pushes watch progress to Plex and imports Plex progress when the app opens. Set to `false` to only use Plex library scans. |
 
 Youtarr Feed matches Plex items by the YouTube video ID in the Youtarr file or
 folder name, for example `[v5Et1hTPlTk]`. No Plex path mapping is required.
@@ -336,8 +338,12 @@ settings. As a fallback, Youtarr Feed can use `YOUTUBE_API_KEY`.
 
 The feed and Local tab are cached server-side under `/data`. Cached results are
 reused for 300 seconds by default. When stale, the old result is returned quickly
-and refreshed in the background. Manual refresh bypasses the cache and also
-refreshes local playback badges and watch progress.
+and refreshed in the background. A server-side warmer starts on server boot, or
+as a fallback on the first server request, and refreshes the feed, Local tab,
+and Floatplane cache every hour by default, controlled by
+`YOUTARR_FEED_BACKGROUND_REFRESH_ENABLED` and
+`YOUTARR_FEED_BACKGROUND_REFRESH_SECONDS`. The warmer never imports Plex watch
+state; Plex progress is imported only when the app opens.
 
 ## iPhone, AirPlay, And Codecs
 

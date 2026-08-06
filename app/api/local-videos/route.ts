@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { demoChannels, demoVideos } from "../../../lib/demo-data";
+import { ensureFeedCacheWarmer } from "../../../lib/feed-cache-warmer";
 import { getCachedVideoList } from "../../../lib/server-cache";
 import { getDownloadedVideos, isYoutarrConfigured } from "../../../lib/youtarr";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  ensureFeedCacheWarmer();
   if (!isYoutarrConfigured()) {
     return NextResponse.json({
       mode: "demo",
