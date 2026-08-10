@@ -129,7 +129,6 @@ input:focus-visible {
 .round-button,
 .profile-button,
 .settings-link,
-.bottom-add-button,
 .filter-row button,
 .thumbnail-button,
 .avatar-button,
@@ -152,7 +151,6 @@ input:focus-visible {
 .round-button:active,
 .profile-button:active,
 .settings-link:active,
-.bottom-add-button:active,
 .filter-row button:active,
 .thumbnail-button:active,
 .avatar-button:active,
@@ -550,8 +548,8 @@ main {
 }
 
 .filter-row .feed-channel-filter {
-  width: 50px;
-  height: 50px;
+  width: 58px;
+  height: 58px;
   padding: 3px;
   display: grid;
   place-items: center;
@@ -566,12 +564,12 @@ main {
 }
 
 .feed-channel-filter .avatar {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
 }
 
 .filter-row .feed-channel-all {
-  height: 50px;
+  height: 58px;
   padding: 4px 14px 4px 5px;
   display: inline-flex;
   align-items: center;
@@ -591,8 +589,8 @@ main {
 .feed-channel-all-icon,
 .floatplane-filter-all,
 .add-flow-icon {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   display: grid;
   place-items: center;
   background: rgba(255, 255, 255, 0.16);
@@ -603,8 +601,8 @@ main {
 .feed-channel-all-icon .svg-inline--fa,
 .floatplane-filter-all .svg-inline--fa,
 .add-flow-icon .svg-inline--fa {
-  width: 17px;
-  height: 17px;
+  width: 20px;
+  height: 20px;
 }
 
 .floatplane-filter-stack {
@@ -1357,10 +1355,6 @@ main {
 }
 
 .bottom-nav {
-  display: none;
-}
-
-.bottom-add-button {
   display: none;
 }
 
@@ -2406,6 +2400,10 @@ html[data-theme="light"] .bottom-nav button.active {
     margin-left: 2px;
   }
 
+  .top-actions .profile-button {
+    display: none;
+  }
+
   .mobile-search {
     display: grid;
   }
@@ -2494,10 +2492,17 @@ html[data-theme="light"] .bottom-nav button.active {
   .feed-channel-row {
     margin-bottom: 13px;
     padding-bottom: 8px;
+    padding-right: 16px;
   }
 
   .filter-row .feed-channel-all {
     padding-right: 12px;
+  }
+
+  .feed-channel-filter .avatar,
+  .feed-channel-all-icon {
+    width: 50px;
+    height: 50px;
   }
 
   .floatplane-filter-stack {
@@ -2583,13 +2588,13 @@ html[data-theme="light"] .bottom-nav button.active {
     position: fixed;
     z-index: 60;
     right: auto;
-    bottom: calc(10px + var(--safe-bottom));
-    left: max(12px, calc(50% - 124px));
-    width: min(178px, calc(100vw - 92px));
-    height: 58px;
-    padding: 6px;
+    bottom: calc(8px + var(--safe-bottom));
+    left: 50%;
+    width: min(360px, calc(100vw - 28px));
+    height: 64px;
+    padding: 7px 9px;
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     align-items: center;
     justify-items: center;
     gap: 0;
@@ -2598,6 +2603,7 @@ html[data-theme="light"] .bottom-nav button.active {
     border-radius: calc(var(--radius-sheet) + 4px);
     box-shadow: var(--glass-highlight);
     filter: drop-shadow(0 16px 34px rgba(0, 0, 0, 0.22));
+    transform: translateX(-50%);
     overflow: hidden;
     background-clip: padding-box;
     -webkit-backdrop-filter: blur(30px) saturate(190%);
@@ -2606,21 +2612,28 @@ html[data-theme="light"] .bottom-nav button.active {
 
   .bottom-nav button {
     position: relative;
-    width: 50px;
-    height: 46px;
+    width: 52px;
+    height: 50px;
     display: grid;
     place-items: center;
     background: transparent;
     color: var(--quiet);
     border: 1px solid transparent;
-    border-radius: 23px;
+    border-radius: 25px;
   }
 
   .bottom-nav button.active {
-    background: rgba(255, 255, 255, 0.11);
-    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.095);
+    border-color: rgba(255, 255, 255, 0.12);
     color: var(--text);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  }
+
+  .bottom-nav .bottom-create-button {
+    background: rgba(255, 255, 255, 0.14);
+    border-color: rgba(255, 255, 255, 0.17);
+    color: var(--text);
+    box-shadow: var(--glass-highlight);
   }
 
   .bottom-nav button:active {
@@ -2628,40 +2641,13 @@ html[data-theme="light"] .bottom-nav button.active {
   }
 
   .bottom-nav .nav-icon-frame {
-    width: 22px;
-    height: 22px;
+    width: 30px;
+    height: 30px;
   }
 
   .bottom-nav .nav-icon {
-    width: 20px;
-    height: 20px;
-  }
-
-  .bottom-add-button {
-    position: fixed;
-    z-index: 61;
-    bottom: calc(10px + var(--safe-bottom));
-    left: calc(
-      max(12px, calc(50% - 124px)) +
-      min(178px, calc(100vw - 92px)) + 12px
-    );
-    width: 58px;
-    height: 58px;
-    display: grid;
-    place-items: center;
-    background: var(--material-chrome);
-    border: 1px solid var(--line);
-    border-radius: 50%;
-    color: var(--text);
-    box-shadow: var(--glass-highlight);
-    filter: drop-shadow(0 16px 34px rgba(0, 0, 0, 0.22));
-    -webkit-backdrop-filter: blur(30px) saturate(190%);
-    backdrop-filter: blur(30px) saturate(190%);
-  }
-
-  .bottom-add-button .svg-inline--fa {
-    width: 19px;
-    height: 19px;
+    width: 27px;
+    height: 27px;
   }
 
   .mini-player-shell {
@@ -2939,7 +2925,6 @@ html[data-theme="light"] .bottom-nav button.active {
   .player-action-button,
   .mini-player-shell,
   .mini-play-button,
-  .bottom-add-button,
   .bottom-nav {
     background: var(--surface);
     -webkit-backdrop-filter: none;
@@ -2961,7 +2946,6 @@ html[data-theme="light"] .bottom-nav button.active {
   .topbar,
   .sidebar,
   .bottom-nav,
-  .bottom-add-button,
   .video-menu,
   .settings-modal,
   .video-modal {

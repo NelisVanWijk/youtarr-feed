@@ -33,7 +33,6 @@ test("renders the English Youtarr subscription shell", async () => {
   const html = await response.text();
   assert.match(html, /<html[^>]*lang="en"/i);
   assert.match(html, /<title>Youtarr Feed<\/title>/i);
-  assert.match(html, /Your Subscriptions/);
   assert.match(html, /Floatplane/);
   assert.match(html, /Add channel or video/);
   assert.match(html, /Not downloaded/);

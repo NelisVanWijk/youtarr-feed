@@ -11,6 +11,7 @@ import {
   faEllipsisVertical,
   faExpand,
   faFolderOpen,
+  faGear,
   faHouse,
   faInbox,
   faLink,
@@ -2460,19 +2461,6 @@ export default function FeedApp() {
 
         {view === "feed" && (
           <>
-            <section className="page-heading">
-              <div>
-                <span className="eyebrow">
-                  <span className={`status-dot status-${mode}`} />
-                  {mode === "live" ? copy.feed.eyebrowLive : copy.feed.eyebrowDemo}
-                </span>
-                <h1>{copy.feed.title}</h1>
-                <p>{copy.feed.subtitle}</p>
-              </div>
-              <button className="settings-link" onClick={() => setSettingsOpen(true)}>
-                {copy.common.settings}
-              </button>
-            </section>
             {(feed?.channels.length || 0) > 0 && (
               <div
                 className="filter-row feed-channel-row"
@@ -2978,30 +2966,51 @@ export default function FeedApp() {
       </main>
 
       <nav className="bottom-nav" aria-label={copy.nav.feed}>
-        {([
-          ["feed", copy.nav.feed],
-          ["continue", copy.nav.continue],
-          ["floatplane", copy.nav.floatplaneShort],
-        ] as const).map(([itemView, label]) => (
-          <button
-            key={itemView}
-            className={view === itemView ? "active" : ""}
-            onClick={() => switchView(itemView)}
-            aria-label={label}
-            title={label}
-          >
-            <BottomNavIcon view={itemView} />
-          </button>
-        ))}
+        <button
+          className={view === "feed" ? "active" : ""}
+          onClick={() => switchView("feed")}
+          aria-label={copy.nav.feed}
+          title={copy.nav.feed}
+        >
+          <BottomNavIcon view="feed" />
+        </button>
+        <button
+          className={view === "continue" ? "active" : ""}
+          onClick={() => switchView("continue")}
+          aria-label={copy.nav.continue}
+          title={copy.nav.continue}
+        >
+          <BottomNavIcon view="continue" />
+        </button>
+        <button
+          className="bottom-create-button"
+          onClick={() => setAddSheetOpen(true)}
+          aria-label={copy.add.aria}
+          title={copy.add.open}
+        >
+          <span className="nav-icon-frame">
+            <FontAwesomeIcon className="nav-icon" icon={faPlus} aria-hidden="true" />
+          </span>
+        </button>
+        <button
+          className={view === "floatplane" ? "active" : ""}
+          onClick={() => switchView("floatplane")}
+          aria-label={copy.nav.floatplaneShort}
+          title={copy.nav.floatplaneShort}
+        >
+          <BottomNavIcon view="floatplane" />
+        </button>
+        <button
+          className={settingsOpen ? "active" : ""}
+          onClick={() => setSettingsOpen(true)}
+          aria-label={copy.settings.buttonAria}
+          title={copy.common.settings}
+        >
+          <span className="nav-icon-frame">
+            <FontAwesomeIcon className="nav-icon" icon={faGear} aria-hidden="true" />
+          </span>
+        </button>
       </nav>
-      <button
-        className="bottom-add-button"
-        onClick={() => setAddSheetOpen(true)}
-        aria-label={copy.add.aria}
-        title={copy.add.open}
-      >
-        <FontAwesomeIcon icon={faPlus} aria-hidden="true" />
-      </button>
 
       <div className="orientation-guard" role="status" aria-live="polite">
         <div>
