@@ -20,6 +20,7 @@ import {
   faMobileScreenButton,
   faPause,
   faPlay,
+  faPlus,
   faPlane,
   faRotateRight,
   faThumbsUp,
@@ -113,6 +114,7 @@ type DownloadJob = {
   channelId: string;
   error?: string;
 };
+type BottomView = Extract<View, "feed" | "continue" | "floatplane">;
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
 const languageStorageKey = "youtarr-feed-language";
@@ -161,6 +163,10 @@ function NavIcon({ view }: { view: View }) {
       <FontAwesomeIcon className="nav-icon" icon={icon} aria-hidden="true" />
     </span>
   );
+}
+
+function BottomNavIcon({ view }: { view: BottomView }) {
+  return <NavIcon view={view} />;
 }
 
 function ChannelExportLink({ copy }: { copy: AppCopy }) {
@@ -685,6 +691,7 @@ export default function FeedApp() {
     "idle" | "adding" | "added" | "error"
   >("idle");
   const [singleVideoMessage, setSingleVideoMessage] = useState("");
+  const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsChecking, setSettingsChecking] = useState(false);
   const [floatplaneSessionToken, setFloatplaneSessionToken] = useState("");
@@ -835,6 +842,15 @@ export default function FeedApp() {
     const timer = window.setTimeout(() => void refreshStatus(), 0);
     return () => window.clearTimeout(timer);
   }, [refreshStatus, settingsOpen]);
+
+  useEffect(() => {
+    const shouldLockScroll =
+      addSheetOpen || settingsOpen || (selectedVideo !== null && playerMode === "full");
+    document.body.classList.toggle("modal-scroll-locked", shouldLockScroll);
+    return () => {
+      document.body.classList.remove("modal-scroll-locked");
+    };
+  }, [addSheetOpen, playerMode, selectedVideo, settingsOpen]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void loadSingleVideos(true), 0);
@@ -1008,6 +1024,14 @@ export default function FeedApp() {
     // Local loaders are intentionally local to this component; view changes drive refreshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
+
+  useEffect(() => {
+    if (view === "feed" && filter === "downloaded") {
+      void loadLocalVideos(localVideos.length > 0);
+    }
+    // Local videos back the feed's Downloaded filter.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, view]);
 
   useEffect(() => {
     if (
@@ -1266,7 +1290,12 @@ export default function FeedApp() {
   ]);
 
   const visibleVideos = useMemo(() => {
-    const source = selectedChannel ? channelVideos : feed?.videos || [];
+    const feedVideos = mergeVideosById(feed?.videos || [], singleVideos);
+    const source = selectedChannel
+      ? channelVideos
+      : filter === "downloaded"
+        ? mergeVideosById(feedVideos, localVideos)
+        : feedVideos;
     const normalized = query.trim().toLowerCase();
     return source.filter((video) => {
       if (filter === "new" && video.downloaded) return false;
@@ -1279,7 +1308,7 @@ export default function FeedApp() {
       }
       return true;
     });
-  }, [channelVideos, feed?.videos, filter, query, selectedChannel]);
+  }, [channelVideos, feed?.videos, filter, localVideos, query, selectedChannel, singleVideos]);
 
   const continueVideos = useMemo(() => {
     const normalized = query.trim().toLowerCase();
@@ -2162,6 +2191,12 @@ export default function FeedApp() {
           ? copy.channels.restored(data.channel.name || copy.channels.title)
           : copy.channels.added(data.channel?.name || copy.channels.title)
       );
+      setAddSheetOpen(false);
+      setSelectedChannel(null);
+      setChannelVideos([]);
+      setView("feed");
+      setFilter("all");
+      window.scrollTo({ top: 0, behavior: "smooth" });
       void loadFeed(true, true);
     } catch (addFailure) {
       setAddChannelState("error");
@@ -2195,6 +2230,18 @@ export default function FeedApp() {
       setSingleVideoUrl("");
       setSingleVideoState("added");
       setSingleVideoMessage(copy.singles.added(data.video?.title || "Video"));
+      if (data.video) {
+        setSingleVideos((current) => [
+          data.video as FeedVideo,
+          ...current.filter((video) => video.id !== data.video?.id),
+        ]);
+        setSelectedChannel(null);
+        setChannelVideos([]);
+        setView("feed");
+        setFilter(data.video.downloaded ? "downloaded" : "new");
+        setAddSheetOpen(false);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
       void loadSingleVideos(true);
     } catch (addFailure) {
       setSingleVideoState("error");
@@ -2249,6 +2296,14 @@ export default function FeedApp() {
     }
     if (view === "singles") {
       void loadSingleVideos(true);
+      return;
+    }
+    if (view === "feed" && filter === "downloaded") {
+      void Promise.allSettled([
+        loadFeed(true, true),
+        loadLocalVideos(true, true),
+        loadSingleVideos(true),
+      ]);
       return;
     }
     void loadFeed(true, true);
@@ -2367,32 +2422,11 @@ export default function FeedApp() {
             <span>{copy.nav.continueFull}</span>
           </button>
           <button
-            className={view === "local" ? "active" : ""}
-            onClick={() => switchView("local")}
-          >
-            <NavIcon view="local" />
-            <span>{copy.nav.local}</span>
-          </button>
-          <button
-            className={view === "singles" ? "active" : ""}
-            onClick={() => switchView("singles")}
-          >
-            <NavIcon view="singles" />
-            <span>{copy.nav.singles}</span>
-          </button>
-          <button
             className={view === "floatplane" ? "active" : ""}
             onClick={() => switchView("floatplane")}
           >
             <NavIcon view="floatplane" />
             <span>{copy.nav.floatplane}</span>
-          </button>
-          <button
-            className={view === "channels" ? "active" : ""}
-            onClick={() => switchView("channels")}
-          >
-            <NavIcon view="channels" />
-            <span>{copy.nav.channels}</span>
           </button>
         </nav>
         <div className="sidebar-status">
@@ -2439,6 +2473,34 @@ export default function FeedApp() {
                 {copy.common.settings}
               </button>
             </section>
+            {(feed?.channels.length || 0) > 0 && (
+              <div
+                className="filter-row feed-channel-row"
+                role="group"
+                aria-label={copy.channels.title}
+              >
+                {(feed?.channels || []).map((channel) => (
+                  <button
+                    key={channel.id}
+                    className="feed-channel-filter"
+                    onClick={() => void openChannel(channel.id)}
+                    aria-label={channel.name}
+                    title={channel.name}
+                  >
+                    <ChannelAvatar channel={channel} size="small" />
+                  </button>
+                ))}
+                <button
+                  className="feed-channel-all"
+                  onClick={() => switchView("channels")}
+                >
+                  <span className="feed-channel-all-icon">
+                    <FontAwesomeIcon icon={faList} aria-hidden="true" />
+                  </span>
+                  <span>{copy.channels.allChannels}</span>
+                </button>
+              </div>
+            )}
             <div className="filter-row" role="group" aria-label={copy.feed.title}>
               {[
                 ["all", copy.feed.all],
@@ -2916,49 +2978,30 @@ export default function FeedApp() {
       </main>
 
       <nav className="bottom-nav" aria-label={copy.nav.feed}>
-        <button
-          className={view === "feed" ? "active" : ""}
-          onClick={() => switchView("feed")}
-        >
-          <NavIcon view="feed" />
-          <small>{copy.nav.feed}</small>
-        </button>
-        <button
-          className={view === "continue" ? "active" : ""}
-          onClick={() => switchView("continue")}
-        >
-          <NavIcon view="continue" />
-          <small>{copy.nav.continue}</small>
-        </button>
-        <button
-          className={view === "local" ? "active" : ""}
-          onClick={() => switchView("local")}
-        >
-          <NavIcon view="local" />
-          <small>{copy.nav.local}</small>
-        </button>
-        <button
-          className={view === "singles" ? "active" : ""}
-          onClick={() => switchView("singles")}
-        >
-          <NavIcon view="singles" />
-          <small>{copy.nav.singlesShort}</small>
-        </button>
-        <button
-          className={view === "floatplane" ? "active" : ""}
-          onClick={() => switchView("floatplane")}
-        >
-          <NavIcon view="floatplane" />
-          <small>{copy.nav.floatplaneShort}</small>
-        </button>
-        <button
-          className={view === "channels" ? "active" : ""}
-          onClick={() => switchView("channels")}
-        >
-          <NavIcon view="channels" />
-          <small>{copy.nav.channels}</small>
-        </button>
+        {([
+          ["feed", copy.nav.feed],
+          ["continue", copy.nav.continue],
+          ["floatplane", copy.nav.floatplaneShort],
+        ] as const).map(([itemView, label]) => (
+          <button
+            key={itemView}
+            className={view === itemView ? "active" : ""}
+            onClick={() => switchView(itemView)}
+            aria-label={label}
+            title={label}
+          >
+            <BottomNavIcon view={itemView} />
+          </button>
+        ))}
       </nav>
+      <button
+        className="bottom-add-button"
+        onClick={() => setAddSheetOpen(true)}
+        aria-label={copy.add.aria}
+        title={copy.add.open}
+      >
+        <FontAwesomeIcon icon={faPlus} aria-hidden="true" />
+      </button>
 
       <div className="orientation-guard" role="status" aria-live="polite">
         <div>
@@ -3323,6 +3366,95 @@ export default function FeedApp() {
                   {deleteState === "error" && <small>{deleteError}</small>}
                 </div>
               )}
+            </div>
+          </section>
+        </div>
+      )}
+
+      {addSheetOpen && (
+        <div
+          className="modal-backdrop add-sheet-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) setAddSheetOpen(false);
+          }}
+        >
+          <section
+            className="settings-modal add-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={copy.add.aria}
+          >
+            <button
+              className="modal-close"
+              onClick={() => setAddSheetOpen(false)}
+              aria-label={copy.common.close}
+            >
+              <FontAwesomeIcon icon={faXmark} aria-hidden="true" />
+            </button>
+            <span className="connection-icon add-sheet-icon">
+              <FontAwesomeIcon icon={faPlus} aria-hidden="true" />
+            </span>
+            <span className="eyebrow">{copy.add.eyebrow}</span>
+            <h2>{copy.add.title}</h2>
+            <p>{copy.add.subtitle}</p>
+            <div className="add-flow-grid">
+              <form className="add-flow-card" onSubmit={submitChannel}>
+                <span className="add-flow-icon">
+                  <FontAwesomeIcon icon={faList} aria-hidden="true" />
+                </span>
+                <strong>{copy.add.channelTitle}</strong>
+                <p>{copy.add.channelBody}</p>
+                <div className="add-flow-row">
+                  <input
+                    value={channelUrl}
+                    onChange={(event) => setChannelUrl(event.target.value)}
+                    placeholder={copy.channels.placeholder}
+                    aria-label={copy.channels.aria}
+                  />
+                  <button
+                    className="primary-button"
+                    disabled={addChannelState === "adding" || mode !== "live"}
+                  >
+                    {addChannelState === "adding"
+                      ? copy.common.adding
+                      : copy.common.add}
+                  </button>
+                </div>
+                {addChannelMessage && (
+                  <small className={`form-message form-${addChannelState}`}>
+                    {addChannelMessage}
+                  </small>
+                )}
+              </form>
+              <form className="add-flow-card" onSubmit={submitSingleVideo}>
+                <span className="add-flow-icon">
+                  <FontAwesomeIcon icon={faLink} aria-hidden="true" />
+                </span>
+                <strong>{copy.add.singleTitle}</strong>
+                <p>{copy.add.singleBody}</p>
+                <div className="add-flow-row">
+                  <input
+                    value={singleVideoUrl}
+                    onChange={(event) => setSingleVideoUrl(event.target.value)}
+                    placeholder={copy.singles.placeholder}
+                    aria-label={copy.singles.aria}
+                  />
+                  <button
+                    className="primary-button"
+                    disabled={singleVideoState === "adding"}
+                  >
+                    {singleVideoState === "adding"
+                      ? copy.common.adding
+                      : copy.common.add}
+                  </button>
+                </div>
+                {singleVideoMessage && (
+                  <small className={`form-message form-${singleVideoState}`}>
+                    {singleVideoMessage}
+                  </small>
+                )}
+              </form>
             </div>
           </section>
         </div>

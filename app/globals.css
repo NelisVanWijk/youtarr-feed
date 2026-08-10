@@ -101,6 +101,11 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+body.modal-scroll-locked {
+  overflow: hidden;
+  touch-action: none;
+}
+
 button,
 input,
 textarea,
@@ -124,6 +129,7 @@ input:focus-visible {
 .round-button,
 .profile-button,
 .settings-link,
+.bottom-add-button,
 .filter-row button,
 .thumbnail-button,
 .avatar-button,
@@ -146,6 +152,7 @@ input:focus-visible {
 .round-button:active,
 .profile-button:active,
 .settings-link:active,
+.bottom-add-button:active,
 .filter-row button:active,
 .thumbnail-button:active,
 .avatar-button:active,
@@ -535,6 +542,71 @@ main {
   color: #171719;
 }
 
+.feed-channel-row {
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 14px;
+  padding: 2px 0 9px;
+}
+
+.filter-row .feed-channel-filter {
+  width: 50px;
+  height: 50px;
+  padding: 3px;
+  display: grid;
+  place-items: center;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  box-shadow: none;
+}
+
+.filter-row .feed-channel-filter:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.feed-channel-filter .avatar {
+  width: 40px;
+  height: 40px;
+}
+
+.filter-row .feed-channel-all {
+  height: 50px;
+  padding: 4px 14px 4px 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--material-control);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.filter-row .feed-channel-all:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.feed-channel-all-icon,
+.floatplane-filter-all,
+.add-flow-icon {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.16);
+  border-radius: 50%;
+  color: var(--text);
+}
+
+.feed-channel-all-icon .svg-inline--fa,
+.floatplane-filter-all .svg-inline--fa,
+.add-flow-icon .svg-inline--fa {
+  width: 17px;
+  height: 17px;
+}
+
 .floatplane-filter-stack {
   max-width: 1480px;
   margin: 0 auto 25px;
@@ -599,21 +671,6 @@ main {
 .floatplane-channel-filter .avatar {
   width: 40px;
   height: 40px;
-}
-
-.floatplane-filter-all {
-  width: 40px;
-  height: 40px;
-  display: grid;
-  place-items: center;
-  background: rgba(255, 255, 255, 0.16);
-  border-radius: 50%;
-  color: var(--text);
-}
-
-.floatplane-filter-all .svg-inline--fa {
-  width: 17px;
-  height: 17px;
 }
 
 .floatplane-subchannel-row {
@@ -1303,6 +1360,10 @@ main {
   display: none;
 }
 
+.bottom-add-button {
+  display: none;
+}
+
 .modal-backdrop {
   position: fixed;
   z-index: 100;
@@ -1882,6 +1943,71 @@ main {
   line-height: 1.6;
 }
 
+.add-sheet {
+  width: min(760px, 100%);
+  box-sizing: border-box;
+}
+
+.add-sheet-icon {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.add-flow-grid {
+  margin-top: 28px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  text-align: left;
+}
+
+.add-flow-card {
+  min-width: 0;
+  padding: 16px;
+  display: grid;
+  gap: 10px;
+  background: var(--material-control);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  box-shadow: var(--glass-highlight);
+  -webkit-backdrop-filter: blur(20px) saturate(170%);
+  backdrop-filter: blur(20px) saturate(170%);
+}
+
+.add-flow-card > strong {
+  font-size: 15px;
+  font-weight: 760;
+}
+
+.add-flow-card > p {
+  min-height: 35px;
+  margin: -4px 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.add-flow-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.add-flow-row input {
+  min-width: 0;
+  height: 40px;
+  padding: 0 12px;
+  background: var(--surface-tint);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.add-flow-card .form-message {
+  padding: 0;
+}
+
 .connection-icon {
   width: 62px;
   height: 62px;
@@ -2365,6 +2491,15 @@ html[data-theme="light"] .bottom-nav button.active {
     padding-right: 10px;
   }
 
+  .feed-channel-row {
+    margin-bottom: 13px;
+    padding-bottom: 8px;
+  }
+
+  .filter-row .feed-channel-all {
+    padding-right: 12px;
+  }
+
   .floatplane-filter-stack {
     margin: 0 16px 18px;
   }
@@ -2449,12 +2584,12 @@ html[data-theme="light"] .bottom-nav button.active {
     z-index: 60;
     right: auto;
     bottom: calc(10px + var(--safe-bottom));
-    left: 50%;
-    width: min(560px, calc(100vw - 24px));
-    height: 64px;
+    left: max(12px, calc(50% - 124px));
+    width: min(178px, calc(100vw - 92px));
+    height: 58px;
     padding: 6px;
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: center;
     justify-items: center;
     gap: 0;
@@ -2463,7 +2598,6 @@ html[data-theme="light"] .bottom-nav button.active {
     border-radius: calc(var(--radius-sheet) + 4px);
     box-shadow: var(--glass-highlight);
     filter: drop-shadow(0 16px 34px rgba(0, 0, 0, 0.22));
-    transform: translateX(-50%);
     overflow: hidden;
     background-clip: padding-box;
     -webkit-backdrop-filter: blur(30px) saturate(190%);
@@ -2472,17 +2606,14 @@ html[data-theme="light"] .bottom-nav button.active {
 
   .bottom-nav button {
     position: relative;
-    width: min(100%, 54px);
-    height: 38px;
+    width: 50px;
+    height: 46px;
     display: grid;
-    grid-template-rows: 19px 11px;
-    align-content: center;
-    justify-items: center;
-    row-gap: 1px;
+    place-items: center;
     background: transparent;
     color: var(--quiet);
     border: 1px solid transparent;
-    border-radius: 19px;
+    border-radius: 23px;
   }
 
   .bottom-nav button.active {
@@ -2496,25 +2627,41 @@ html[data-theme="light"] .bottom-nav button.active {
     transform: scale(0.96);
   }
 
-  .bottom-nav small {
-    height: 12px;
-    display: block;
-    font-size: 10px;
-    font-weight: 700;
-    line-height: 1;
-    text-align: center;
-    white-space: nowrap;
-  }
-
   .bottom-nav .nav-icon-frame {
-    width: 20px;
-    height: 20px;
-    align-self: end;
+    width: 22px;
+    height: 22px;
   }
 
   .bottom-nav .nav-icon {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
+  }
+
+  .bottom-add-button {
+    position: fixed;
+    z-index: 61;
+    bottom: calc(10px + var(--safe-bottom));
+    left: calc(
+      max(12px, calc(50% - 124px)) +
+      min(178px, calc(100vw - 92px)) + 12px
+    );
+    width: 58px;
+    height: 58px;
+    display: grid;
+    place-items: center;
+    background: var(--material-chrome);
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    color: var(--text);
+    box-shadow: var(--glass-highlight);
+    filter: drop-shadow(0 16px 34px rgba(0, 0, 0, 0.22));
+    -webkit-backdrop-filter: blur(30px) saturate(190%);
+    backdrop-filter: blur(30px) saturate(190%);
+  }
+
+  .bottom-add-button .svg-inline--fa {
+    width: 19px;
+    height: 19px;
   }
 
   .mini-player-shell {
@@ -2537,6 +2684,75 @@ html[data-theme="light"] .bottom-nav button.active {
     border-right: 0;
     border-bottom: 0;
     border-left: 0;
+  }
+
+  .add-sheet-backdrop {
+    padding: calc(18px + var(--safe-top)) 14px calc(18px + var(--safe-bottom));
+    align-items: center;
+  }
+
+  .add-sheet {
+    width: min(430px, 100%);
+    max-height: min(86dvh, 690px);
+    padding: 24px 22px 18px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sheet);
+  }
+
+  .add-sheet .modal-close {
+    top: 10px;
+    right: 10px;
+  }
+
+  .add-sheet .connection-icon {
+    width: 48px;
+    height: 48px;
+    margin-bottom: 10px;
+  }
+
+  .add-sheet h2 {
+    margin-top: 6px;
+    font-size: 23px;
+  }
+
+  .add-sheet > p {
+    max-width: 300px;
+    font-size: 12px;
+  }
+
+  .add-flow-grid {
+    width: 100%;
+    margin-top: 16px;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .add-flow-card {
+    padding: 14px;
+    gap: 8px;
+  }
+
+  .add-flow-card > p {
+    min-height: 0;
+    margin-bottom: 2px;
+  }
+
+  .add-flow-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .add-flow-icon .svg-inline--fa {
+    width: 15px;
+    height: 15px;
+  }
+
+  .add-flow-row {
+    grid-template-columns: 1fr;
+  }
+
+  .add-flow-row .primary-button {
+    width: 100%;
   }
 
   .player,
@@ -2723,6 +2939,7 @@ html[data-theme="light"] .bottom-nav button.active {
   .player-action-button,
   .mini-player-shell,
   .mini-play-button,
+  .bottom-add-button,
   .bottom-nav {
     background: var(--surface);
     -webkit-backdrop-filter: none;
@@ -2744,6 +2961,7 @@ html[data-theme="light"] .bottom-nav button.active {
   .topbar,
   .sidebar,
   .bottom-nav,
+  .bottom-add-button,
   .video-menu,
   .settings-modal,
   .video-modal {
