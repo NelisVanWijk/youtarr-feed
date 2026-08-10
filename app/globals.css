@@ -324,24 +324,25 @@ input:focus-visible {
 .sidebar {
   position: fixed;
   z-index: 30;
-  top: calc(68px + var(--safe-top));
-  bottom: 0;
-  left: 0;
+  top: calc(86px + var(--safe-top));
+  bottom: 20px;
+  left: 16px;
   width: 220px;
-  padding: 24px 14px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  background: rgba(43, 41, 48, 0.52);
-  border-right: 1px solid var(--line);
-  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.055);
-  -webkit-backdrop-filter: blur(26px) saturate(170%);
-  backdrop-filter: blur(26px) saturate(170%);
+  background: var(--material-chrome);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sheet);
+  box-shadow: var(--glass-highlight), var(--shadow-float);
+  -webkit-backdrop-filter: blur(30px) saturate(190%);
+  backdrop-filter: blur(30px) saturate(190%);
 }
 
 .sidebar nav {
   display: grid;
-  gap: 5px;
+  gap: 6px;
 }
 
 .sidebar nav button {
@@ -2233,6 +2234,7 @@ html[data-theme="light"] .bottom-nav button.active {
   }
 
   .sidebar {
+    left: 14px;
     width: 190px;
   }
 
@@ -2444,27 +2446,29 @@ html[data-theme="light"] .bottom-nav button.active {
   .bottom-nav {
     position: fixed;
     z-index: 60;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    height: calc(68px + var(--safe-bottom));
-    padding: 6px max(8px, env(safe-area-inset-right, 0px))
-      var(--safe-bottom) max(8px, env(safe-area-inset-left, 0px));
+    right: auto;
+    bottom: calc(10px + var(--safe-bottom));
+    left: 50%;
+    width: min(560px, calc(100vw - 24px));
+    height: 64px;
+    padding: 6px;
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
     align-items: center;
     justify-items: center;
     gap: 0;
     background: var(--material-chrome);
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-    box-shadow: 0 -14px 30px rgba(0, 0, 0, 0.22);
-    -webkit-backdrop-filter: blur(24px) saturate(180%);
-    backdrop-filter: blur(24px) saturate(180%);
+    border: 1px solid var(--line);
+    border-radius: calc(var(--radius-sheet) + 4px);
+    box-shadow: var(--glass-highlight), 0 18px 55px rgba(0, 0, 0, 0.26);
+    transform: translateX(-50%);
+    -webkit-backdrop-filter: blur(30px) saturate(190%);
+    backdrop-filter: blur(30px) saturate(190%);
   }
 
   .bottom-nav button {
     position: relative;
-    width: min(100%, 58px);
+    width: min(100%, 60px);
     height: 52px;
     display: grid;
     grid-template-rows: 24px 13px;
@@ -2477,8 +2481,9 @@ html[data-theme="light"] .bottom-nav button.active {
   }
 
   .bottom-nav button.active {
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.14);
     color: var(--text);
+    box-shadow: var(--glass-highlight);
   }
 
   .bottom-nav button.active::before {
@@ -2518,7 +2523,7 @@ html[data-theme="light"] .bottom-nav button.active {
 
   .mini-player-shell {
     right: 10px;
-    bottom: calc(74px + var(--safe-bottom));
+    bottom: calc(88px + var(--safe-bottom));
     left: 10px;
     width: auto;
   }
