@@ -390,7 +390,7 @@ function Thumbnail({
       ? copy.common.direct
       : streamSource?.source === "youtarr"
         ? copy.common.youtarr
-        : copy.common.checkingLocal);
+        : copy.feed.downloaded);
   const badgeSource =
     video.provider === "floatplane"
       ? "floatplane"
@@ -2481,6 +2481,8 @@ export default function FeedApp() {
                 <button
                   className="feed-channel-all"
                   onClick={() => switchView("channels")}
+                  aria-label={copy.channels.allChannels}
+                  title={copy.channels.allChannels}
                 >
                   <span className="feed-channel-all-icon">
                     <FontAwesomeIcon icon={faList} aria-hidden="true" />

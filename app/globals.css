@@ -821,14 +821,22 @@ main {
 .cloud-badge {
   position: absolute;
   z-index: 2;
-  padding: 4px 6px;
+  max-width: calc(100% - 18px);
+  padding: 4px 7px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
   background: var(--badge-bg);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
   color: #fff;
   font-size: 10px;
   font-weight: 720;
+  line-height: 1;
+  overflow: hidden;
   box-shadow: var(--glass-highlight);
+  text-overflow: ellipsis;
+  white-space: nowrap;
   -webkit-backdrop-filter: blur(14px) saturate(170%);
   backdrop-filter: blur(14px) saturate(170%);
 }
@@ -840,45 +848,45 @@ main {
 
 .local-badge,
 .cloud-badge {
-  top: 8px;
-  left: 8px;
+  top: 9px;
+  left: 9px;
 }
 
 .local-badge,
 .local-badge-checking {
-  background: rgba(17, 105, 66, 0.9);
+  background: rgba(18, 105, 69, 0.82);
 }
 
 .local-badge-direct {
-  background: rgba(17, 105, 66, 0.92);
+  background: rgba(18, 105, 69, 0.84);
 }
 
 .local-badge-youtarr {
-  background: rgba(139, 101, 28, 0.92);
+  background: rgba(132, 96, 30, 0.82);
 }
 
 .local-badge-floatplane {
-  background: rgba(45, 95, 165, 0.92);
+  background: rgba(45, 95, 165, 0.82);
 }
 
 .local-badge-checking {
-  background: rgba(20, 20, 22, 0.82);
+  background: rgba(22, 22, 25, 0.7);
   color: #dddcd8;
 }
 
 .cloud-badge {
-  background: var(--cloud-badge-bg);
+  background: rgba(31, 30, 35, 0.66);
   color: #dddcd8;
 }
 
 .cloud-badge-queueing,
 .cloud-badge-queued {
-  background: rgba(255, 74, 61, 0.9);
+  background: rgba(255, 74, 61, 0.82);
   color: #fff;
 }
 
 .cloud-badge-error {
-  background: rgba(183, 39, 39, 0.92);
+  background: rgba(183, 39, 39, 0.84);
   color: #fff;
 }
 
@@ -2098,8 +2106,7 @@ html[data-theme="light"] .filter-row .floatplane-channel-filter.active {
 }
 
 html[data-theme="light"] .bottom-nav button.active {
-  background: rgba(255, 255, 255, 0.46);
-  border-color: rgba(255, 255, 255, 0.62);
+  color: var(--text);
 }
 
 .settings-diagnostics {
@@ -2496,13 +2503,21 @@ html[data-theme="light"] .bottom-nav button.active {
   }
 
   .filter-row .feed-channel-all {
-    padding-right: 12px;
+    width: 58px;
+    height: 58px;
+    padding: 3px;
+    justify-content: center;
+    border-radius: 50%;
   }
 
   .feed-channel-filter .avatar,
   .feed-channel-all-icon {
     width: 50px;
     height: 50px;
+  }
+
+  .feed-channel-all > span:not(.feed-channel-all-icon) {
+    display: none;
   }
 
   .floatplane-filter-stack {
@@ -2623,17 +2638,30 @@ html[data-theme="light"] .bottom-nav button.active {
   }
 
   .bottom-nav button.active {
-    background: rgba(255, 255, 255, 0.095);
-    border-color: rgba(255, 255, 255, 0.12);
+    background: transparent;
+    border-color: transparent;
     color: var(--text);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    box-shadow: none;
+  }
+
+  .bottom-nav button.active::after {
+    content: "";
+    position: absolute;
+    right: 50%;
+    bottom: 5px;
+    width: 4px;
+    height: 4px;
+    background: currentColor;
+    border-radius: 50%;
+    opacity: 0.92;
+    transform: translateX(50%);
   }
 
   .bottom-nav .bottom-create-button {
-    background: rgba(255, 255, 255, 0.14);
-    border-color: rgba(255, 255, 255, 0.17);
+    background: transparent;
+    border-color: transparent;
     color: var(--text);
-    box-shadow: var(--glass-highlight);
+    box-shadow: none;
   }
 
   .bottom-nav button:active {
@@ -2641,13 +2669,13 @@ html[data-theme="light"] .bottom-nav button.active {
   }
 
   .bottom-nav .nav-icon-frame {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
   }
 
   .bottom-nav .nav-icon {
-    width: 27px;
-    height: 27px;
+    width: 24px;
+    height: 24px;
   }
 
   .mini-player-shell {
