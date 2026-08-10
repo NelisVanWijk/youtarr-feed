@@ -53,6 +53,7 @@ import type {
 type View = "feed" | "continue" | "local" | "singles" | "channels" | "floatplane";
 type Filter = "all" | "new" | "downloaded";
 type PlayerMode = "full" | "mini";
+type ThemeMode = "dark" | "light";
 type WebKitVideoElement = HTMLVideoElement & {
   webkitEnterFullscreen?: () => void;
   webkitPresentationMode?: string;
@@ -115,8 +116,13 @@ type DownloadJob = {
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
 const languageStorageKey = "youtarr-feed-language";
+const themeStorageKey = "youtarr-feed-theme";
 const watchResumeRewindSeconds = 5;
 const floatplanePageSize = 48;
+
+function isThemeMode(value: string | null): value is ThemeMode {
+  return value === "dark" || value === "light";
+}
 
 function mergeVideosById(existing: FeedVideo[], incoming: FeedVideo[]) {
   const next = [...existing];
@@ -628,6 +634,11 @@ export default function FeedApp() {
     const storedLanguage = window.localStorage.getItem(languageStorageKey);
     return isLanguage(storedLanguage) ? storedLanguage : defaultLanguage;
   });
+  const [theme, setTheme] = useState<ThemeMode>(() => {
+    if (typeof window === "undefined") return "dark";
+    const storedTheme = window.localStorage.getItem(themeStorageKey);
+    return isThemeMode(storedTheme) ? storedTheme : "dark";
+  });
   const [view, setView] = useState<View>("feed");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -701,6 +712,11 @@ export default function FeedApp() {
     window.localStorage.setItem(languageStorageKey, language);
     document.documentElement.lang = language;
   }, [language]);
+
+  useEffect(() => {
+    window.localStorage.setItem(themeStorageKey, theme);
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   const loadFeed = useCallback(async (quiet = false, refresh = false) => {
     if (quiet) setRefreshing(true);
@@ -3369,11 +3385,33 @@ export default function FeedApp() {
                 <strong className="language-switcher">
                   {languageOptions.map((option) => (
                     <button
+                      type="button"
                       key={option.code}
                       className={language === option.code ? "active" : ""}
                       onClick={() => setLanguage(option.code)}
                     >
                       {option.label}
+                    </button>
+                  ))}
+                </strong>
+              </div>
+              <div>
+                <span>{copy.settings.themeLabel}</span>
+                <strong
+                  className="theme-switcher"
+                  role="group"
+                  aria-label={copy.settings.themeLabel}
+                >
+                  {(["dark", "light"] as const).map((option) => (
+                    <button
+                      type="button"
+                      key={option}
+                      className={theme === option ? "active" : ""}
+                      onClick={() => setTheme(option)}
+                    >
+                      {option === "dark"
+                        ? copy.settings.themeDark
+                        : copy.settings.themeLight}
                     </button>
                   ))}
                 </strong>

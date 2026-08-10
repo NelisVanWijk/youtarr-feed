@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "A mobile-first subscription feed and local playback app for Youtarr.",
     start_url: "/",
     display: "standalone",
-    background_color: "#0c0c0d",
-    theme_color: "#0c0c0d",
+    background_color: "#242329",
+    theme_color: "#242329",
     orientation: "portrait",
   };
 }

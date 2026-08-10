@@ -23,7 +23,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
-  themeColor: "#0c0c0d",
+  themeColor: "#242329",
 };
 
 export default function RootLayout({
@@ -32,8 +32,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              'try{var t=localStorage.getItem("youtarr-feed-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t;}catch(e){}',
+          }}
+        />
         <link rel="preconnect" href="https://i.ytimg.com" />
       </head>
       <body>{children}</body>
