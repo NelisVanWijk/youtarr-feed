@@ -28,6 +28,12 @@
     inset 0 -1px 0 rgba(255, 255, 255, 0.055);
   --shadow-soft: 0 14px 40px rgba(0, 0, 0, 0.18);
   --shadow-float: 0 22px 70px rgba(0, 0, 0, 0.32);
+  --radius-card: 8px;
+  --radius-tight: 12px;
+  --radius-control: 16px;
+  --radius-media: 18px;
+  --radius-panel: 22px;
+  --radius-sheet: 28px;
   --press-transition: transform 95ms ease-out, background 160ms ease,
     border-color 160ms ease, color 160ms ease;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -200,7 +206,7 @@ input:focus-visible {
   display: grid;
   place-items: center;
   background: var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius-tight);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28),
     0 8px 22px rgba(255, 90, 79, 0.24);
 }
@@ -219,7 +225,7 @@ input:focus-visible {
   padding: 0 14px;
   background: var(--material-control);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   box-shadow: var(--glass-highlight);
   -webkit-backdrop-filter: blur(22px) saturate(180%);
   backdrop-filter: blur(22px) saturate(180%);
@@ -345,7 +351,7 @@ input:focus-visible {
   gap: 15px;
   padding: 0 15px;
   background: transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--muted);
   font-size: 14px;
   font-weight: 580;
@@ -384,7 +390,7 @@ input:focus-visible {
   padding: 14px;
   background: var(--material-panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   box-shadow: var(--glass-highlight);
   -webkit-backdrop-filter: blur(24px) saturate(175%);
   backdrop-filter: blur(24px) saturate(175%);
@@ -640,7 +646,7 @@ main {
   gap: 9px;
   background: var(--material-control);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--text);
   font-size: 13px;
   font-weight: 680;
@@ -674,7 +680,7 @@ main {
   display: block;
   padding: 0;
   background: transparent;
-  border-radius: 8px;
+  border-radius: var(--radius-media);
 }
 
 .thumbnail {
@@ -682,7 +688,7 @@ main {
   aspect-ratio: 16 / 9;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.11);
-  border-radius: 8px;
+  border-radius: var(--radius-media);
   box-shadow: var(--glass-highlight), 0 10px 24px rgba(0, 0, 0, 0.16);
 }
 
@@ -986,7 +992,7 @@ main {
   gap: 2px;
   background: var(--material-panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-panel);
   box-shadow: var(--glass-highlight), var(--shadow-float);
   transform-origin: top right;
   animation: menu-pop 130ms ease-out both;
@@ -1004,7 +1010,7 @@ main {
   width: 100%;
   padding: 10px;
   background: transparent;
-  border-radius: 7px;
+  border-radius: var(--radius-tight);
   color: var(--text);
   font-size: 12px;
   font-weight: 650;
@@ -1029,7 +1035,7 @@ main {
     linear-gradient(100deg, transparent 30%, rgba(255,255,255,.04) 50%, transparent 70%),
     var(--surface);
   background-size: 200% 100%;
-  border-radius: 8px;
+  border-radius: var(--radius-media);
   animation: shimmer 1.4s infinite linear;
 }
 
@@ -1081,7 +1087,7 @@ main {
   gap: 16px;
   background: var(--material-panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
   text-align: left;
   box-shadow: var(--glass-highlight), 0 12px 26px rgba(0, 0, 0, 0.12);
   -webkit-backdrop-filter: blur(24px) saturate(170%);
@@ -1166,7 +1172,7 @@ main {
   padding: 0 12px;
   background: var(--material-control);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--text);
   font-size: 13px;
 }
@@ -1228,7 +1234,7 @@ main {
   gap: 16px;
   background: rgba(255, 74, 61, 0.11);
   border: 1px solid rgba(255, 74, 61, 0.28);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: #ffb7b1;
   font-size: 12px;
 }
@@ -1237,7 +1243,7 @@ main {
   flex: 0 0 auto;
   padding: 7px 10px;
   background: rgba(255, 255, 255, 0.08);
-  border-radius: 7px;
+  border-radius: var(--radius-tight);
   font-size: 11px;
   font-weight: 700;
 }
@@ -1252,7 +1258,7 @@ main {
   gap: 16px;
   background: var(--material-panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.04);
   -webkit-backdrop-filter: blur(18px) saturate(150%);
   backdrop-filter: blur(18px) saturate(150%);
@@ -1324,7 +1330,7 @@ main {
   overflow: auto;
   background: var(--material-panel);
   border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 16px;
+  border-radius: var(--radius-sheet);
   box-shadow: var(--glass-highlight), var(--shadow-float);
   -webkit-backdrop-filter: blur(32px) saturate(185%);
   backdrop-filter: blur(32px) saturate(185%);
@@ -1387,7 +1393,7 @@ main {
   position: relative;
   width: 100%;
   background: #000;
-  border-radius: 16px 16px 0 0;
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
   touch-action: pan-y;
 }
 
@@ -1396,7 +1402,7 @@ main {
   aspect-ratio: 16 / 9;
   display: block;
   background: #000;
-  border-radius: 16px 16px 0 0;
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
 }
 
 .player-busy-overlay {
@@ -1520,7 +1526,7 @@ main {
   overflow: hidden;
   background: var(--material-chrome);
   border: 1px solid rgba(255, 255, 255, 0.24);
-  border-radius: 8px;
+  border-radius: var(--radius-media);
   box-shadow: var(--glass-highlight), var(--shadow-float);
   animation: fade-in 180ms ease both;
   -webkit-backdrop-filter: blur(28px) saturate(190%);
@@ -1534,12 +1540,12 @@ main {
   overflow: hidden;
   background: transparent;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-media);
   box-shadow: none;
 }
 
 .video-modal-mini .player {
-  border-radius: 8px;
+  border-radius: var(--radius-media);
 }
 
 .video-modal-mini .modal-copy {
@@ -1596,7 +1602,7 @@ main {
   place-content: center;
   justify-items: center;
   background: #101012;
-  border-radius: 16px 16px 0 0;
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
   text-align: center;
 }
 
@@ -1720,7 +1726,7 @@ main {
   padding: 11px 12px;
   background: var(--material-control);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   box-shadow: var(--glass-highlight);
   -webkit-backdrop-filter: blur(18px) saturate(170%);
   backdrop-filter: blur(18px) saturate(170%);
@@ -1762,7 +1768,7 @@ main {
   overflow: hidden;
   background: var(--material-control);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--muted);
   font-size: 11px;
   line-height: 1.35;
@@ -1806,7 +1812,7 @@ main {
   padding: 10px 13px;
   background: rgba(255, 74, 61, 0.12);
   border: 1px solid rgba(255, 74, 61, 0.32);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: #ffb7b1;
   font-size: 12px;
   font-weight: 750;
@@ -1929,7 +1935,7 @@ main {
   overflow: hidden;
   background: var(--material-control);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   box-shadow: var(--glass-highlight);
   -webkit-backdrop-filter: blur(16px) saturate(170%);
   backdrop-filter: blur(16px) saturate(170%);
@@ -2001,7 +2007,7 @@ html[data-theme="light"] .bottom-nav button.active {
   flex: 0 0 auto;
   background: var(--material-control);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--text);
   font-size: 11px;
   font-weight: 750;
@@ -2019,7 +2025,7 @@ html[data-theme="light"] .bottom-nav button.active {
   gap: 8px;
   background: var(--surface-tint);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
 }
 
 .floatplane-session-form label {
@@ -2046,7 +2052,7 @@ html[data-theme="light"] .bottom-nav button.active {
   padding: 0 11px;
   background: var(--material-control);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: var(--text);
   font-size: 12px;
 }
@@ -2070,7 +2076,7 @@ html[data-theme="light"] .bottom-nav button.active {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
 }
 
 .playback-routing div {
@@ -2119,7 +2125,7 @@ html[data-theme="light"] .bottom-nav button.active {
   padding: 13px;
   background: var(--surface-tint);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-card);
 }
 
 .diagnostic-card header {
@@ -2183,7 +2189,7 @@ html[data-theme="light"] .bottom-nav button.active {
 .primary-button {
   padding: 11px 17px;
   background: var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   color: #fff;
   font-size: 12px;
   font-weight: 750;
@@ -2303,7 +2309,7 @@ html[data-theme="light"] .bottom-nav button.active {
   .search-wrap.search-open input {
     padding: 0 4px;
     background: transparent;
-    border-radius: 8px;
+    border-radius: var(--radius-control);
   }
 
   .sidebar {
@@ -2375,9 +2381,15 @@ html[data-theme="light"] .bottom-nav button.active {
   }
 
   .thumbnail-button,
-  .thumbnail,
   .loading-thumb {
-    border-radius: 0;
+    width: calc(100% - 28px);
+    margin-right: 14px;
+    margin-left: 14px;
+    border-radius: var(--radius-media);
+  }
+
+  .thumbnail {
+    border-radius: var(--radius-media);
   }
 
   .video-details,
@@ -2398,7 +2410,7 @@ html[data-theme="light"] .bottom-nav button.active {
 
   .channel-card {
     padding: 13px;
-    border-radius: 8px;
+    border-radius: var(--radius-card);
   }
 
   .add-channel-form {
@@ -2461,7 +2473,7 @@ html[data-theme="light"] .bottom-nav button.active {
     row-gap: 3px;
     background: transparent;
     color: var(--quiet);
-    border-radius: 8px;
+    border-radius: var(--radius-control);
   }
 
   .bottom-nav button.active {
@@ -2520,7 +2532,7 @@ html[data-theme="light"] .bottom-nav button.active {
   .settings-modal {
     width: 100%;
     max-height: calc(94vh - var(--safe-top));
-    border-radius: 18px 18px 0 0;
+    border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
     border-right: 0;
     border-bottom: 0;
     border-left: 0;
@@ -2530,7 +2542,7 @@ html[data-theme="light"] .bottom-nav button.active {
   .player-frame,
   .demo-player,
   .download-panel {
-    border-radius: 17px 17px 0 0;
+    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
   }
 
   .demo-player,
@@ -2593,7 +2605,7 @@ html[data-theme="light"] .bottom-nav button.active {
 
   .video-modal-mini .player,
   .video-modal-mini .player-frame {
-    border-radius: 8px;
+    border-radius: var(--radius-media);
   }
 
   .modal-actions {
