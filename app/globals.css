@@ -1978,7 +1978,8 @@ html[data-theme="light"] .filter-row .floatplane-channel-filter.active {
 }
 
 html[data-theme="light"] .bottom-nav button.active {
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.46);
+  border-color: rgba(255, 255, 255, 0.62);
 }
 
 .settings-diagnostics {
@@ -2460,40 +2461,35 @@ html[data-theme="light"] .bottom-nav button.active {
     background: var(--material-chrome);
     border: 1px solid var(--line);
     border-radius: calc(var(--radius-sheet) + 4px);
-    box-shadow: var(--glass-highlight), 0 18px 55px rgba(0, 0, 0, 0.26);
+    box-shadow: var(--glass-highlight);
+    filter: drop-shadow(0 16px 34px rgba(0, 0, 0, 0.22));
     transform: translateX(-50%);
+    overflow: hidden;
+    background-clip: padding-box;
     -webkit-backdrop-filter: blur(30px) saturate(190%);
     backdrop-filter: blur(30px) saturate(190%);
   }
 
   .bottom-nav button {
     position: relative;
-    width: min(100%, 60px);
-    height: 52px;
+    width: min(100%, 54px);
+    height: 38px;
     display: grid;
-    grid-template-rows: 24px 13px;
+    grid-template-rows: 19px 11px;
     align-content: center;
     justify-items: center;
-    row-gap: 3px;
+    row-gap: 1px;
     background: transparent;
     color: var(--quiet);
-    border-radius: var(--radius-control);
+    border: 1px solid transparent;
+    border-radius: 19px;
   }
 
   .bottom-nav button.active {
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.11);
+    border-color: rgba(255, 255, 255, 0.16);
     color: var(--text);
-    box-shadow: var(--glass-highlight);
-  }
-
-  .bottom-nav button.active::before {
-    content: "";
-    position: absolute;
-    top: 4px;
-    width: 18px;
-    height: 2px;
-    background: var(--accent);
-    border-radius: 999px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
   }
 
   .bottom-nav button:active {
@@ -2511,14 +2507,14 @@ html[data-theme="light"] .bottom-nav button.active {
   }
 
   .bottom-nav .nav-icon-frame {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
     align-self: end;
   }
 
   .bottom-nav .nav-icon {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
   }
 
   .mini-player-shell {
