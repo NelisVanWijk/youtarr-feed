@@ -130,6 +130,7 @@ input:focus-visible {
 .profile-button,
 .settings-link,
 .filter-row button,
+.channel-scroll-button,
 .thumbnail-button,
 .avatar-button,
 .video-copy,
@@ -152,6 +153,7 @@ input:focus-visible {
 .profile-button:active,
 .settings-link:active,
 .filter-row button:active,
+.channel-scroll-button:active,
 .thumbnail-button:active,
 .avatar-button:active,
 .video-copy:active,
@@ -540,11 +542,57 @@ main {
   color: #171719;
 }
 
+.feed-channel-scroll-shell {
+  max-width: 1480px;
+  margin: 0 auto 14px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  align-items: center;
+  gap: 10px;
+}
+
 .feed-channel-row {
   align-items: center;
   gap: 11px;
-  margin-bottom: 14px;
+  max-width: none;
+  margin: 0;
   padding: 2px 0 9px;
+  min-width: 0;
+  scroll-behavior: smooth;
+}
+
+.channel-scroll-button {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  background: var(--material-control);
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--muted);
+  box-shadow: var(--glass-highlight);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
+}
+
+.channel-scroll-button:hover {
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--text);
+}
+
+.channel-scroll-button:disabled {
+  cursor: default;
+  opacity: 0.32;
+}
+
+.channel-scroll-button:disabled:hover {
+  background: var(--material-control);
+  color: var(--muted);
+}
+
+.channel-scroll-button .svg-inline--fa {
+  width: 14px;
+  height: 14px;
 }
 
 .filter-row .feed-channel-filter {
@@ -2364,6 +2412,13 @@ html[data-theme="light"] .bottom-nav button.active {
   .sidebar {
     left: 14px;
     width: 190px;
+    padding: 12px;
+  }
+
+  .sidebar nav button {
+    gap: 12px;
+    padding: 0 12px;
+    font-size: 13px;
   }
 
   main {
@@ -2496,8 +2551,17 @@ html[data-theme="light"] .bottom-nav button.active {
     padding-right: 10px;
   }
 
+  .feed-channel-scroll-shell {
+    margin: 0 16px 13px;
+    display: block;
+  }
+
+  .channel-scroll-button {
+    display: none;
+  }
+
   .feed-channel-row {
-    margin-bottom: 13px;
+    margin: 0;
     padding-bottom: 8px;
     padding-right: 16px;
   }
@@ -2944,6 +3008,7 @@ html[data-theme="light"] .bottom-nav button.active {
   .sidebar-status,
   .search-wrap,
   .filter-row button,
+  .channel-scroll-button,
   .activity-strip,
   .video-menu,
   .modal-backdrop,

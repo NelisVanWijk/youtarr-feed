@@ -695,6 +695,10 @@ export default function FeedApp() {
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsChecking, setSettingsChecking] = useState(false);
+  const [feedChannelScrollState, setFeedChannelScrollState] = useState({
+    left: false,
+    right: false,
+  });
   const [floatplaneSessionToken, setFloatplaneSessionToken] = useState("");
   const [floatplaneSessionState, setFloatplaneSessionState] = useState<
     "idle" | "saving" | "saved" | "error"
@@ -711,10 +715,51 @@ export default function FeedApp() {
   const playerDragRef = useRef<PlayerDragState | null>(null);
   const intendedPlaybackRef = useRef(false);
   const pauseIntentTimerRef = useRef<number | null>(null);
+  const feedChannelRowRef = useRef<HTMLDivElement | null>(null);
   const floatplaneLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const mode: AppMode = feed?.mode || "demo";
   const copy = translations[language];
   const shouldUseInlineWatchPage = useCallback(() => true, []);
+  const updateFeedChannelScrollState = useCallback(() => {
+    const row = feedChannelRowRef.current;
+    if (!row) {
+      setFeedChannelScrollState({ left: false, right: false });
+      return;
+    }
+    const maxScrollLeft = Math.max(0, row.scrollWidth - row.clientWidth);
+    const next = {
+      left: row.scrollLeft > 1,
+      right: row.scrollLeft < maxScrollLeft - 1,
+    };
+    setFeedChannelScrollState((current) =>
+      current.left === next.left && current.right === next.right ? current : next
+    );
+  }, []);
+
+  useEffect(() => {
+    const row = feedChannelRowRef.current;
+    if (!row) {
+      updateFeedChannelScrollState();
+      return undefined;
+    }
+
+    updateFeedChannelScrollState();
+    row.addEventListener("scroll", updateFeedChannelScrollState, { passive: true });
+    window.addEventListener("resize", updateFeedChannelScrollState);
+    const resizeObserver =
+      "ResizeObserver" in window
+        ? new ResizeObserver(updateFeedChannelScrollState)
+        : null;
+    resizeObserver?.observe(row);
+    const animationFrame = window.requestAnimationFrame(updateFeedChannelScrollState);
+
+    return () => {
+      row.removeEventListener("scroll", updateFeedChannelScrollState);
+      window.removeEventListener("resize", updateFeedChannelScrollState);
+      resizeObserver?.disconnect();
+      window.cancelAnimationFrame(animationFrame);
+    };
+  }, [feed?.channels.length, updateFeedChannelScrollState, view]);
 
   useEffect(() => {
     window.localStorage.setItem(languageStorageKey, language);
@@ -2319,6 +2364,13 @@ export default function FeedApp() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function scrollFeedChannels(direction: "left" | "right") {
+    feedChannelRowRef.current?.scrollBy({
+      left: direction === "left" ? -360 : 360,
+      behavior: "smooth",
+    });
+  }
+
   const activeActivity =
     status?.mode === "live" && activity && activity.state !== "idle"
       ? activity
@@ -2423,11 +2475,41 @@ export default function FeedApp() {
             <span>{copy.nav.continueFull}</span>
           </button>
           <button
+            className={view === "channels" ? "active" : ""}
+            onClick={() => switchView("channels")}
+          >
+            <NavIcon view="channels" />
+            <span>{copy.nav.channels}</span>
+          </button>
+          <button
             className={view === "floatplane" ? "active" : ""}
             onClick={() => switchView("floatplane")}
           >
             <NavIcon view="floatplane" />
             <span>{copy.nav.floatplane}</span>
+          </button>
+          <button
+            className={view === "local" ? "active" : ""}
+            onClick={() => switchView("local")}
+          >
+            <NavIcon view="local" />
+            <span>{copy.nav.local}</span>
+          </button>
+          <button
+            className={view === "singles" ? "active" : ""}
+            onClick={() => switchView("singles")}
+          >
+            <NavIcon view="singles" />
+            <span>{copy.nav.singles}</span>
+          </button>
+          <button
+            className={settingsOpen ? "active" : ""}
+            onClick={() => setSettingsOpen(true)}
+          >
+            <span className="nav-icon-frame">
+              <FontAwesomeIcon className="nav-icon" icon={faGear} aria-hidden="true" />
+            </span>
+            <span>{copy.common.settings}</span>
           </button>
         </nav>
         <div className="sidebar-status">
@@ -2462,32 +2544,53 @@ export default function FeedApp() {
         {view === "feed" && (
           <>
             {(feed?.channels.length || 0) > 0 && (
-              <div
-                className="filter-row feed-channel-row"
-                role="group"
-                aria-label={copy.channels.title}
-              >
-                {(feed?.channels || []).map((channel) => (
-                  <button
-                    key={channel.id}
-                    className="feed-channel-filter"
-                    onClick={() => void openChannel(channel.id)}
-                    aria-label={channel.name}
-                    title={channel.name}
-                  >
-                    <ChannelAvatar channel={channel} size="small" />
-                  </button>
-                ))}
+              <div className="feed-channel-scroll-shell">
                 <button
-                  className="feed-channel-all"
-                  onClick={() => switchView("channels")}
-                  aria-label={copy.channels.allChannels}
-                  title={copy.channels.allChannels}
+                  className="channel-scroll-button"
+                  onClick={() => scrollFeedChannels("left")}
+                  aria-label={copy.channels.scrollLeft}
+                  title={copy.channels.scrollLeft}
+                  disabled={!feedChannelScrollState.left}
                 >
-                  <span className="feed-channel-all-icon">
-                    <FontAwesomeIcon icon={faList} aria-hidden="true" />
-                  </span>
-                  <span>{copy.channels.allChannels}</span>
+                  <FontAwesomeIcon icon={faChevronLeft} aria-hidden="true" />
+                </button>
+                <div
+                  ref={feedChannelRowRef}
+                  className="filter-row feed-channel-row"
+                  role="group"
+                  aria-label={copy.channels.title}
+                >
+                  {(feed?.channels || []).map((channel) => (
+                    <button
+                      key={channel.id}
+                      className="feed-channel-filter"
+                      onClick={() => void openChannel(channel.id)}
+                      aria-label={channel.name}
+                      title={channel.name}
+                    >
+                      <ChannelAvatar channel={channel} size="small" />
+                    </button>
+                  ))}
+                  <button
+                    className="feed-channel-all"
+                    onClick={() => switchView("channels")}
+                    aria-label={copy.channels.allChannels}
+                    title={copy.channels.allChannels}
+                  >
+                    <span className="feed-channel-all-icon">
+                      <FontAwesomeIcon icon={faList} aria-hidden="true" />
+                    </span>
+                    <span>{copy.channels.allChannels}</span>
+                  </button>
+                </div>
+                <button
+                  className="channel-scroll-button"
+                  onClick={() => scrollFeedChannels("right")}
+                  aria-label={copy.channels.scrollRight}
+                  title={copy.channels.scrollRight}
+                  disabled={!feedChannelScrollState.right}
+                >
+                  <FontAwesomeIcon icon={faChevronRight} aria-hidden="true" />
                 </button>
               </div>
             )}
