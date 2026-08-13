@@ -3380,26 +3380,104 @@ export default function FeedApp() {
                 <p>{copy.player.notLocalBody}</p>
               </div>
             )}
-            <div className="modal-copy">
-              <h2>{selectedVideo.title}</h2>
-              <button
-                disabled={selectedVideo.provider === "floatplane"}
-                onClick={() => {
-                  if (selectedVideo.provider === "floatplane") return;
-                  const id = selectedVideo.channelId;
-                  setSelectedVideo(null);
-                  void openChannel(id);
-                }}
-              >
-                {selectedVideo.channelName}
-              </button>
-              <div className="watch-meta">
-                <span>{relativeDate(selectedVideo.publishedAt, copy)}</span>
-                {typeof selectedLikeCount === "number" && selectedLikeCount > 0 && (
-                  <span className="watch-like-count">
-                    <FontAwesomeIcon icon={faThumbsUp} aria-hidden="true" />
-                    {formatCompactNumber(selectedLikeCount, copy)}
+            <div className="modal-copy watch-copy">
+              <div className="watch-title-block">
+                <h2>{selectedVideo.title}</h2>
+                <div className="watch-meta">
+                  <span>{relativeDate(selectedVideo.publishedAt, copy)}</span>
+                </div>
+              </div>
+              <div className="watch-channel-row">
+                <button
+                  className="watch-channel-button"
+                  disabled={selectedVideo.provider === "floatplane"}
+                  onClick={() => {
+                    if (selectedVideo.provider === "floatplane") return;
+                    const id = selectedVideo.channelId;
+                    setSelectedVideo(null);
+                    void openChannel(id);
+                  }}
+                >
+                  <ChannelAvatar
+                    channel={{
+                      id: selectedVideo.channelId,
+                      name: selectedVideo.channelName,
+                      avatar: selectedVideo.channelAvatar,
+                    }}
+                    size="normal"
+                  />
+                  <span>
+                    <strong>{selectedVideo.channelName}</strong>
+                    <small>
+                      {selectedVideo.provider === "floatplane"
+                        ? "Floatplane"
+                        : "YouTube"}
+                    </small>
                   </span>
+                </button>
+                {selectedVideoPlayable && (
+                  <div className="modal-actions watch-action-row">
+                    {typeof selectedLikeCount === "number" && selectedLikeCount > 0 && (
+                      <span className="watch-action-chip watch-like-count">
+                        <FontAwesomeIcon icon={faThumbsUp} aria-hidden="true" />
+                        {formatCompactNumber(selectedLikeCount, copy)}
+                      </span>
+                    )}
+                    <button
+                      className="icon-secondary-button watch-action-chip"
+                      onClick={() =>
+                        void setVideoWatched(
+                          selectedVideo,
+                          !isVideoWatched(selectedVideo)
+                        )
+                      }
+                      title={
+                        isVideoWatched(selectedVideo)
+                          ? copy.common.markUnwatched
+                          : copy.common.markWatched
+                      }
+                      aria-label={
+                        isVideoWatched(selectedVideo)
+                          ? copy.common.markUnwatched
+                          : copy.common.markWatched
+                      }
+                    >
+                      <FontAwesomeIcon
+                        icon={isVideoWatched(selectedVideo) ? faClockRotateLeft : faCheck}
+                        aria-hidden="true"
+                      />
+                      <span>
+                        {isVideoWatched(selectedVideo)
+                          ? copy.common.markUnwatched
+                          : copy.common.markWatched}
+                      </span>
+                    </button>
+                    <button
+                      className="icon-secondary-button watch-action-chip"
+                      onClick={() => openSelectedVideoInVlc(selectedVideo)}
+                      title={copy.player.openInVlc}
+                      aria-label={copy.player.openInVlc}
+                    >
+                      <FontAwesomeIcon icon={faUpRightFromSquare} aria-hidden="true" />
+                      <span>{copy.player.openInVlc}</span>
+                    </button>
+                    {selectedVideo.provider !== "floatplane" && (
+                      <button
+                        className="icon-danger-button watch-action-chip"
+                        onClick={() => {
+                          if (window.confirm(copy.player.confirmDelete(selectedVideo.title))) {
+                            void removeDownload(selectedVideo);
+                          }
+                        }}
+                        disabled={deleteState === "deleting"}
+                        title={copy.common.deleteDownload}
+                        aria-label={copy.common.deleteDownload}
+                      >
+                        <FontAwesomeIcon icon={faTrash} aria-hidden="true" />
+                        <span>{copy.common.deleteDownload}</span>
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
               {selectedDescription && (
@@ -3469,57 +3547,11 @@ export default function FeedApp() {
                           streamSource.local.debug.mediaDirectory || ""
                         )}
                       </small>
-                    )}
+                  )}
                 </p>
               )}
-              {selectedVideoPlayable && (
-                <div className="modal-actions">
-                  <button
-                    className="icon-secondary-button"
-                    onClick={() =>
-                      void setVideoWatched(selectedVideo, !isVideoWatched(selectedVideo))
-                    }
-                    title={
-                      isVideoWatched(selectedVideo)
-                        ? copy.common.markUnwatched
-                        : copy.common.markWatched
-                    }
-                    aria-label={
-                      isVideoWatched(selectedVideo)
-                        ? copy.common.markUnwatched
-                        : copy.common.markWatched
-                    }
-                  >
-                    <FontAwesomeIcon
-                      icon={isVideoWatched(selectedVideo) ? faClockRotateLeft : faCheck}
-                      aria-hidden="true"
-                    />
-                  </button>
-                  <button
-                    className="icon-secondary-button"
-                    onClick={() => openSelectedVideoInVlc(selectedVideo)}
-                    title={copy.player.openInVlc}
-                    aria-label={copy.player.openInVlc}
-                  >
-                    <FontAwesomeIcon icon={faUpRightFromSquare} aria-hidden="true" />
-                  </button>
-                  {selectedVideo.provider !== "floatplane" && (
-                    <button
-                      className="icon-danger-button"
-                      onClick={() => {
-                        if (window.confirm(copy.player.confirmDelete(selectedVideo.title))) {
-                          void removeDownload(selectedVideo);
-                        }
-                      }}
-                      disabled={deleteState === "deleting"}
-                      title={copy.common.deleteDownload}
-                      aria-label={copy.common.deleteDownload}
-                    >
-                      <FontAwesomeIcon icon={faTrash} aria-hidden="true" />
-                    </button>
-                  )}
-                  {deleteState === "error" && <small>{deleteError}</small>}
-                </div>
+              {deleteState === "error" && (
+                <small className="watch-action-error">{deleteError}</small>
               )}
             </div>
           </section>

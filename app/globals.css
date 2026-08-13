@@ -1598,8 +1598,12 @@ main {
   position: sticky;
   top: 0;
   z-index: 2;
-  height: min(72dvh, 56.25vw);
-  border-radius: 0;
+  width: min(1120px, calc(100vw - 48px));
+  height: auto;
+  aspect-ratio: 16 / 9;
+  margin: 20px auto 0;
+  overflow: hidden;
+  border-radius: var(--radius-panel);
 }
 
 .player-backdrop .video-modal-watch-page .player {
@@ -1610,10 +1614,21 @@ main {
 }
 
 .player-backdrop .video-modal-watch-page .download-panel {
-  height: min(72dvh, 56.25vw);
+  width: min(1120px, calc(100vw - 48px));
+  height: auto;
   aspect-ratio: auto;
+  margin: 20px auto 0;
   padding: 28px 20px;
-  border-radius: 0;
+  border-radius: var(--radius-panel);
+}
+
+.player-backdrop .video-modal-watch-page .demo-player {
+  width: min(1120px, calc(100vw - 48px));
+  min-height: 0;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  margin: 20px auto 0;
+  border-radius: var(--radius-panel);
 }
 
 .player-backdrop .video-modal-watch-page .modal-copy {
@@ -1814,13 +1829,91 @@ main {
   text-align: right;
 }
 
+.watch-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 15px;
+}
+
+.player-backdrop .video-modal-watch-page .watch-copy {
+  width: min(1120px, 100%);
+  padding-top: 20px;
+}
+
+.watch-title-block {
+  display: grid;
+  gap: 8px;
+}
+
+.watch-title-block h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 26px;
+  line-height: 1.18;
+  letter-spacing: 0;
+}
+
+.video-modal-watch-page .watch-title-block h2 {
+  font-size: 26px;
+  line-height: 1.18;
+}
+
+.watch-channel-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.watch-copy .watch-channel-button {
+  min-width: 0;
+  width: auto;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text);
+  text-align: left;
+}
+
+.watch-copy .watch-channel-button:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.watch-channel-button > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  color: var(--text);
+  font-size: 14px;
+  text-align: left;
+}
+
+.watch-channel-button strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 820;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.watch-channel-button small {
+  color: var(--quiet);
+  font-size: 12px;
+  font-weight: 620;
+  line-height: 1.25;
+}
+
 .watch-meta {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   gap: 12px;
   color: var(--quiet);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .watch-like-count {
@@ -1835,10 +1928,57 @@ main {
   height: 12px;
 }
 
+.watch-action-row {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  border: 0;
+}
+
+.watch-action-chip {
+  width: auto;
+  min-width: 0;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.watch-action-chip span {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-align: left;
+}
+
+.watch-action-chip .svg-inline--fa {
+  width: 14px;
+  height: 14px;
+}
+
+.watch-action-row .watch-like-count {
+  background: var(--material-control);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: var(--glass-highlight);
+}
+
 .watch-description {
   grid-column: 1 / -1;
-  margin-top: 8px;
-  padding: 11px 12px;
+  margin-top: 2px;
+  padding: 14px 15px;
   background: var(--material-control);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: var(--radius-control);
@@ -1854,8 +1994,8 @@ main {
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
   color: var(--text);
-  font-size: 13px;
-  line-height: 1.48;
+  font-size: 14px;
+  line-height: 1.5;
   white-space: pre-wrap;
 }
 
@@ -1876,25 +2016,33 @@ main {
 
 .stream-source {
   grid-column: 1 / -1;
-  width: fit-content;
+  width: 100%;
   max-width: 100%;
   margin: 5px 0 0;
-  padding: 7px 9px;
+  padding: 11px 12px;
   overflow: hidden;
   background: var(--material-control);
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   color: var(--muted);
-  font-size: 11px;
-  line-height: 1.35;
+  font-size: 12px;
+  line-height: 1.42;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .stream-source strong {
   margin-right: 6px;
   color: var(--text);
   font-weight: 800;
+}
+
+.stream-source small {
+  display: block;
+  margin-top: 6px;
+  color: var(--quiet);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .stream-source-local {
@@ -1972,6 +2120,38 @@ main {
   color: #ffb7b1;
   font-size: 11px;
   text-align: right;
+}
+
+.modal-actions.watch-action-row {
+  margin: 0;
+  padding: 0;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  border-top: 0;
+}
+
+.icon-secondary-button.watch-action-chip,
+.icon-danger-button.watch-action-chip {
+  width: auto;
+  height: 38px;
+  padding: 0 13px;
+  display: inline-flex;
+  place-items: initial;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+}
+
+.icon-secondary-button.watch-action-chip .svg-inline--fa,
+.icon-danger-button.watch-action-chip .svg-inline--fa,
+.watch-action-row .watch-like-count .svg-inline--fa {
+  width: 14px;
+  height: 14px;
+}
+
+.watch-action-error {
+  color: #ffb7b1;
+  font-size: 12px;
 }
 
 .settings-modal {
@@ -2894,12 +3074,60 @@ html[data-theme="light"] .bottom-nav button.active {
     padding: 14px 14px calc(28px + var(--safe-bottom));
   }
 
-  .video-modal-watch-page .modal-copy h2 {
-    font-size: 19px;
+  .player-backdrop .video-modal-watch-page .player-frame,
+  .player-backdrop .video-modal-watch-page .demo-player,
+  .player-backdrop .video-modal-watch-page .download-panel {
+    width: 100%;
+    margin-top: 0;
+    border-radius: 0;
+  }
+
+  .video-modal-watch-page .watch-title-block h2 {
+    font-size: 21px;
+    line-height: 1.2;
+  }
+
+  .watch-copy {
+    gap: 13px;
+  }
+
+  .watch-channel-row {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .modal-actions.watch-action-row {
+    margin-right: -14px;
+    padding-bottom: 2px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    scrollbar-width: none;
+  }
+
+  .modal-actions.watch-action-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .icon-secondary-button.watch-action-chip,
+  .icon-danger-button.watch-action-chip,
+  .watch-action-chip {
+    height: 36px;
+    min-height: 36px;
+    padding: 0 12px;
   }
 
   .watch-description {
     padding: 10px;
+  }
+
+  .watch-description p {
+    font-size: 13px;
+  }
+
+  .stream-source {
+    font-size: 11px;
   }
 
   .video-modal-mini .player,
