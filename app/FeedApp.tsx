@@ -771,6 +771,47 @@ export default function FeedApp() {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
+  useEffect(() => {
+    const root = document.documentElement;
+    let animationFrame = 0;
+
+    const updateVisualViewportBottom = () => {
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        const viewport = window.visualViewport;
+        const bottomOffset = viewport
+          ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop)
+          : 0;
+        root.style.setProperty(
+          "--visual-viewport-bottom",
+          `${Math.round(bottomOffset)}px`
+        );
+        animationFrame = 0;
+      });
+    };
+
+    updateVisualViewportBottom();
+    window.visualViewport?.addEventListener("resize", updateVisualViewportBottom);
+    window.visualViewport?.addEventListener("scroll", updateVisualViewportBottom);
+    window.addEventListener("resize", updateVisualViewportBottom);
+    window.addEventListener("scroll", updateVisualViewportBottom, { passive: true });
+
+    return () => {
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      window.visualViewport?.removeEventListener(
+        "resize",
+        updateVisualViewportBottom
+      );
+      window.visualViewport?.removeEventListener(
+        "scroll",
+        updateVisualViewportBottom
+      );
+      window.removeEventListener("resize", updateVisualViewportBottom);
+      window.removeEventListener("scroll", updateVisualViewportBottom);
+      root.style.removeProperty("--visual-viewport-bottom");
+    };
+  }, []);
+
   const loadFeed = useCallback(async (quiet = false, refresh = false) => {
     if (quiet) setRefreshing(true);
     else setLoading(true);

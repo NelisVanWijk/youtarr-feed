@@ -38,6 +38,7 @@
     border-color 160ms ease, color 160ms ease;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --visual-viewport-bottom: 0px;
 }
 
 html[data-theme="light"] {
@@ -1632,7 +1633,7 @@ main {
   position: fixed;
   z-index: 90;
   right: 18px;
-  bottom: calc(18px + var(--safe-bottom));
+  bottom: calc(18px + var(--safe-bottom) + var(--visual-viewport-bottom));
   width: min(360px, calc(100vw - 28px));
   cursor: pointer;
   overflow: hidden;
@@ -1641,6 +1642,8 @@ main {
   border-radius: var(--radius-media);
   box-shadow: var(--glass-highlight), var(--shadow-float);
   animation: fade-in 180ms ease both;
+  transform: translate3d(0, 0, 0);
+  will-change: bottom;
   -webkit-backdrop-filter: blur(28px) saturate(190%);
   backdrop-filter: blur(28px) saturate(190%);
 }
@@ -2667,7 +2670,7 @@ html[data-theme="light"] .bottom-nav button.active {
     position: fixed;
     z-index: 60;
     right: auto;
-    bottom: calc(8px + var(--safe-bottom));
+    bottom: calc(8px + var(--safe-bottom) + var(--visual-viewport-bottom));
     left: 50%;
     width: min(360px, calc(100vw - 28px));
     height: 64px;
@@ -2682,7 +2685,8 @@ html[data-theme="light"] .bottom-nav button.active {
     border-radius: calc(var(--radius-sheet) + 4px);
     box-shadow: var(--glass-highlight);
     filter: drop-shadow(0 16px 34px rgba(0, 0, 0, 0.22));
-    transform: translateX(-50%);
+    transform: translate3d(-50%, 0, 0);
+    will-change: bottom;
     overflow: hidden;
     background-clip: padding-box;
     -webkit-backdrop-filter: blur(30px) saturate(190%);
@@ -2744,7 +2748,7 @@ html[data-theme="light"] .bottom-nav button.active {
 
   .mini-player-shell {
     right: 10px;
-    bottom: calc(88px + var(--safe-bottom));
+    bottom: calc(88px + var(--safe-bottom) + var(--visual-viewport-bottom));
     left: 10px;
     width: auto;
   }
