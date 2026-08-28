@@ -56,6 +56,8 @@ type View = "feed" | "continue" | "local" | "singles" | "channels" | "floatplane
 type Filter = "all" | "new" | "downloaded";
 type PlayerMode = "full" | "mini";
 type ThemeMode = "dark" | "light";
+type YoutarrPlaybackProfile = "primary" | "av1" | "vp9";
+type PlaybackOverride = "auto" | YoutarrPlaybackProfile;
 type WebKitVideoElement = HTMLVideoElement & {
   webkitEnterFullscreen?: () => void;
   webkitPresentationMode?: string;
@@ -120,11 +122,29 @@ type BottomView = Extract<View, "feed" | "continue" | "floatplane">;
 const palette = ["coral", "blue", "lime", "violet", "gold"];
 const languageStorageKey = "youtarr-feed-language";
 const themeStorageKey = "youtarr-feed-theme";
+const playbackOverrideStorageKey = "youtarr-feed-playback-override";
 const watchResumeRewindSeconds = 5;
 const floatplanePageSize = 48;
 
 function isThemeMode(value: string | null): value is ThemeMode {
   return value === "dark" || value === "light";
+}
+
+function isYoutarrPlaybackProfileValue(
+  value: string | null
+): value is YoutarrPlaybackProfile {
+  return value === "primary" || value === "av1" || value === "vp9";
+}
+
+function isPlaybackOverride(value: string | null): value is PlaybackOverride {
+  return value === "auto" || isYoutarrPlaybackProfileValue(value);
+}
+
+function playbackOverrideLabel(value: PlaybackOverride, copy: AppCopy) {
+  if (value === "auto") return copy.player.playbackOverrideAuto;
+  if (value === "primary") return copy.player.playbackOverridePrimary;
+  if (value === "av1") return copy.player.playbackOverrideAv1;
+  return copy.player.playbackOverrideVp9;
 }
 
 function mergeVideosById(existing: FeedVideo[], incoming: FeedVideo[]) {
@@ -646,6 +666,11 @@ export default function FeedApp() {
     const storedTheme = window.localStorage.getItem(themeStorageKey);
     return isThemeMode(storedTheme) ? storedTheme : "dark";
   });
+  const [playbackOverride, setPlaybackOverride] = useState<PlaybackOverride>(() => {
+    if (typeof window === "undefined") return "auto";
+    const storedOverride = window.localStorage.getItem(playbackOverrideStorageKey);
+    return isPlaybackOverride(storedOverride) ? storedOverride : "auto";
+  });
   const [view, setView] = useState<View>("feed");
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
@@ -715,11 +740,69 @@ export default function FeedApp() {
   const playerDragRef = useRef<PlayerDragState | null>(null);
   const intendedPlaybackRef = useRef(false);
   const pauseIntentTimerRef = useRef<number | null>(null);
+  const pendingPlaybackResumeRef = useRef<{
+    videoId: string;
+    currentTime: number;
+    wasPlaying: boolean;
+  } | null>(null);
   const feedChannelRowRef = useRef<HTMLDivElement | null>(null);
   const floatplaneLoadMoreRef = useRef<HTMLDivElement | null>(null);
   const mode: AppMode = feed?.mode || "demo";
   const copy = translations[language];
+  const youtarrPlaybackOptions = useMemo(() => {
+    const options: { value: PlaybackOverride; label: string }[] = [
+      { value: "auto", label: playbackOverrideLabel("auto", copy) },
+    ];
+    const configuredProfiles = new Set<YoutarrPlaybackProfile>();
+    (status?.diagnostics?.youtarr.instances || []).forEach((diagnostic) => {
+      if (
+        diagnostic.configured &&
+        isYoutarrPlaybackProfileValue(diagnostic.key)
+      ) {
+        configuredProfiles.add(diagnostic.key);
+      }
+    });
+    (["primary", "av1", "vp9"] as YoutarrPlaybackProfile[]).forEach(
+      (profile) => {
+        if (!configuredProfiles.has(profile)) return;
+        options.push({
+          value: profile,
+          label: playbackOverrideLabel(profile, copy),
+        });
+      }
+    );
+    return options;
+  }, [copy, status?.diagnostics?.youtarr.instances]);
+  const activePlaybackOverride =
+    playbackOverride === "auto" ||
+    youtarrPlaybackOptions.some((option) => option.value === playbackOverride)
+      ? playbackOverride
+      : "auto";
   const shouldUseInlineWatchPage = useCallback(() => true, []);
+  const youtarrStreamPath = useCallback(
+    (videoId: string) => {
+      const query =
+        activePlaybackOverride === "auto"
+          ? ""
+          : `?profile=${encodeURIComponent(activePlaybackOverride)}`;
+      return `/api/stream/${encodeURIComponent(videoId)}${query}`;
+    },
+    [activePlaybackOverride]
+  );
+  const youtarrStreamSourcePath = useCallback(
+    (videoId: string, detail = false) => {
+      const params = new URLSearchParams();
+      if (detail) params.set("detail", "1");
+      if (activePlaybackOverride !== "auto") {
+        params.set("profile", activePlaybackOverride);
+      }
+      const query = params.toString();
+      return `/api/stream/${encodeURIComponent(videoId)}/source${
+        query ? `?${query}` : ""
+      }`;
+    },
+    [activePlaybackOverride]
+  );
   const updateFeedChannelScrollState = useCallback(() => {
     const row = feedChannelRowRef.current;
     if (!row) {
@@ -770,6 +853,10 @@ export default function FeedApp() {
     window.localStorage.setItem(themeStorageKey, theme);
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    window.localStorage.setItem(playbackOverrideStorageKey, playbackOverride);
+  }, [playbackOverride]);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -1260,6 +1347,7 @@ export default function FeedApp() {
 
   useEffect(() => {
     intendedPlaybackRef.current = false;
+    pendingPlaybackResumeRef.current = null;
     if (pauseIntentTimerRef.current) {
       window.clearTimeout(pauseIntentTimerRef.current);
       pauseIntentTimerRef.current = null;
@@ -1352,7 +1440,7 @@ export default function FeedApp() {
       }
       try {
         const response = await fetch(
-          `/api/stream/${encodeURIComponent(selectedVideo.id)}/source?detail=1`,
+          youtarrStreamSourcePath(selectedVideo.id, true),
           { cache: "no-store" }
         );
         if (!response.ok) return;
@@ -1374,6 +1462,7 @@ export default function FeedApp() {
     selectedVideo?.id,
     selectedVideo?.provider,
     selectedVideo?.sourceLabel,
+    youtarrStreamSourcePath,
   ]);
 
   const visibleVideos = useMemo(() => {
@@ -1900,7 +1989,7 @@ export default function FeedApp() {
       if (mode === "live") {
         try {
           const response = await fetch(
-            `/api/stream/${encodeURIComponent(video.id)}/source`,
+            youtarrStreamSourcePath(video.id),
             { cache: "no-store" }
           );
           if (response.ok) {
@@ -2000,6 +2089,26 @@ export default function FeedApp() {
     player.pause();
   }
 
+  function switchPlaybackOverride(nextOverride: PlaybackOverride) {
+    if (nextOverride === playbackOverride) return;
+    const player = playerRef.current;
+    if (selectedVideo && player) {
+      const currentTime = Number.isFinite(player.currentTime)
+        ? player.currentTime
+        : 0;
+      pendingPlaybackResumeRef.current = {
+        videoId: selectedVideo.id,
+        currentTime,
+        wasPlaying: !player.paused && !player.ended,
+      };
+      if (selectedVideo.downloaded) {
+        storePlayerWatchProgress(selectedVideo, player, true);
+      }
+    }
+    setStreamSource(null);
+    setPlaybackOverride(nextOverride);
+  }
+
   function openSelectedVideoInVlc(video: FeedVideo) {
     if (playerRef.current) {
       storePlayerWatchProgress(video, playerRef.current, true);
@@ -2009,7 +2118,7 @@ export default function FeedApp() {
     const streamPath =
       video.provider === "floatplane"
         ? `/api/floatplane/stream/${encodeURIComponent(video.id)}`
-        : `/api/stream/${encodeURIComponent(video.id)}`;
+        : youtarrStreamPath(video.id);
     const streamUrl = new URL(
       streamPath,
       window.location.origin
@@ -2422,11 +2531,15 @@ export default function FeedApp() {
   const playerSource = selectedVideo
     ? selectedVideo.provider === "floatplane"
       ? `/api/floatplane/stream/${selectedVideoId}`
-      : `/api/stream/${selectedVideoId}`
+      : youtarrStreamPath(selectedVideo.id)
     : "";
   const selectedVideoPlayable =
     Boolean(selectedVideo?.downloaded) &&
     (mode === "live" || selectedVideo?.provider === "floatplane");
+  const showYoutarrPlaybackOverride =
+    selectedVideoPlayable &&
+    selectedVideo?.provider !== "floatplane" &&
+    youtarrPlaybackOptions.length > 2;
   const inlineWatchPage = selectedVideo ? shouldUseInlineWatchPage() : false;
   const selectedDescription = selectedVideo
     ? videoMetadata[selectedVideo.id]?.description?.trim() ||
@@ -3272,7 +3385,36 @@ export default function FeedApp() {
                       event.currentTarget.setAttribute("webkit-playsinline", "true");
                       updateMediaSession(selectedVideo);
                       updateMediaSessionControls(event.currentTarget);
-                      resumePlayback(selectedVideo, event.currentTarget);
+                      const pendingResume = pendingPlaybackResumeRef.current;
+                      if (pendingResume?.videoId === selectedVideo.id) {
+                        pendingPlaybackResumeRef.current = null;
+                        try {
+                          event.currentTarget.currentTime = Math.max(
+                            0,
+                            pendingResume.currentTime
+                          );
+                        } catch {
+                          // Some mobile players reject seeking until enough metadata is available.
+                        }
+                        if (pendingResume.wasPlaying) {
+                          intendedPlaybackRef.current = true;
+                          void event.currentTarget.play().catch(() => {
+                            // Autoplay permissions can still reject this after a source switch.
+                          });
+                        } else {
+                          window.setTimeout(() => {
+                            event.currentTarget.pause();
+                            intendedPlaybackRef.current = false;
+                            setPlayerPlaying(false);
+                            if ("mediaSession" in navigator) {
+                              navigator.mediaSession.playbackState = "paused";
+                            }
+                          }, 0);
+                        }
+                      } else {
+                        pendingPlaybackResumeRef.current = null;
+                        resumePlayback(selectedVideo, event.currentTarget);
+                      }
                       if (playerMode === "full" && !inlineWatchPage) {
                         void requestNativeFullscreen(event.currentTarget);
                       }
@@ -3480,6 +3622,29 @@ export default function FeedApp() {
                   </div>
                 )}
               </div>
+              {showYoutarrPlaybackOverride && (
+                <div
+                  className="watch-playback-override"
+                  aria-label={copy.player.playbackOverrideLabel}
+                >
+                  <span>{copy.player.playbackOverrideLabel}</span>
+                  <div className="watch-playback-options" role="group">
+                    {youtarrPlaybackOptions.map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        className={`watch-playback-option ${
+                          activePlaybackOverride === option.value ? "is-active" : ""
+                        }`}
+                        aria-pressed={activePlaybackOverride === option.value}
+                        onClick={() => switchPlaybackOverride(option.value)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {selectedDescription && (
                 <div
                   className={`watch-description ${

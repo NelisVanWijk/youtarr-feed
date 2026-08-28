@@ -21,7 +21,8 @@ export async function GET(
   const direct = searchParams.get("direct") !== "0";
   let expectedFilePath: string | null = null;
   const playbackTarget = getYoutarrPlaybackTarget(
-    request.headers.get("user-agent")
+    request.headers.get("user-agent"),
+    searchParams.get("profile")
   );
 
   try {

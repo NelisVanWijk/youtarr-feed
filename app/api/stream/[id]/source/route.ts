@@ -16,8 +16,10 @@ export async function GET(
     return NextResponse.json({ error: "Invalid video" }, { status: 400 });
   }
 
+  const searchParams = new URL(request.url).searchParams;
   const playbackTarget = getYoutarrPlaybackTarget(
-    request.headers.get("user-agent")
+    request.headers.get("user-agent"),
+    searchParams.get("profile")
   );
   const youtarrLocation = await getYoutarrVideoLocation(
     id,

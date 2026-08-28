@@ -250,8 +250,19 @@ export function selectYoutarrPlaybackProfile(
   return "primary";
 }
 
-export function getYoutarrPlaybackTarget(userAgent?: string | null) {
-  const profile = selectYoutarrPlaybackProfile(userAgent);
+export function isYoutarrPlaybackProfile(
+  value?: string | null
+): value is YoutarrPlaybackProfile {
+  return value === "primary" || value === "av1" || value === "vp9";
+}
+
+export function getYoutarrPlaybackTarget(
+  userAgent?: string | null,
+  requestedProfile?: string | null
+) {
+  const profile = isYoutarrPlaybackProfile(requestedProfile)
+    ? requestedProfile
+    : selectYoutarrPlaybackProfile(userAgent);
   const instance = configuredPlaybackInstance(profile) || primaryInstance;
   return {
     profile: instance.key,

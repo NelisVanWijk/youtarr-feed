@@ -145,6 +145,7 @@ input:focus-visible {
 .mini-play-button,
 .icon-secondary-button,
 .icon-danger-button,
+.watch-playback-option,
 .settings-check-button,
 .primary-button {
   transition: var(--press-transition);
@@ -1975,6 +1976,61 @@ main {
   box-shadow: var(--glass-highlight);
 }
 
+.watch-playback-override {
+  grid-column: 1 / -1;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 42px;
+  padding: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  background: var(--material-control);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  box-shadow: var(--glass-highlight);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  backdrop-filter: blur(18px) saturate(170%);
+}
+
+.watch-playback-override > span {
+  padding: 0 7px 0 9px;
+  color: var(--quiet);
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.watch-playback-options {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.watch-playback-option {
+  min-width: 44px;
+  height: 30px;
+  padding: 0 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 820;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.watch-playback-option.is-active {
+  background: var(--text);
+  color: var(--surface);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+}
+
 .watch-description {
   grid-column: 1 / -1;
   margin-top: 2px;
@@ -3116,6 +3172,31 @@ html[data-theme="light"] .bottom-nav button.active {
     height: 36px;
     min-height: 36px;
     padding: 0 12px;
+  }
+
+  .watch-playback-override {
+    width: 100%;
+    min-height: 40px;
+    align-items: center;
+  }
+
+  .watch-playback-override > span {
+    flex: 0 0 auto;
+  }
+
+  .watch-playback-options {
+    flex: 1 1 auto;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .watch-playback-options::-webkit-scrollbar {
+    display: none;
+  }
+
+  .watch-playback-option {
+    flex: 1 0 auto;
+    min-width: 54px;
   }
 
   .watch-description {
