@@ -12,6 +12,11 @@ tokens, API keys, and Plex tokens are never sent to the browser.
 
 ## Features
 
+- LG webOS TV interface at `/tv`, with a chronological feed, channel avatars,
+  Direct/Youtarr badges, downloads, glass surfaces, compact remote controls,
+  original-resolution 4K playback, codec backups, and shared watch progress.
+  See [webOS setup](webos/README.md) for the launcher and installation steps.
+
 - Chronological feed for Youtarr channels.
 - Channel pages and channel export to Youtarr-compatible CSV.
 - Add channels from the app.

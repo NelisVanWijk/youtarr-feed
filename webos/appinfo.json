@@ -1,0 +1,14 @@
+{
+  "id": "nl.vossenwijk.mytube",
+  "title": "MyTube",
+  "vendor": "Vossenwijk",
+  "version": "1.0.0",
+  "type": "web",
+  "resolution": "1920x1080",
+  "main": "index.html",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "iconColor": "#101114",
+  "disableBackHistoryAPI": true,
+  "requiredACG": []
+}

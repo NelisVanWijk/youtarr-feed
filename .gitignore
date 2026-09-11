@@ -43,4 +43,6 @@ next-env.d.ts
 /outputs/
 /work/
 /data/
+/webos-dist/
+*.tsbuildinfo
 /.data/

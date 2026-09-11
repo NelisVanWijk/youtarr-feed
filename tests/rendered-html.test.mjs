@@ -23,6 +23,20 @@ function fetchFrom(worker, path, init) {
   );
 }
 
+test("TV entry redirects to its independent static interface", async () => {
+  const worker = await createWorker();
+  const response = await fetchFrom(worker, "/tv");
+  assert.equal(response.status, 307);
+  assert.equal(new URL(response.headers.get("location")).pathname, "/tv/index.html");
+});
+
+test("TV playback choices expose no configured profiles in demo mode", async () => {
+  const worker = await createWorker();
+  const response = await fetchFrom(worker, "/api/tv/playback");
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { profiles: [], defaultProfile: "primary" });
+});
+
 test("renders the English Youtarr subscription shell", async () => {
   const worker = await createWorker();
   const response = await fetchFrom(worker, "/");
