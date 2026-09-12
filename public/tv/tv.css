@@ -207,6 +207,8 @@ html, body { height: 100%; overflow: hidden; }
 #library { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 #library > .heading, #library > #status, #library > #search, #library > #library-filters, #library > footer { flex-shrink: 0; }
 #results { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 12px; margin: -12px; scroll-padding: 16px; }
+#results, #channels, #navigation { scrollbar-width: none; }
+#results::-webkit-scrollbar, #channels::-webkit-scrollbar, #navigation::-webkit-scrollbar { display: none; width: 0; height: 0; }
 #grid { padding: 6px; }
 #library > footer { margin-top: 22px; }
 #server-address { display: block; width: 100%; font: inherit; padding: 18px; color: #fff; background: #151515; border: 1px solid #777; border-radius: 12px; margin: 18px 0; }

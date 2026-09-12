@@ -102,7 +102,7 @@
       img.onerror = function () { img.onerror = null; img.src = '/tv/placeholder.svg'; }; art.appendChild(img);
       var duration = document.createElement('span'); duration.className = 'duration'; duration.textContent = time(item.duration); art.appendChild(duration);
       var badge = document.createElement('span'); badge.className = 'download-badge'; badge.dataset.sourceId = item.id;
-      badge.textContent = item.provider === 'floatplane' ? 'Floatplane' : item.missing ? 'File missing' : !item.downloaded ? jobs[item.id] ? 'Queued' : 'Not downloaded' : item.sourceLabel || sources[item.id] || 'Downloaded';
+      badge.textContent = item.provider === 'floatplane' ? 'Floatplane' : item.missing ? 'Opnieuw downloaden' : !item.downloaded ? jobs[item.id] ? 'Queued' : 'Not downloaded' : item.sourceLabel || sources[item.id] || 'Downloaded';
       if (item.downloaded && !item.missing) badge.classList.add('available'); art.appendChild(badge);
       if (item.provider !== 'floatplane' && item.downloaded && !item.missing && !demo && !sources[item.id] && !sourceRequests[item.id]) {
         sourceRequests[item.id] = true;
@@ -159,7 +159,7 @@
   function downloadState(note) {
     if (!pendingVideo) return;
     var ready = pendingVideo.downloaded && !pendingVideo.missing;
-    $('download-start').textContent = ready ? 'Play now' : jobs[pendingVideo.id] ? 'Download queued' : 'Download';
+    $('download-start').textContent = ready ? 'Play now' : jobs[pendingVideo.id] ? 'Download queued' : pendingVideo.missing ? 'Opnieuw downloaden' : 'Download';
     $('download-start').disabled = !!jobs[pendingVideo.id] && !ready;
     $('download-message').textContent = note || (ready ? 'Ready to watch in original quality.' : jobs[pendingVideo.id] ? 'Queued in Youtarr. You can keep browsing while it downloads.' : pendingVideo.missing ? 'The downloaded file is missing. Download it again to watch.' : 'Download this video to your Youtarr library to watch it.');
   }
@@ -236,7 +236,7 @@
   function playbackButton(paused) {
     $('toggle').setAttribute('aria-label', paused ? 'Play' : 'Pause');
     $('toggle').title = paused ? 'Play' : 'Pause';
-    $('toggle-glyph').setAttribute('href', '/tv/icons.svg?v=20260912b#' + (paused ? 'play' : 'pause'));
+    $('toggle-glyph').setAttribute('href', '/tv/icons.svg?v=20260912c#' + (paused ? 'play' : 'pause'));
   }
   function seek(delta) { if (isFinite(video.duration)) video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + delta)); showControls(); }
   function open(item, button) {
@@ -286,6 +286,25 @@
     var elements = Array.prototype.filter.call(root.querySelectorAll('button:not(:disabled),select,input'), function (el) { return el.offsetWidth > 0; });
     var current = document.activeElement;
     if (elements.indexOf(current) < 0) { if (elements[0]) elements[0].focus(); return; }
+    // Vertical navigation follows the rail's order, even across the large gap
+    // above Refresh. Spatial distance must never send focus into another rail.
+    if (root === $('library')) {
+      var rail = current.closest('#navigation, #channels');
+      if (rail && (code === 38 || code === 40)) {
+        var buttons = Array.prototype.filter.call(rail.querySelectorAll('button:not(:disabled)'), function (el) { return el.offsetWidth > 0; });
+        var index = buttons.indexOf(current), next = buttons[index + (code === 38 ? -1 : 1)];
+        if (next) { next.focus({ preventScroll: true }); next.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+        return;
+      }
+      if (rail && (code === 37 || code === 39)) {
+        var destination;
+        if (code === 37 && rail === $('channels')) destination = $('navigation').querySelector('[aria-pressed="true"]');
+        if (code === 39 && rail === $('navigation') && !$('channels').hidden) destination = $('channels').querySelector('[aria-pressed="true"]') || $('channels').querySelector('button');
+        if (code === 39 && !destination) destination = $('search').hidden ? $('grid').querySelector('.card') : $('search');
+        if (destination) { destination.focus({ preventScroll: true }); destination.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+        return;
+      }
+    }
     var rect = current.getBoundingClientRect(), x = rect.left + rect.width / 2, y = rect.top + rect.height / 2, best, score = Infinity;
     elements.forEach(function (el) {
       if (el === current) return;
