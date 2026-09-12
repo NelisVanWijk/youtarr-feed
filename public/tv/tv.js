@@ -25,6 +25,7 @@
     button.onclick = function () {
       if (tab === 'floatplane') { fpScope = id; fpKind = kind; loadFloatplane(false); }
       else { selectedChannel = id; render(); }
+      $('results').scrollTop = 0;
       $('channels').querySelectorAll('button').forEach(function (el) { el.setAttribute('aria-pressed', String(el === button)); });
     };
     $('channels').appendChild(button);
@@ -235,7 +236,7 @@
   function playbackButton(paused) {
     $('toggle').setAttribute('aria-label', paused ? 'Play' : 'Pause');
     $('toggle').title = paused ? 'Play' : 'Pause';
-    $('toggle-glyph').setAttribute('href', '/tv/icons.svg?v=20260912#' + (paused ? 'play' : 'pause'));
+    $('toggle-glyph').setAttribute('href', '/tv/icons.svg?v=20260912b#' + (paused ? 'play' : 'pause'));
   }
   function seek(delta) { if (isFinite(video.duration)) video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + delta)); showControls(); }
   function open(item, button) {
@@ -293,7 +294,10 @@
       var secondary = Math.abs(code === 37 || code === 39 ? dy : dx);
       if (primary > 5 && primary + secondary * 3 < score) { score = primary + secondary * 3; best = el; }
     });
-    if (best) { best.focus(); best.scrollIntoView({ block: 'nearest' }); }
+    if (best) {
+      best.focus({ preventScroll: true }); best.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      if (best.classList.contains('card') && best.offsetTop === $('grid').firstElementChild.offsetTop) $('results').scrollTop = 0;
+    }
   }
   document.querySelectorAll('[data-tab]').forEach(function (button) {
     button.setAttribute('aria-label', button.textContent.trim());
@@ -305,6 +309,7 @@
       $('channels').hidden = !rail; $('library').classList.toggle('with-channels', rail);
       $('search').hidden = tab !== 'search'; $('library-filters').hidden = tab !== 'downloads';
       renderChannels(); render();
+      $('results').scrollTop = 0;
       if (tab === 'floatplane' && !fpLoaded && !fpLoading) loadFloatplane(false);
       if (tab === 'search') $('search').focus();
     };

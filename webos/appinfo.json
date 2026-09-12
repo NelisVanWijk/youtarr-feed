@@ -2,7 +2,7 @@
   "id": "nl.vossenwijk.mytube",
   "title": "MyTube",
   "vendor": "Vossenwijk",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "type": "web",
   "resolution": "1920x1080",
   "main": "index.html",

@@ -62,3 +62,17 @@ only opens the server address, so normal MyTube releases carry TV updates.
   check after Docker update. Browser automation was unavailable during the final
   refinement pass; the earlier LG playback results above apply to that earlier
   version, not to newly added Floatplane playback.
+
+## Follow-up from television photos
+
+- Focused navigation now has an opaque white background and dark text in one
+  rule, including when the item is also selected. The expanded menu is opaque.
+- Center-crop YouTube thumbnails so the baked-in letterboxing of 4:3 thumbnail
+  files does not appear above the image. Badges remain positioned overlays.
+- The video results scroll independently of the heading; changing tabs/channels
+  resets the results to the top. Returning to the first row reveals its full top.
+- Launcher 1.2.0 opens saved servers automatically after 2.5 seconds. Any remote
+  key or editing cancels this, allowing recovery without an extra OK every launch.
+  Package validation and installation on the LG succeeded. Auto-open/cancel are
+  covered by launcher tests. Browser automation remains unavailable; the latest
+  visual and scrolling behavior needs a TV check after the Docker update.

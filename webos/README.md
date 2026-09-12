@@ -6,11 +6,13 @@ Deploy/rebuild MyTube with these source changes before using the launcher.
 The TV and MyTube server must be able to reach each other on your network.
 No Youtarr password or API key belongs in this package.
 
-On launch, confirm the prefilled MyTube address `http://192.168.100.43:3090`,
-and select Open MyTube. The launcher remembers it. Close and relaunch the app
-to change an incorrect address or recover from an unreachable hosted page.
+On first launch, enter your MyTube address and select Open MyTube. The launcher
+remembers it. Subsequent launches open the saved server automatically after
+2.5 seconds. Press any key or choose Adres wijzigen during that interval to
+cancel automatic opening and edit the address. Close and relaunch the app
+to recover from an unreachable hosted page.
 This uses LG's hosted-app redirect pattern, not an iframe.
-Version 1.1.0 replaces the temporary PC-preview launcher with this editable
+Version 1.2.0 replaces the temporary PC-preview launcher with this editable
 startup screen. In the hosted interface, **Serveradres** can also switch servers
 for the current session. Change the startup screen's address to remember a new
 default across app launches. Fully close/relaunch the app to recover if a server
@@ -23,7 +25,7 @@ Using the LG webOS CLI from the MyTube folder:
 ```powershell
 ares-package --check ./webos
 ares-package ./webos -e README.md -o ./webos-dist
-ares-install -d mytv ./webos-dist/nl.vossenwijk.mytube_1.1.0_all.ipk
+ares-install -d mytv ./webos-dist/nl.vossenwijk.mytube_1.2.0_all.ipk
 ares-launch -d mytv nl.vossenwijk.mytube
 ```
 
