@@ -6,6 +6,63 @@
   var pendingVideo = null, downloadOrigin = null, jobs = {}, pollTimer, polling = false, pollCount = 0;
   var sources = {}, sourceRequests = {}, feedIds = null, unwatched = [];
   var defaultProfile = 'primary', playbackProfiles = [{ id: 'primary', label: 'Primary' }], attemptedProfiles = [];
+  var selectedChannel = '', subscriptionChannels = null, libraryFilter = 'downloads', fpVideos = [], fpChannels = [], fpCreators = [];
+  var fpScope = '', fpKind = '', fpOffset = null, fpRequest = 0, fpLoading = false, fpLoaded = false, fpError = '';
+  function relativeDate(value) {
+    var age = Math.max(0, (Date.now() - Date.parse(value)) / 1000);
+    if (!isFinite(age)) return '';
+    var units = [[31536000, 'jaar', 'jaar'], [2592000, 'maand', 'maanden'], [604800, 'week', 'weken'], [86400, 'dag', 'dagen'], [3600, 'uur', 'uur'], [60, 'minuut', 'minuten']];
+    for (var i = 0; i < units.length; i++) if (age >= units[i][0]) { var n = Math.floor(age / units[i][0]); return n + ' ' + units[i][n === 1 ? 1 : 2] + ' geleden'; }
+    return 'Zojuist';
+  }
+  function channelButton(name, image, id, kind, nested) {
+    var button = document.createElement('button'); button.className = 'channel-button' + (nested ? ' nested' : '');
+    button.dataset.channel = id; button.dataset.kind = kind;
+    button.setAttribute('aria-pressed', String(tab === 'floatplane' ? fpScope === id && fpKind === kind : selectedChannel === id));
+    var avatar = document.createElement('span'); avatar.className = 'avatar'; avatar.textContent = name.slice(0, 1);
+    if (image) { var img = document.createElement('img'); img.src = image; img.alt = ''; img.loading = 'lazy'; img.onerror = function () { img.remove(); }; avatar.appendChild(img); }
+    button.appendChild(avatar); var label = document.createElement('span'); label.textContent = name; button.appendChild(label);
+    button.onclick = function () {
+      if (tab === 'floatplane') { fpScope = id; fpKind = kind; loadFloatplane(false); }
+      else { selectedChannel = id; render(); }
+      $('channels').querySelectorAll('button').forEach(function (el) { el.setAttribute('aria-pressed', String(el === button)); });
+    };
+    $('channels').appendChild(button);
+  }
+  function renderChannels() {
+    var old = document.activeElement, focused = old && old.closest('#channels'), id = old && old.dataset.channel, kind = old && old.dataset.kind;
+    $('channels').textContent = '';
+    if (tab === 'floatplane') {
+      channelButton('Alles', '', '', '', false);
+      fpCreators.forEach(function (creator) {
+        channelButton(creator.name, creator.avatar, creator.id, 'creator', false);
+        fpChannels.filter(function (channel) { return channel.parentId === creator.id; }).forEach(function (channel) { channelButton(channel.name, channel.avatar, channel.id, 'channel', true); });
+      });
+    } else {
+      channelButton('Alles', '', '', '', false);
+      var channels = {}; videos.forEach(function (item) { channels[item.channelId] = { id: item.channelId, name: item.channelName, avatar: item.channelAvatar }; });
+      (subscriptionChannels || Object.keys(channels).map(function (id) { return channels[id]; })).slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).forEach(function (item) {
+        channelButton(item.name, item.avatar || '/api/channel-avatar/' + encodeURIComponent(item.id), item.id, '', false);
+      });
+    }
+    if (focused) { var replacement = Array.prototype.find.call($('channels').querySelectorAll('button'), function (el) { return el.dataset.channel === id && el.dataset.kind === kind; }); if (replacement) replacement.focus(); }
+  }
+  function loadFloatplane(append) {
+    var request = ++fpRequest; fpLoading = true; fpError = '';
+    if (!append) { fpVideos = []; fpOffset = null; }
+    render();
+    return json('/api/floatplane/feed?limit=48&offset=' + (append ? fpOffset || 0 : 0) + (fpScope ? '&' + fpKind + '=' + encodeURIComponent(fpScope) : '')).then(function (result) {
+      if (request !== fpRequest) return;
+      fpLoaded = true; fpVideos = append ? fpVideos.concat(result.videos.filter(function (item) { return !fpVideos.some(function (existing) { return existing.id === item.id; }); })) : result.videos;
+      if (result.creators && result.creators.length) fpCreators = result.creators;
+      if (result.channels && result.channels.length) fpChannels = result.channels;
+      fpOffset = result.hasMore ? result.nextOffset : null;
+      fpError = (result.warnings || []).join(' ');
+    }).catch(function (error) { if (request === fpRequest) fpError = 'Floatplane kon niet laden: ' + error.message; }).finally(function () {
+      if (request !== fpRequest) return; fpLoading = false;
+      if (tab === 'floatplane') { var moreFocused = document.activeElement === $('load-more'); renderChannels(); render(); if (moreFocused && $('load-more').hidden) { var cards = $('grid').querySelectorAll('.card'); if (cards.length) cards[cards.length - 1].focus(); } }
+    });
+  }
   function isWatched(item) { return watched.indexOf(item.id) >= 0 || (unwatched.indexOf(item.id) < 0 && item.watched); }
   function message(text) { $('status').textContent = text; }
   function time(value) {
@@ -21,15 +78,21 @@
     }).finally(function () { clearTimeout(timeout); });
   }
   function render() {
+    var focusedCard = document.activeElement && document.activeElement.closest('.card');
+    var focusedId = focusedCard && focusedCard.dataset.id;
     $('grid').textContent = '';
-    var filtered = videos.filter(function (item) {
-      return (!$('channel').value || item.channelId === $('channel').value) &&
-        ((tab !== 'all' && tab !== 'unwatched') || !feedIds || feedIds.indexOf(item.id) >= 0) &&
+    var filter = tab === 'downloads' ? libraryFilter : tab;
+    var query = $('search').value.trim().toLocaleLowerCase();
+    var filtered = (tab === 'floatplane' ? fpVideos : videos).filter(function (item) {
+      return (tab !== 'subscriptions' || !selectedChannel || item.channelId === selectedChannel) &&
+        (['all', 'subscriptions', 'search'].indexOf(tab) < 0 || !feedIds || feedIds.indexOf(item.id) >= 0) &&
         (tab !== 'downloads' || (item.downloaded && !item.missing)) &&
-        (tab !== 'continue' || (progress[item.id] && item.downloaded && !item.missing)) &&
-        (tab !== 'unwatched' || !isWatched(item));
+        (filter !== 'continue' || progress[item.id]) && (filter !== 'unwatched' || !isWatched(item)) &&
+        (tab !== 'search' || !query || (item.title + ' ' + item.channelName).toLocaleLowerCase().indexOf(query) >= 0);
     });
-    if (tab === 'continue') filtered.sort(function (a, b) { return progress[b.id].updatedAt - progress[a.id].updatedAt; });
+    if (filter === 'continue') filtered.sort(function (a, b) { return progress[b.id].updatedAt - progress[a.id].updatedAt; });
+    $('load-more').hidden = tab !== 'floatplane' || fpOffset === null;
+    $('load-more').disabled = fpLoading;
     $('grid').className = 'grid';
     filtered.forEach(function (item) {
       var button = document.createElement('button'); button.className = 'card'; button.dataset.id = item.id;
@@ -38,9 +101,9 @@
       img.onerror = function () { img.onerror = null; img.src = '/tv/placeholder.svg'; }; art.appendChild(img);
       var duration = document.createElement('span'); duration.className = 'duration'; duration.textContent = time(item.duration); art.appendChild(duration);
       var badge = document.createElement('span'); badge.className = 'download-badge'; badge.dataset.sourceId = item.id;
-      badge.textContent = item.missing ? 'File missing' : !item.downloaded ? jobs[item.id] ? 'Queued' : 'Not downloaded' : item.sourceLabel || sources[item.id] || 'Downloaded';
+      badge.textContent = item.provider === 'floatplane' ? 'Floatplane' : item.missing ? 'File missing' : !item.downloaded ? jobs[item.id] ? 'Queued' : 'Not downloaded' : item.sourceLabel || sources[item.id] || 'Downloaded';
       if (item.downloaded && !item.missing) badge.classList.add('available'); art.appendChild(badge);
-      if (item.downloaded && !item.missing && !demo && !sources[item.id] && !sourceRequests[item.id]) {
+      if (item.provider !== 'floatplane' && item.downloaded && !item.missing && !demo && !sources[item.id] && !sourceRequests[item.id]) {
         sourceRequests[item.id] = true;
         json('/api/stream/' + encodeURIComponent(item.id) + '/source?profile=primary').then(function (source) {
           sources[item.id] = source.source === 'local' ? 'Direct' : 'Youtarr';
@@ -57,11 +120,13 @@
       var avatarImage = document.createElement('img'); avatarImage.src = item.channelAvatar || '/api/channel-avatar/' + encodeURIComponent(item.channelId); avatarImage.alt = ''; avatarImage.loading = 'lazy';
       avatarImage.onerror = function () { avatarImage.remove(); }; avatar.appendChild(avatarImage); meta.appendChild(avatar);
       var metaCopy = document.createElement('div'); metaCopy.className = 'card-meta-copy';
-      var detail = document.createElement('small'); detail.textContent = item.channelName + (entry ? ' · Resume ' + time(entry.currentTime) : isWatched(item) ? ' · Watched' : ''); metaCopy.appendChild(detail);
-      if (item.publishedAt) { var published = document.createElement('small'); published.className = 'published'; published.textContent = new Date(item.publishedAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }); metaCopy.appendChild(published); }
+      var detail = document.createElement('small'); detail.textContent = item.channelName + (entry ? ' · Verder kijken op ' + time(entry.currentTime) : isWatched(item) ? ' · Bekeken' : ''); metaCopy.appendChild(detail);
+      if (item.publishedAt) { var published = document.createElement('small'); published.className = 'published'; published.textContent = relativeDate(item.publishedAt); metaCopy.appendChild(published); }
       meta.appendChild(metaCopy); button.appendChild(meta);
-      button.onclick = function () { if (item.downloaded && !item.missing) open(item, button); else showDownload(item, button); }; $('grid').appendChild(button);
+      button.onclick = function () { if (item.provider === 'floatplane' || (item.downloaded && !item.missing)) open(item, button); else showDownload(item, button); }; $('grid').appendChild(button);
     });
+    if (focusedId && !active) restoreCard(focusedId);
+    if (tab === 'floatplane') { message(fpLoading ? 'Floatplane laden…' : fpError || filtered.length + ' video’s'); return; }
     message((demo ? 'Demo library — connect Youtarr to download and play videos. ' : '') + (filtered.length ? filtered.length + ' videos' : tab === 'continue' ? 'Nothing to resume yet.' : 'No videos here. Choose another channel or refresh.'));
   }
   function load() {
@@ -69,16 +134,12 @@
     return Promise.all([json('/api/local-videos'), json('/api/watch-progress').catch(function () { return null; }), json('/api/feed').catch(function () { return null; })]).then(function (results) {
       demo = results[0].mode === 'demo';
       feedIds = results[2] ? results[2].videos.map(function (item) { return item.id; }) : null;
+      subscriptionChannels = results[2] && results[2].channels || null;
       var merged = {}; (results[2] ? results[2].videos : []).concat(results[0].videos).forEach(function (item) { merged[item.id] = item; });
       videos = Object.keys(merged).map(function (id) { return merged[id]; }).sort(function (a, b) { return (Date.parse(b.publishedAt) || 0) - (Date.parse(a.publishedAt) || 0); });
       if (results[1]) { progress = results[1].progress; watched = results[1].watchedVideoIds; unwatched = results[1].unwatchedVideoIds || []; }
-      var selected = $('channel').value; $('channel').textContent = '';
-      var all = document.createElement('option'); all.value = ''; all.textContent = 'All channels'; $('channel').appendChild(all);
-      var channels = {}; videos.forEach(function (item) { channels[item.channelId] = item.channelName; });
-      Object.keys(channels).sort(function (a, b) { return channels[a].localeCompare(channels[b]); }).forEach(function (id) {
-        var option = document.createElement('option'); option.value = id; option.textContent = channels[id]; $('channel').appendChild(option);
-      });
-      $('channel').value = channels[selected] ? selected : ''; render();
+      renderChannels(); render();
+      if (document.activeElement === document.body && !active) { var firstCard = $('grid').querySelector('.card'); if (firstCard) firstCard.focus(); }
       if (!results[1]) message($('status').textContent + ' Watch progress is unavailable.');
       if (!results[2]) message($('status').textContent + ' The subscription feed is unavailable; showing downloads.');
       if (results[0].warnings && results[0].warnings.length) message($('status').textContent + ' ' + results[0].warnings.join(' '));
@@ -149,7 +210,7 @@
   $('download-close').onclick = closeDownload;
   $('download-check').onclick = function () { pollDownloads(true); };
   function save() {
-    if (!active || demo || !isFinite(video.duration) || video.duration <= 0 || video.readyState < 1) return saveQueue;
+    if (!active || (demo && active.provider !== 'floatplane') || !isFinite(video.duration) || video.duration <= 0 || video.readyState < 1) return saveQueue;
     var body = { videoId: active.id, currentTime: video.currentTime, duration: video.duration };
     if (body.currentTime > body.duration - 8) { delete progress[body.videoId]; if (watched.indexOf(body.videoId) < 0) watched.push(body.videoId); }
     else if (body.currentTime >= 5) progress[body.videoId] = Object.assign({ updatedAt: Date.now() }, body);
@@ -174,12 +235,13 @@
   function playbackButton(paused) {
     $('toggle').setAttribute('aria-label', paused ? 'Play' : 'Pause');
     $('toggle').title = paused ? 'Play' : 'Pause';
-    $('toggle-glyph').setAttribute('href', '/tv/icons.svg#' + (paused ? 'play' : 'pause'));
+    $('toggle-glyph').setAttribute('href', '/tv/icons.svg?v=20260912#' + (paused ? 'play' : 'pause'));
   }
   function seek(delta) { if (isFinite(video.duration)) video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + delta)); showControls(); }
   function open(item, button) {
-    if (demo) { message('This is a demo. Configure Youtarr on the MyTube server to play your own downloads.'); return; }
+    if (demo && item.provider !== 'floatplane') { message('This is a demo. Configure Youtarr on the MyTube server to play your own downloads.'); return; }
     active = item; origin = button; lastSave = Date.now();
+    $('source-label').hidden = item.provider === 'floatplane' || playbackProfiles.length < 2;
     attemptedProfiles = []; $('source').value = defaultProfile;
     $('library').hidden = true; $('player').hidden = false;
     $('playing-title').textContent = item.title; $('playing-channel').textContent = item.channelName;
@@ -189,12 +251,14 @@
   }
   function startSource() {
     $('quality').textContent = 'Original quality · detecting resolution…';
+    if (active.provider === 'floatplane') { video.src = '/api/floatplane/stream/' + encodeURIComponent(active.id); video.load(); play(); return; }
     var profile = $('source').value || 'primary';
     if (attemptedProfiles.indexOf(profile) < 0) attemptedProfiles.push(profile);
     video.src = '/api/stream/' + encodeURIComponent(active.id) + '?profile=' + encodeURIComponent(profile);
     video.load(); play();
   }
   function backupSource() {
+    if (active && active.provider === 'floatplane') return false;
     var next = playbackProfiles.find(function (profile) { return attemptedProfiles.indexOf(profile.id) < 0; });
     if (!next) return false;
     if (video.currentTime > 0) resumeAt = video.currentTime;
@@ -210,14 +274,15 @@
     (target || document.querySelector('[data-tab]')).focus();
   }
   function back() {
-    if ($('download-dialog').open) closeDownload();
+    if ($('server-dialog').open) { $('server-dialog').close(); $('server-settings').focus(); }
+    else if ($('download-dialog').open) closeDownload();
     else if ($('exit-dialog').open) { $('exit-dialog').close(); $('exit').focus(); }
     else if (active) close();
     else { $('exit-dialog').showModal(); $('stay').focus(); }
   }
   function move(code) {
-    var root = $('download-dialog').open ? $('download-dialog') : $('exit-dialog').open ? $('exit-dialog') : active ? $('controls') : $('library');
-    var elements = Array.prototype.filter.call(root.querySelectorAll('button:not(:disabled),select'), function (el) { return el.offsetWidth > 0; });
+    var root = $('server-dialog').open ? $('server-dialog') : $('download-dialog').open ? $('download-dialog') : $('exit-dialog').open ? $('exit-dialog') : active ? $('controls') : $('library');
+    var elements = Array.prototype.filter.call(root.querySelectorAll('button:not(:disabled),select,input'), function (el) { return el.offsetWidth > 0; });
     var current = document.activeElement;
     if (elements.indexOf(current) < 0) { if (elements[0]) elements[0].focus(); return; }
     var rect = current.getBoundingClientRect(), x = rect.left + rect.width / 2, y = rect.top + rect.height / 2, best, score = Infinity;
@@ -230,11 +295,45 @@
     });
     if (best) { best.focus(); best.scrollIntoView({ block: 'nearest' }); }
   }
-  document.querySelectorAll('[data-tab]').forEach(function (button) { button.onclick = function () {
-    tab = button.dataset.tab; document.querySelectorAll('[data-tab]').forEach(function (el) { el.setAttribute('aria-pressed', String(el === button)); });
-    $('heading').textContent = tab === 'all' ? 'Your feed' : tab === 'continue' ? 'Continue watching' : tab === 'downloads' ? 'Downloads' : 'Unwatched'; render();
+  document.querySelectorAll('[data-tab]').forEach(function (button) {
+    button.setAttribute('aria-label', button.textContent.trim());
+    button.onclick = function () {
+      tab = button.dataset.tab;
+      document.querySelectorAll('[data-tab]').forEach(function (el) { el.setAttribute('aria-pressed', String(el === button)); });
+      $('heading').textContent = { all: 'Home', search: 'Zoeken', subscriptions: 'Abonnementen', downloads: 'Bibliotheek', floatplane: 'Floatplane' }[tab];
+      var rail = tab === 'subscriptions' || tab === 'floatplane';
+      $('channels').hidden = !rail; $('library').classList.toggle('with-channels', rail);
+      $('search').hidden = tab !== 'search'; $('library-filters').hidden = tab !== 'downloads';
+      renderChannels(); render();
+      if (tab === 'floatplane' && !fpLoaded && !fpLoading) loadFloatplane(false);
+      if (tab === 'search') $('search').focus();
+    };
+  });
+  $('search').oninput = render;
+  $('server-settings').onclick = function () {
+    $('server-address').value = window.location.origin; $('server-error').textContent = '';
+    $('server-dialog').showModal(); $('server-address').focus();
+  };
+  $('server-cancel').onclick = back;
+  $('server-form').onsubmit = function (event) {
+    event.preventDefault();
+    try {
+      var url = new URL($('server-address').value.trim());
+      if (!/^https?:$/.test(url.protocol) || url.username || url.password || ['/', '/tv', '/tv/', '/tv/index.html'].indexOf(url.pathname) < 0) throw new Error('Vul het HTTP- of HTTPS-serveradres in, inclusief poort, zonder gebruikersnaam of wachtwoord.');
+      window.location.href = url.origin + '/tv/index.html';
+    } catch (error) { $('server-error').textContent = error.message; $('server-address').focus(); }
+  };
+  $('load-more').onclick = function () { loadFloatplane(true); };
+  document.querySelectorAll('[data-filter]').forEach(function (button) { button.onclick = function () {
+    libraryFilter = button.dataset.filter;
+    document.querySelectorAll('[data-filter]').forEach(function (el) { el.setAttribute('aria-pressed', String(el === button)); }); render();
   }; });
-  $('refresh').onclick = load; $('channel').onchange = render; $('exit').onclick = back;
+  $('refresh').onclick = function () { if (tab === 'floatplane') loadFloatplane(false); else load(); }; $('exit').onclick = back;
+  document.querySelectorAll('#navigation button').forEach(function (button) {
+    button.setAttribute('aria-label', button.textContent.trim());
+    var label = document.createElement('span'); label.className = 'nav-label';
+    Array.prototype.slice.call(button.childNodes).forEach(function (node) { if (node.nodeType === 3) { label.textContent += node.textContent; node.remove(); } }); button.appendChild(label);
+  });
   $('stay').onclick = function () { $('exit-dialog').close(); $('exit').focus(); };
   $('confirm-exit').onclick = function () { window.close(); $('exit-dialog').close(); message('Use Home on your remote to leave MyTube.'); $('exit').focus(); };
   $('back').onclick = close; $('toggle').onclick = toggle; $('rewind').onclick = function () { seek(-10); }; $('forward').onclick = function () { seek(10); };
@@ -242,7 +341,7 @@
   $('source').onchange = function () { if (active) { resumeAt = video.currentTime; save(); startSource(); } };
   function quality() {
     var profile = playbackProfiles.find(function (entry) { return entry.id === $('source').value; });
-    if (video.videoHeight) $('quality').textContent = (video.videoHeight >= 2160 ? '4K · ' : '') + video.videoWidth + ' × ' + video.videoHeight + ' · Original quality · ' + (profile ? profile.label : 'Primary') + ($('source').value !== defaultProfile ? ' (backup)' : '');
+    if (video.videoHeight) $('quality').textContent = (video.videoHeight >= 2160 ? '4K · ' : '') + video.videoWidth + ' × ' + video.videoHeight + ' · Original quality · ' + (active && active.provider === 'floatplane' ? 'Floatplane' : profile ? profile.label : 'Primary') + (active && active.provider !== 'floatplane' && $('source').value !== defaultProfile ? ' (backup)' : '');
   }
   video.onloadedmetadata = function () { if (active && resumeAt) video.currentTime = Math.min(resumeAt, Math.max(0, video.duration - 1)); quality(); };
   video.onresize = quality;
@@ -251,6 +350,7 @@
   video.onwaiting = function () { if (active) { $('player-status').textContent = 'Buffering…'; showControls(); } };
   video.onerror = function () { if (active) {
     if (video.error && video.error.code !== 1 && backupSource()) return;
+    if (active.provider === 'floatplane') { $('player-status').textContent = 'Floatplane kan deze video niet afspelen. Controleer je verbinding en Floatplane-sessie in de instellingen.'; showControls(); return; }
     $('player-status').textContent = 'Unable to play the available versions. Check the server or choose another version. 4K requires a TV-supported codec and a 2160p download; MyTube keeps the original resolution.'; showControls();
   } };
   video.onended = function () { save(); $('player-status').textContent = 'Finished watching'; showControls(); };
@@ -271,6 +371,7 @@
     if (active && $('controls').classList.contains('concealed')) {
       if ([13, 37, 38, 39, 40].indexOf(code) >= 0) { event.preventDefault(); showControls(); $('toggle').focus(); if (code === 37 || code === 39) seek(code === 37 ? -10 : 10); return; }
     }
+    if (document.activeElement.tagName === 'INPUT' && [37, 39, 13].indexOf(code) >= 0) return;
     if (document.activeElement.tagName === 'SELECT' && [13, 38, 40].indexOf(code) >= 0) return;
     if (code >= 37 && code <= 40) { event.preventDefault(); move(code); if (active) showControls(); }
     if (code === 13 && document.activeElement.tagName === 'BUTTON') { event.preventDefault(); if (!event.repeat) document.activeElement.click(); }
@@ -284,7 +385,7 @@
     $('source').textContent = '';
     result.profiles.forEach(function (profile) { var option = document.createElement('option'); option.value = profile.id; option.textContent = profile.label; $('source').appendChild(option); });
     $('source').value = selectedProfile;
-    $('source-label').hidden = result.profiles.length < 2;
+    $('source-label').hidden = (active && active.provider === 'floatplane') || result.profiles.length < 2;
   }).catch(function () { /* Primary playback works on older MyTube servers too. */ });
-  clock(); setInterval(clock, 60000); document.querySelector('[data-tab]').focus(); load();
+  clock(); setInterval(clock, 60000); load();
 }());

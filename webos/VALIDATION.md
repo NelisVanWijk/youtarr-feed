@@ -41,8 +41,24 @@ only opens the server address, so normal MyTube releases carry TV updates.
 
 ## Remaining deployment checks
 
-- User updates the MyTube Docker image after the GitHub build finishes; then
-  reinstall the normal launcher targeting `http://192.168.100.43:3090`.
+- User updates the MyTube Docker image after the GitHub build finishes.
 - Global `tsc --noEmit` has existing failures outside the TV changes, in
   FeedApp, local-media, single-videos, youtarr, and Worker binding declarations.
   These did not prevent the production build or API/rendered test suite.
+
+## September 12 refinement
+
+- Added black browsing layout, larger typography, collapsed icon navigation,
+  subscription rail, search, relative dates, and fixed thumbnail overlay geometry.
+- Live server API checks: one Floatplane creator, 11 channels; creator/channel
+  filters return videos and offset pagination returns distinct subsequent videos.
+  A sampled stream source reports MP4/H.264 at 1080p. This is source metadata,
+  not a new hardware playback test or a cap imposed by the TV interface.
+- Launcher tests verify changed addresses, remembered ports/origins, invalid
+  addresses, and operation with unavailable local storage.
+- Normal launcher 1.1.0 packaged and installed successfully on the LG, replacing
+  the temporary PC-preview package. The startup screen allows changing the URL.
+- Latest visual refinements and Floatplane playback still require the user's TV
+  check after Docker update. Browser automation was unavailable during the final
+  refinement pass; the earlier LG playback results above apply to that earlier
+  version, not to newly added Floatplane playback.

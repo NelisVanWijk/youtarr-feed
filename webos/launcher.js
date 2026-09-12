@@ -7,11 +7,11 @@
     event.preventDefault();
     try {
       var url = new URL(input.value.trim());
-      if (!/^https?:$/.test(url.protocol) || url.username || url.password) throw new Error('Enter an HTTP or HTTPS address without a username or password.');
-      if (url.pathname !== '/' && url.pathname !== '/tv' && url.pathname !== '/tv/' && url.pathname !== '/tv/index.html') throw new Error('Use the base MyTube address, without a page path.');
+      if (!/^https?:$/.test(url.protocol) || url.username || url.password) throw new Error('Gebruik een HTTP- of HTTPS-adres zonder gebruikersnaam of wachtwoord.');
+      if (url.pathname !== '/' && url.pathname !== '/tv' && url.pathname !== '/tv/' && url.pathname !== '/tv/index.html') throw new Error('Gebruik het MyTube-serveradres inclusief poort, zonder paginapad.');
       try { localStorage.setItem('mytube-server', url.origin); } catch { /* Opening still works without storage. */ }
       window.location.href = url.origin + '/tv/index.html';
-    } catch (error) { document.getElementById('error').textContent = error.message || 'Check the server address.'; input.focus(); }
+    } catch (error) { document.getElementById('error').textContent = error.message || 'Controleer het serveradres.'; input.focus(); }
   };
   document.getElementById('exit').onclick = function () { window.close(); };
   document.addEventListener('keydown', function (event) {

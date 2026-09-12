@@ -10,6 +10,11 @@ On launch, confirm the prefilled MyTube address `http://192.168.100.43:3090`,
 and select Open MyTube. The launcher remembers it. Close and relaunch the app
 to change an incorrect address or recover from an unreachable hosted page.
 This uses LG's hosted-app redirect pattern, not an iframe.
+Version 1.1.0 replaces the temporary PC-preview launcher with this editable
+startup screen. In the hosted interface, **Serveradres** can also switch servers
+for the current session. Change the startup screen's address to remember a new
+default across app launches. Fully close/relaunch the app to recover if a server
+is unreachable.
 
 ## Package and install
 
@@ -18,7 +23,7 @@ Using the LG webOS CLI from the MyTube folder:
 ```powershell
 ares-package --check ./webos
 ares-package ./webos -e README.md -o ./webos-dist
-ares-install -d mytv ./webos-dist/nl.vossenwijk.mytube_1.0.0_all.ipk
+ares-install -d mytv ./webos-dist/nl.vossenwijk.mytube_1.1.0_all.ipk
 ares-launch -d mytv nl.vossenwijk.mytube
 ```
 
@@ -28,7 +33,10 @@ device name). This app has its own ID and does not replace SUB/WAVE.
 ## Controls and playback
 
 - D-pad moves between navigation, cards, and player buttons; OK selects.
-- Pointer selection works too. Channel selection uses the TV's native select.
+- Pointer selection works too. The icon-only left menu expands when focused.
+  Zoeken searches the YouTube feed; Home shows the feed; Abonnementen has a
+  second rail of subscribed channels; Bibliotheek shows downloaded files with
+  Continue Watching and Unwatched filters.
 - Back closes playback and restores card focus; from the library it asks to exit.
 - Play, Pause, Stop, Rewind, and Fast Forward remote keys are supported.
 - Player controls hide after five seconds while playing. OK reveals them;
@@ -37,7 +45,8 @@ device name). This app has its own ID and does not replace SUB/WAVE.
   MyTube progress store is used on mobile and TV. Hiding the app pauses playback.
 - Feed shows the regular chronological subscription feed, including undownloaded
   and missing videos, channel avatars, duration, dates, and Direct/Youtarr badges.
-  Downloads and Continue Watching are separate views.
+  Metadata uses relative Dutch upload dates. Thumbnails occupy a fixed 16:9
+  region; source and duration badges overlay the image without affecting layout.
 - Select an undownloaded/missing video, then Download. The app queues the existing
   Youtarr download action (including configured secondary instances). It polls
   global Youtarr activity and confirms this video's availability separately,
@@ -46,8 +55,13 @@ device name). This app has its own ID and does not replace SUB/WAVE.
 - Play/Pause is the default focused control on opening and revealing the player.
   The TV interface uses Apple-inspired glass navigation and dialogs, compact
   SVG controls, and reduced-motion/transparency/high-contrast fallbacks.
-- Demo videos cannot play or download. Floatplane and library administration
-  remain in the regular interface. The phone/desktop UI is unchanged.
+- Floatplane has a separate creator/channel rail and paginated feeds per scope.
+  It streams through the existing Floatplane endpoint, using the TV's native
+  MP4/HLS playback, with shared watch progress. Youtarr codec profiles and download
+  actions do not apply to Floatplane. Subscription/session administration stays
+  in the regular interface. The phone/desktop UI is unchanged.
+- Demo YouTube videos cannot play or download; a configured Floatplane account
+  works independently of YouTube demo mode.
 
 Playback uses the existing same-origin Range streaming endpoint. No new
 transcoding is added. Container, video codec, audio codec, and resolution must
