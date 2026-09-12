@@ -157,6 +157,11 @@ nav button[aria-pressed=true] { background: #ffffff15; }
 .art { position: relative; width: 100%; height: 0; padding-top: 56.25%; aspect-ratio: auto; flex: none; border-radius: 14px; background: #161616; }
 .art > img { position: absolute; inset: 0; display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .art > .download-badge, .art > .duration { position: absolute; z-index: 1; margin: 0; max-width: calc(100% - 24px); }
+.art > .download-badge { font-weight: 650; padding: 6px 12px; border-radius: 9px; box-shadow: 0 2px 8px #0006; }
+.art > .download-badge[data-state=pending] { background: #22252bef; color: #f1f3f7; border-color: #87909e; }
+.art > .download-badge[data-state=missing] { background: #382607f2; color: #ffdfa0; border-color: #b98631; }
+.art > .download-badge[data-state=ready] { background: #103526f2; color: #bff6d6; border-color: #4c9870; }
+.art > .download-badge[data-state=queued], .art > .download-badge[data-state=floatplane] { background: #102c48f2; color: #c0e3ff; border-color: #518bb9; }
 .card strong { font-size: 1.8rem; line-height: 1.28; margin: 18px 12px 12px; }
 .card small { font-size: 1.45rem; color: #c6c6c6; }
 .card small.published { font-size: 1.3rem; color: #aaa; }

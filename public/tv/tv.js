@@ -102,7 +102,8 @@
       img.onerror = function () { img.onerror = null; img.src = '/tv/placeholder.svg'; }; art.appendChild(img);
       var duration = document.createElement('span'); duration.className = 'duration'; duration.textContent = time(item.duration); art.appendChild(duration);
       var badge = document.createElement('span'); badge.className = 'download-badge'; badge.dataset.sourceId = item.id;
-      badge.textContent = item.provider === 'floatplane' ? 'Floatplane' : item.missing ? 'Opnieuw downloaden' : !item.downloaded ? jobs[item.id] ? 'Queued' : 'Not downloaded' : item.sourceLabel || sources[item.id] || 'Downloaded';
+      badge.dataset.state = item.provider === 'floatplane' ? 'floatplane' : jobs[item.id] ? 'queued' : item.missing ? 'missing' : item.downloaded ? 'ready' : 'pending';
+      badge.textContent = item.provider === 'floatplane' ? 'Floatplane' : jobs[item.id] ? 'In wachtrij' : item.missing ? 'Opnieuw downloaden' : !item.downloaded ? 'Not downloaded' : item.sourceLabel || sources[item.id] || 'Downloaded';
       if (item.downloaded && !item.missing) badge.classList.add('available'); art.appendChild(badge);
       if (item.provider !== 'floatplane' && item.downloaded && !item.missing && !demo && !sources[item.id] && !sourceRequests[item.id]) {
         sourceRequests[item.id] = true;
@@ -236,7 +237,7 @@
   function playbackButton(paused) {
     $('toggle').setAttribute('aria-label', paused ? 'Play' : 'Pause');
     $('toggle').title = paused ? 'Play' : 'Pause';
-    $('toggle-glyph').setAttribute('href', '/tv/icons.svg?v=20260912c#' + (paused ? 'play' : 'pause'));
+    $('toggle-glyph').setAttribute('href', '/tv/icons.svg?v=20260912d#' + (paused ? 'play' : 'pause'));
   }
   function seek(delta) { if (isFinite(video.duration)) video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + delta)); showControls(); }
   function open(item, button) {
