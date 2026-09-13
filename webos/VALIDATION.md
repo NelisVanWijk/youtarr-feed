@@ -89,3 +89,13 @@ only opens the server address, so normal MyTube releases carry TV updates.
   cancellation, stale cards, delete guarding, shared watched state, and bar values.
   No real user videos were deleted during these tests. Physical remote behavior
   and the new modal still need the user's TV check after Docker update.
+
+## Codec menu hardening
+
+- Replaced the native HTML select with a remote-navigable dialog. Player controls
+  cannot auto-hide while it is open; Back/Cancel returns focus to Play/Pause.
+- Manual switching validates profiles, saves position, pauses the old source,
+  and preserves resume time. Selecting the current source does not reload it.
+- Build, targeted lint, and 26 tests pass. This addresses a possible focus/hiding
+  interaction; the reported complete TV freeze was not reproduced, so its cause
+  is not confirmed. Hardware behavior still needs verification after deployment.

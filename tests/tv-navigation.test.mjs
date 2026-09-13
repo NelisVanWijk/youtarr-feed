@@ -8,7 +8,7 @@ const moveSource = source.slice(source.indexOf('  function move(code)'), source.
 
 function navigation() {
   const document = { activeElement: null };
-  const nodes = Object.fromEntries(['library', 'navigation', 'channels', 'grid', 'search', 'controls', 'server-dialog', 'download-dialog', 'exit-dialog', 'video-menu'].map(id => [id, { hidden: false, open: false }]));
+  const nodes = Object.fromEntries(['library', 'navigation', 'channels', 'grid', 'search', 'controls', 'server-dialog', 'download-dialog', 'exit-dialog', 'video-menu', 'source-dialog'].map(id => [id, { hidden: false, open: false }]));
   nodes.search.hidden = true;
   function button(id, rail) {
     return { id, offsetWidth: 60, closest: () => rail, focus() { document.activeElement = this; }, scrollIntoView() {}, getBoundingClientRect() { throw new Error('Rail navigation must not depend on geometry'); } };

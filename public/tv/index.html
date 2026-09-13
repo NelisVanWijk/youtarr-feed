@@ -5,20 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MyTube TV</title>
   <link rel="icon" href="/icon-512.png">
-  <link rel="stylesheet" href="/tv/tv.css?v=20260912e">
+  <link rel="stylesheet" href="/tv/tv.css?v=20260913">
 </head>
 <body>
 <main id="library">
   <header><span id="clock"></span></header>
   <nav id="navigation" aria-label="Hoofdmenu">
-    <button data-tab="search"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260912e#search"/></svg> Zoeken</button>
-    <button data-tab="all" aria-pressed="true"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260912e#home"/></svg> Home</button>
-    <button data-tab="subscriptions"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260912e#feed"/></svg> Abonnementen</button>
-    <button data-tab="downloads"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260912e#download"/></svg> Bibliotheek</button>
-    <button data-tab="floatplane"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260912e#play"/></svg> Floatplane</button>
-    <button id="refresh"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260912e#restart"/></svg> Refresh</button>
-    <button id="server-settings"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260912e#settings"/></svg> Serveradres</button>
-    <button id="exit"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260912e#back"/></svg> Exit</button>
+    <button data-tab="search"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260913#search"/></svg> Zoeken</button>
+    <button data-tab="all" aria-pressed="true"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260913#home"/></svg> Home</button>
+    <button data-tab="subscriptions"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260913#feed"/></svg> Abonnementen</button>
+    <button data-tab="downloads"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260913#download"/></svg> Bibliotheek</button>
+    <button data-tab="floatplane"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260913#play"/></svg> Floatplane</button>
+    <button id="refresh"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260913#restart"/></svg> Refresh</button>
+    <button id="server-settings"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260913#settings"/></svg> Serveradres</button>
+    <button id="exit"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260913#back"/></svg> Exit</button>
   </nav>
   <aside id="channels" aria-label="Kanalen" hidden></aside>
   <div class="heading"><h1 id="heading">Home</h1></div>
@@ -35,16 +35,17 @@
     <p id="quality">Original quality</p><p id="player-status" role="status"></p>
     <div class="timeline"><div id="position"></div></div><p id="time">0:00 / 0:00</p>
     <div class="actions">
-      <button id="back" aria-label="Back to library" title="Back to library"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260912e#back"/></svg></button>
+      <button id="back" aria-label="Back to library" title="Back to library"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260913#back"/></svg></button>
       <button id="rewind" aria-label="Rewind 10 seconds" title="Rewind 10 seconds">&minus;10</button>
-      <button id="toggle" aria-label="Play" title="Play"><svg aria-hidden="true"><use id="toggle-glyph" href="/tv/icons.svg?v=20260912e#play"/></svg></button>
+      <button id="toggle" aria-label="Play" title="Play"><svg aria-hidden="true"><use id="toggle-glyph" href="/tv/icons.svg?v=20260913#play"/></svg></button>
       <button id="forward" aria-label="Forward 10 seconds" title="Forward 10 seconds">+10</button>
-      <button id="restart" aria-label="Start over" title="Start over"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260912e#restart"/></svg></button>
-      <label id="source-label" hidden>Version <select id="source"><option value="primary">Primary</option></select></label>
+      <button id="restart" aria-label="Start over" title="Start over"><svg aria-hidden="true"><use href="/tv/icons.svg?v=20260913#restart"/></svg></button>
+      <span id="source-label" hidden><button id="source" value="primary" aria-haspopup="dialog">Versie: Primary</button></span>
     </div>
     <p class="hint">OK Show controls / Play &middot; Left / Right Seek &middot; Back Library</p>
   </div>
 </section>
+<dialog id="source-dialog" aria-labelledby="source-title"><h2 id="source-title">Videoversie</h2><div id="source-options"></div><button id="source-cancel">Terug</button></dialog>
 <dialog id="exit-dialog"><h2>Finished watching?</h2><button id="stay">Keep browsing</button><button id="confirm-exit">Exit MyTube</button></dialog>
 <dialog id="video-menu" aria-labelledby="video-menu-title">
   <h2 id="video-menu-title"></h2><p id="video-menu-status" role="status"></p>
@@ -63,6 +64,6 @@
   <p class="hint">Downloads use your Youtarr quality settings. Choose 2160p there for 4K when available.</p>
   <button id="download-start">Download</button><button id="download-check">Check status</button><button id="download-close">Back to browsing</button>
 </dialog>
-<script src="/tv/tv.js?v=20260912e"></script>
+<script src="/tv/tv.js?v=20260913"></script>
 </body>
 </html>

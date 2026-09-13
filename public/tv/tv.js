@@ -296,7 +296,7 @@
   }
   function showControls() {
     clearTimeout(hideTimer); $('controls').classList.remove('concealed');
-    if (!video.paused) hideTimer = setTimeout(function () { $('controls').classList.add('concealed'); }, 5000);
+    if (!video.paused && !$('source-dialog').open) hideTimer = setTimeout(function () { $('controls').classList.add('concealed'); }, 5000);
   }
   function play() {
     var source = video.src;
@@ -309,7 +309,7 @@
   function playbackButton(paused) {
     $('toggle').setAttribute('aria-label', paused ? 'Play' : 'Pause');
     $('toggle').title = paused ? 'Play' : 'Pause';
-    $('toggle-glyph').setAttribute('href', '/tv/icons.svg?v=20260912e#' + (paused ? 'play' : 'pause'));
+    $('toggle-glyph').setAttribute('href', '/tv/icons.svg?v=20260913#' + (paused ? 'play' : 'pause'));
   }
   function seek(delta) { if (isFinite(video.duration)) video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + delta)); showControls(); }
   function open(item, button) {
@@ -324,6 +324,7 @@
     startSource(); $('toggle').focus(); showControls();
   }
   function startSource() {
+    updateSourceButton();
     $('quality').textContent = 'Original quality · detecting resolution…';
     if (active.provider === 'floatplane') { video.src = '/api/floatplane/stream/' + encodeURIComponent(active.id); video.load(); play(); return; }
     var profile = $('source').value || 'primary';
@@ -341,6 +342,7 @@
     startSource(); $('toggle').focus(); showControls(); return true;
   }
   function close() {
+    if ($('source-dialog').open) $('source-dialog').close();
     save(); video.pause(); active = null; video.removeAttribute('src'); video.load(); clearTimeout(hideTimer);
     $('player').hidden = true; $('library').hidden = false;
     var id = origin && origin.dataset.id; render();
@@ -349,7 +351,8 @@
   }
   function back() {
     cancelHold();
-    if ($('video-menu').open) closeVideoMenu();
+    if ($('source-dialog').open) closeSources();
+    else if ($('video-menu').open) closeVideoMenu();
     else if ($('server-dialog').open) { $('server-dialog').close(); $('server-settings').focus(); }
     else if ($('download-dialog').open) closeDownload();
     else if ($('exit-dialog').open) { $('exit-dialog').close(); $('exit').focus(); }
@@ -357,7 +360,7 @@
     else { $('exit-dialog').showModal(); $('stay').focus(); }
   }
   function move(code) {
-    var root = $('video-menu').open ? $('video-menu') : $('server-dialog').open ? $('server-dialog') : $('download-dialog').open ? $('download-dialog') : $('exit-dialog').open ? $('exit-dialog') : active ? $('controls') : $('library');
+    var root = $('source-dialog').open ? $('source-dialog') : $('video-menu').open ? $('video-menu') : $('server-dialog').open ? $('server-dialog') : $('download-dialog').open ? $('download-dialog') : $('exit-dialog').open ? $('exit-dialog') : active ? $('controls') : $('library');
     var elements = Array.prototype.filter.call(root.querySelectorAll('button:not(:disabled),select,input'), function (el) { return el.offsetWidth > 0; });
     var current = document.activeElement;
     if (elements.indexOf(current) < 0) { if (elements[0]) elements[0].focus(); return; }
@@ -442,7 +445,34 @@
   $('confirm-exit').onclick = function () { window.close(); $('exit-dialog').close(); message('Use Home on your remote to leave MyTube.'); $('exit').focus(); };
   $('back').onclick = close; $('toggle').onclick = toggle; $('rewind').onclick = function () { seek(-10); }; $('forward').onclick = function () { seek(10); };
   $('restart').onclick = function () { video.currentTime = 0; play(); };
-  $('source').onchange = function () { if (active) { resumeAt = video.currentTime; save(); startSource(); } };
+  function updateSourceButton() {
+    var profile = playbackProfiles.find(function (entry) { return entry.id === $('source').value; });
+    $('source').textContent = 'Versie: ' + (profile ? profile.label : 'Primary');
+  }
+  function closeSources() {
+    $('source-dialog').close(); $('toggle').focus(); showControls();
+  }
+  function chooseSource(id) {
+    if (!active || active.provider === 'floatplane') return;
+    if (!playbackProfiles.some(function (profile) { return profile.id === id; })) return;
+    if ($('source').value === id) { closeSources(); return; }
+    resumeAt = video.currentTime || resumeAt; save(); video.pause();
+    $('source').value = id; attemptedProfiles = [];
+    closeSources(); $('player-status').textContent = 'Videoversie laden…'; startSource();
+  }
+  $('source').onclick = function () {
+    if (!active || active.provider === 'floatplane') return;
+    $('source-options').textContent = '';
+    playbackProfiles.forEach(function (profile) {
+      var button = document.createElement('button'); button.textContent = profile.label;
+      button.setAttribute('aria-pressed', String(profile.id === $('source').value));
+      button.onclick = function () { chooseSource(profile.id); }; $('source-options').appendChild(button);
+    });
+    $('source-dialog').showModal(); showControls();
+    ($('source-options').querySelector('[aria-pressed="true"]') || $('source-cancel')).focus();
+  };
+  $('source-cancel').onclick = closeSources;
+  $('source-dialog').oncancel = function (event) { event.preventDefault(); closeSources(); };
   function quality() {
     var profile = playbackProfiles.find(function (entry) { return entry.id === $('source').value; });
     if (video.videoHeight) $('quality').textContent = (video.videoHeight >= 2160 ? '4K · ' : '') + video.videoWidth + ' × ' + video.videoHeight + ' · Original quality · ' + (active && active.provider === 'floatplane' ? 'Floatplane' : profile ? profile.label : 'Primary') + (active && active.provider !== 'floatplane' && $('source').value !== defaultProfile ? ' (backup)' : '');
@@ -495,9 +525,8 @@
     playbackProfiles = result.profiles;
     defaultProfile = result.defaultProfile || 'primary';
     var selectedProfile = active ? $('source').value : defaultProfile;
-    $('source').textContent = '';
-    result.profiles.forEach(function (profile) { var option = document.createElement('option'); option.value = profile.id; option.textContent = profile.label; $('source').appendChild(option); });
     $('source').value = selectedProfile;
+    updateSourceButton();
     $('source-label').hidden = (active && active.provider === 'floatplane') || result.profiles.length < 2;
   }).catch(function () { /* Primary playback works on older MyTube servers too. */ });
   clock(); setInterval(clock, 60000); load();

@@ -222,6 +222,10 @@ html, body { height: 100%; overflow: hidden; }
 #video-menu button { display: block; width: 100%; text-align: left; margin: 12px 0 0; }
 #delete-video { color: #ffc0b5; }
 #video-menu-status { font-size: 1.3rem; }
+.actions #source { width: auto; min-width: 150px; max-width: 340px; padding: 0 22px; border-radius: 32px; font-size: 1.25rem; letter-spacing: normal; }
+#source-dialog { width: 650px; }
+#source-dialog button { display: block; width: 100%; text-align: left; margin: 12px 0 0; }
+#source-dialog button[aria-pressed=true] { border-color: #aaa; }
 footer { font-size: 1.25rem; }
 dialog button { font-size: 1.5rem; }
 @media (prefers-reduced-transparency:reduce), (prefers-contrast:more) {
