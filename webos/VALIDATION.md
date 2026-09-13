@@ -76,3 +76,16 @@ only opens the server address, so normal MyTube releases carry TV updates.
   Package validation and installation on the LG succeeded. Auto-open/cancel are
   covered by launcher tests. Browser automation remains unavailable; the latest
   visual and scrolling behavior needs a TV check after the Docker update.
+
+## Long-press actions and watched bars
+
+- Holding OK for 650 ms opens a modal video action menu; short OK opens the
+  existing playback/download action. Pointer holds and right-click are supported.
+- Watched/unwatched uses the shared PUT watch-progress API for both providers.
+  YouTube downloads use the existing delete API after a second selection;
+  Floatplane deletion is hidden and blocked in the action handler.
+- Watched thumbnails have a full red bar; explicit unwatched state clears it.
+- Build, targeted lint, and 24 automated tests passed, including hold/release,
+  cancellation, stale cards, delete guarding, shared watched state, and bar values.
+  No real user videos were deleted during these tests. Physical remote behavior
+  and the new modal still need the user's TV check after Docker update.

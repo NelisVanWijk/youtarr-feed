@@ -8,6 +8,64 @@
   var defaultProfile = 'primary', playbackProfiles = [{ id: 'primary', label: 'Primary' }], attemptedProfiles = [];
   var selectedChannel = '', subscriptionChannels = null, libraryFilter = 'downloads', fpVideos = [], fpChannels = [], fpCreators = [];
   var fpScope = '', fpKind = '', fpOffset = null, fpRequest = 0, fpLoading = false, fpLoaded = false, fpError = '';
+  var menuVideo = null, menuBusy = false, confirmDelete = false, heldCard = null, holdTimer, heldLong = false, suppressCardClick = false;
+  function cancelHold() { clearTimeout(holdTimer); heldCard = null; heldLong = false; }
+  function beginHold(card) {
+    if (heldCard || menuBusy) return;
+    heldCard = card; heldLong = false;
+    holdTimer = setTimeout(function () {
+      if (!heldCard || !heldCard.isConnected) return;
+      heldLong = true; suppressCardClick = true;
+      var item = videos.concat(fpVideos).find(function (entry) { return entry.id === card.dataset.id; });
+      if (item) showVideoMenu(item);
+    }, 650);
+  }
+  function releaseHold() {
+    var card = heldCard, long = heldLong; cancelHold();
+    if (card && !long && card.isConnected) { suppressCardClick = false; card.click(); }
+  }
+  function showVideoMenu(item) {
+    menuVideo = item; confirmDelete = false;
+    $('video-menu-title').textContent = item.title;
+    $('video-menu-status').textContent = item.channelName;
+    $('delete-video').hidden = item.provider === 'floatplane' || (!item.downloaded && !item.missing);
+    $('delete-video').textContent = 'Verwijderen';
+    $('video-menu').showModal(); $('mark-watched').focus();
+  }
+  function closeVideoMenu() {
+    if (menuBusy) return;
+    var id = menuVideo && menuVideo.id; menuVideo = null;
+    $('video-menu').close(); render(); restoreCard(id);
+  }
+  function menuAction(deleting, watchedState) {
+    if (!menuVideo || menuBusy || (deleting && menuVideo.provider === 'floatplane')) return;
+    if (deleting && !confirmDelete) {
+      confirmDelete = true; $('video-menu-status').textContent = 'De download wordt verwijderd. Je kunt de video later opnieuw downloaden.';
+      $('delete-video').textContent = 'Download definitief verwijderen'; return;
+    }
+    var item = menuVideo; menuBusy = true;
+    $('video-menu').querySelectorAll('button').forEach(function (button) { button.disabled = true; });
+    $('video-menu-status').textContent = 'Bezig…';
+    return saveQueue.catch(function () {}).then(function () {
+      return json(deleting ? '/api/delete' : '/api/watch-progress', {
+        method: deleting ? 'POST' : 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(deleting ? { id: item.id } : { videoId: item.id, watched: watchedState, thumbnail: item.thumbnail })
+      });
+    }).then(function (result) {
+      delete progress[item.id];
+      if (deleting) {
+        videos.forEach(function (entry) { if (entry.id === item.id) { entry.downloaded = false; entry.missing = false; entry.sourceLabel = ''; } });
+        delete sources[item.id]; delete sourceRequests[item.id]; delete jobs[item.id];
+      } else {
+        progress = result.progress || progress; watched = result.watchedVideoIds || watched; unwatched = result.unwatchedVideoIds || unwatched;
+        videos.concat(fpVideos).forEach(function (entry) { if (entry.id === item.id) entry.watched = watchedState; });
+      }
+      menuBusy = false; closeVideoMenu();
+    }).catch(function (error) { $('video-menu-status').textContent = error.message; }).finally(function () {
+      menuBusy = false; $('video-menu').querySelectorAll('button').forEach(function (button) { button.disabled = false; });
+      if ($('video-menu').open) $('close-video-menu').focus();
+    });
+  }
   function relativeDate(value) {
     var age = Math.max(0, (Date.now() - Date.parse(value)) / 1000);
     if (!isFinite(age)) return '';
@@ -65,6 +123,11 @@
     });
   }
   function isWatched(item) { return watched.indexOf(item.id) >= 0 || (unwatched.indexOf(item.id) < 0 && item.watched); }
+  function progressPercent(item) {
+    if (isWatched(item)) return 100;
+    var entry = progress[item.id];
+    return entry && entry.duration > 0 ? Math.max(0, Math.min(100, entry.currentTime / entry.duration * 100)) : 0;
+  }
   function message(text) { $('status').textContent = text; }
   function time(value) {
     value = Math.max(0, Math.floor(Number(value) || 0));
@@ -113,7 +176,7 @@
         }).catch(function () { delete sourceRequests[item.id]; });
       }
       var entry = progress[item.id];
-      if (entry) { var bar = document.createElement('div'); bar.className = 'progress'; bar.style.width = Math.min(100, entry.currentTime / entry.duration * 100) + '%'; art.appendChild(bar); }
+      if (isWatched(item) || entry) { var bar = document.createElement('div'); bar.className = 'progress'; bar.style.width = progressPercent(item) + '%'; art.appendChild(bar); }
       button.appendChild(art);
       var title = document.createElement('strong'); title.textContent = item.title; button.appendChild(title);
       var meta = document.createElement('div'); meta.className = 'card-meta';
@@ -125,7 +188,16 @@
       var detail = document.createElement('small'); detail.textContent = item.channelName + (entry ? ' · Verder kijken op ' + time(entry.currentTime) : isWatched(item) ? ' · Bekeken' : ''); metaCopy.appendChild(detail);
       if (item.publishedAt) { var published = document.createElement('small'); published.className = 'published'; published.textContent = relativeDate(item.publishedAt); metaCopy.appendChild(published); }
       meta.appendChild(metaCopy); button.appendChild(meta);
-      button.onclick = function () { if (item.provider === 'floatplane' || (item.downloaded && !item.missing)) open(item, button); else showDownload(item, button); }; $('grid').appendChild(button);
+      button.onclick = function () {
+        if (suppressCardClick) { suppressCardClick = false; return; }
+        if (item.provider === 'floatplane' || (item.downloaded && !item.missing)) open(item, button); else showDownload(item, button);
+      };
+      button.onpointerdown = function (event) { if (event.button !== 0) return; suppressCardClick = false; beginHold(button); };
+      button.onpointerup = function () { releaseHold(); suppressCardClick = true; };
+      button.onpointercancel = function () { cancelHold(); suppressCardClick = true; };
+      button.onpointerleave = function () { if (heldCard === button) cancelHold(); };
+      button.oncontextmenu = function (event) { event.preventDefault(); cancelHold(); suppressCardClick = true; showVideoMenu(item); };
+      $('grid').appendChild(button);
     });
     if (focusedId && !active) restoreCard(focusedId);
     if (tab === 'floatplane') { message(fpLoading ? 'Floatplane laden…' : fpError || filtered.length + ' video’s'); return; }
@@ -237,7 +309,7 @@
   function playbackButton(paused) {
     $('toggle').setAttribute('aria-label', paused ? 'Play' : 'Pause');
     $('toggle').title = paused ? 'Play' : 'Pause';
-    $('toggle-glyph').setAttribute('href', '/tv/icons.svg?v=20260912d#' + (paused ? 'play' : 'pause'));
+    $('toggle-glyph').setAttribute('href', '/tv/icons.svg?v=20260912e#' + (paused ? 'play' : 'pause'));
   }
   function seek(delta) { if (isFinite(video.duration)) video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + delta)); showControls(); }
   function open(item, button) {
@@ -276,14 +348,16 @@
     (target || document.querySelector('[data-tab]')).focus();
   }
   function back() {
-    if ($('server-dialog').open) { $('server-dialog').close(); $('server-settings').focus(); }
+    cancelHold();
+    if ($('video-menu').open) closeVideoMenu();
+    else if ($('server-dialog').open) { $('server-dialog').close(); $('server-settings').focus(); }
     else if ($('download-dialog').open) closeDownload();
     else if ($('exit-dialog').open) { $('exit-dialog').close(); $('exit').focus(); }
     else if (active) close();
     else { $('exit-dialog').showModal(); $('stay').focus(); }
   }
   function move(code) {
-    var root = $('server-dialog').open ? $('server-dialog') : $('download-dialog').open ? $('download-dialog') : $('exit-dialog').open ? $('exit-dialog') : active ? $('controls') : $('library');
+    var root = $('video-menu').open ? $('video-menu') : $('server-dialog').open ? $('server-dialog') : $('download-dialog').open ? $('download-dialog') : $('exit-dialog').open ? $('exit-dialog') : active ? $('controls') : $('library');
     var elements = Array.prototype.filter.call(root.querySelectorAll('button:not(:disabled),select,input'), function (el) { return el.offsetWidth > 0; });
     var current = document.activeElement;
     if (elements.indexOf(current) < 0) { if (elements[0]) elements[0].focus(); return; }
@@ -335,6 +409,11 @@
     };
   });
   $('search').oninput = render;
+  $('mark-watched').onclick = function () { menuAction(false, true); };
+  $('mark-unwatched').onclick = function () { menuAction(false, false); };
+  $('delete-video').onclick = function () { menuAction(true); };
+  $('close-video-menu').onclick = closeVideoMenu;
+  $('video-menu').oncancel = function (event) { event.preventDefault(); closeVideoMenu(); };
   $('server-settings').onclick = function () {
     $('server-address').value = window.location.origin; $('server-error').textContent = '';
     $('server-dialog').showModal(); $('server-address').focus();
@@ -389,6 +468,12 @@
   window.addEventListener('pagehide', save);
   document.addEventListener('keydown', function (event) {
     var code = event.keyCode;
+    if (code === 13 && (heldCard || (!active && document.activeElement.classList.contains('card')))) {
+      event.preventDefault();
+      if (!event.repeat && !heldCard) { suppressCardClick = false; beginHold(document.activeElement); }
+      return;
+    }
+    if (heldCard) cancelHold();
     if (code === 461 || code === 27 || (code === 8 && document.activeElement.tagName !== 'INPUT')) { event.preventDefault(); back(); return; }
     if (active && [415, 19, 413, 417, 412, 32].indexOf(code) >= 0) {
       event.preventDefault(); if (code === 415) play(); else if (code === 19) video.pause(); else if (code === 413) close(); else if (code === 417 || code === 412) seek(code === 417 ? 10 : -10); else toggle(); return;
@@ -401,6 +486,9 @@
     if (code >= 37 && code <= 40) { event.preventDefault(); move(code); if (active) showControls(); }
     if (code === 13 && document.activeElement.tagName === 'BUTTON') { event.preventDefault(); if (!event.repeat) document.activeElement.click(); }
   });
+  document.addEventListener('keyup', function (event) { if (event.keyCode === 13 && heldCard) { event.preventDefault(); releaseHold(); } });
+  window.addEventListener('blur', cancelHold);
+  document.addEventListener('visibilitychange', function () { if (document.hidden) cancelHold(); });
   function clock() { $('clock').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
   json('/api/tv/playback').then(function (result) {
     if (!result.profiles || !result.profiles.length) return;

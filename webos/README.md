@@ -35,6 +35,13 @@ device name). This app has its own ID and does not replace SUB/WAVE.
 ## Controls and playback
 
 - D-pad moves between navigation, cards, and player buttons; OK selects.
+- Hold OK on a video for 650 ms to open its action menu. A short press still
+  opens playback/downloads. The menu marks videos watched or unwatched using
+  the shared server state. Downloaded/missing YouTube items also offer deletion
+  with a second confirmation; Floatplane never offers deletion. Pointer holds
+  and context menus are supported as well.
+- Watched videos show a full red thumbnail progress bar. Partial playback shows
+  partial progress; marking unwatched clears the bar.
 - Pointer selection works too. The icon-only left menu expands when focused.
   Zoeken searches the YouTube feed; Home shows the feed; Abonnementen has a
   second rail of subscribed channels; Bibliotheek shows downloaded files with

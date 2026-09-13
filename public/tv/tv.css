@@ -218,6 +218,10 @@ html, body { height: 100%; overflow: hidden; }
 #library > footer { margin-top: 22px; }
 #server-address { display: block; width: 100%; font: inherit; padding: 18px; color: #fff; background: #151515; border: 1px solid #777; border-radius: 12px; margin: 18px 0; }
 #server-dialog { width: 900px; }
+#video-menu { width: 820px; }
+#video-menu button { display: block; width: 100%; text-align: left; margin: 12px 0 0; }
+#delete-video { color: #ffc0b5; }
+#video-menu-status { font-size: 1.3rem; }
 footer { font-size: 1.25rem; }
 dialog button { font-size: 1.5rem; }
 @media (prefers-reduced-transparency:reduce), (prefers-contrast:more) {
