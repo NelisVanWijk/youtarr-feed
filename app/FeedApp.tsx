@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  faBell,
   faCheck,
   faChevronLeft,
   faChevronRight,
@@ -105,6 +106,12 @@ type VideoMetadataInfo = {
   likeCount?: number | null;
   webpageUrl?: string | null;
 };
+type PushPublicConfig = {
+  enabled: boolean;
+  publicKey: string | null;
+  subscriberCount: number;
+  error?: string;
+};
 type PlayerDragState = {
   startX: number;
   startY: number;
@@ -145,6 +152,22 @@ function playbackOverrideLabel(value: PlaybackOverride, copy: AppCopy) {
   if (value === "primary") return copy.player.playbackOverridePrimary;
   if (value === "av1") return copy.player.playbackOverrideAv1;
   return copy.player.playbackOverrideVp9;
+}
+
+function isIosClient() {
+  if (typeof navigator === "undefined") return false;
+  return /\b(iPhone|iPad|iPod)\b/i.test(navigator.userAgent);
+}
+
+function urlBase64ToUint8Array(value: string) {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = `${value}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let index = 0; index < raw.length; index += 1) {
+    output[index] = raw.charCodeAt(index);
+  }
+  return output;
 }
 
 function mergeVideosById(existing: FeedVideo[], incoming: FeedVideo[]) {
@@ -720,6 +743,17 @@ export default function FeedApp() {
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsChecking, setSettingsChecking] = useState(false);
+  const [notificationConfig, setNotificationConfig] =
+    useState<PushPublicConfig | null>(null);
+  const [notificationPermission, setNotificationPermission] = useState<
+    NotificationPermission | "unsupported"
+  >("default");
+  const [pushSubscribed, setPushSubscribed] = useState(false);
+  const [notificationBusy, setNotificationBusy] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState("");
+  const [notificationMessageKind, setNotificationMessageKind] = useState<
+    "idle" | "success" | "error"
+  >("idle");
   const [feedChannelScrollState, setFeedChannelScrollState] = useState({
     left: false,
     right: false,
@@ -959,6 +993,186 @@ export default function FeedApp() {
     }
   }, []);
 
+  const pushSupportProblem = useCallback(() => {
+    if (
+      typeof window === "undefined" ||
+      !("serviceWorker" in navigator) ||
+      !("PushManager" in window) ||
+      !("Notification" in window)
+    ) {
+      return copy.settings.notificationsUnsupported;
+    }
+    if (!window.isSecureContext) {
+      return copy.settings.notificationsNeedsHttps;
+    }
+    if (isIosClient() && !standaloneMode) {
+      return copy.settings.notificationsNeedsHomeScreen;
+    }
+    return "";
+  }, [
+    copy.settings.notificationsNeedsHomeScreen,
+    copy.settings.notificationsNeedsHttps,
+    copy.settings.notificationsUnsupported,
+    standaloneMode,
+  ]);
+
+  const refreshNotificationSettings = useCallback(async () => {
+    const unsupported = pushSupportProblem();
+    if (unsupported) {
+      setNotificationPermission("unsupported");
+      setPushSubscribed(false);
+    } else {
+      setNotificationPermission(Notification.permission);
+      const registration = await navigator.serviceWorker.getRegistration("/");
+      const subscription = await registration?.pushManager.getSubscription();
+      setPushSubscribed(Boolean(subscription));
+    }
+
+    try {
+      const response = await fetch("/api/notifications/config", {
+        cache: "no-store",
+      });
+      const data = (await response.json()) as PushPublicConfig;
+      setNotificationConfig(data);
+      if (!response.ok) {
+        setNotificationMessage(data.error || copy.settings.notificationsConfigError);
+        setNotificationMessageKind("error");
+      }
+    } catch (error) {
+      setNotificationConfig(null);
+      setNotificationMessage(
+        error instanceof Error
+          ? error.message
+          : copy.settings.notificationsConfigError
+      );
+      setNotificationMessageKind("error");
+    }
+  }, [copy.settings.notificationsConfigError, pushSupportProblem]);
+
+  async function getNotificationSubscription() {
+    const problem = pushSupportProblem();
+    if (problem) throw new Error(problem);
+    const config =
+      notificationConfig ||
+      ((await (
+        await fetch("/api/notifications/config", { cache: "no-store" })
+      ).json()) as PushPublicConfig);
+    if (!config.enabled || !config.publicKey) {
+      throw new Error(copy.settings.notificationsServerDisabled);
+    }
+
+    if (!(await navigator.serviceWorker.getRegistration("/"))) {
+      await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+    }
+    const readyRegistration = await navigator.serviceWorker.ready;
+    const existing = await readyRegistration.pushManager.getSubscription();
+    if (existing) return existing;
+
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    if (permission !== "granted") {
+      throw new Error(copy.settings.notificationsPermissionDenied);
+    }
+
+    return readyRegistration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(config.publicKey),
+    });
+  }
+
+  async function enableNotifications() {
+    setNotificationBusy(true);
+    setNotificationMessage("");
+    setNotificationMessageKind("idle");
+    try {
+      const subscription = await getNotificationSubscription();
+      const response = await fetch("/api/notifications/subscriptions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: subscription.toJSON() }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error || copy.settings.notificationsEnableError);
+      }
+      setPushSubscribed(true);
+      setNotificationMessage(copy.settings.notificationsEnabledMessage);
+      setNotificationMessageKind("success");
+      void refreshNotificationSettings();
+    } catch (error) {
+      setNotificationMessage(
+        error instanceof Error
+          ? error.message
+          : copy.settings.notificationsEnableError
+      );
+      setNotificationMessageKind("error");
+    } finally {
+      setNotificationBusy(false);
+    }
+  }
+
+  async function disableNotifications() {
+    setNotificationBusy(true);
+    setNotificationMessage("");
+    setNotificationMessageKind("idle");
+    try {
+      const registration = await navigator.serviceWorker.getRegistration("/");
+      const subscription = await registration?.pushManager.getSubscription();
+      if (subscription) {
+        await fetch("/api/notifications/subscriptions", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: subscription.endpoint }),
+        });
+        await subscription.unsubscribe();
+      }
+      setPushSubscribed(false);
+      setNotificationMessage(copy.settings.notificationsDisabledMessage);
+      setNotificationMessageKind("success");
+      void refreshNotificationSettings();
+    } catch (error) {
+      setNotificationMessage(
+        error instanceof Error
+          ? error.message
+          : copy.settings.notificationsDisableError
+      );
+      setNotificationMessageKind("error");
+    } finally {
+      setNotificationBusy(false);
+    }
+  }
+
+  async function sendNotificationTest() {
+    setNotificationBusy(true);
+    setNotificationMessage("");
+    setNotificationMessageKind("idle");
+    try {
+      const subscription = await getNotificationSubscription();
+      const response = await fetch("/api/notifications/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: subscription.toJSON() }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(data.error || copy.settings.notificationsTestError);
+      }
+      setPushSubscribed(true);
+      setNotificationMessage(copy.settings.notificationsTestSent);
+      setNotificationMessageKind("success");
+      void refreshNotificationSettings();
+    } catch (error) {
+      setNotificationMessage(
+        error instanceof Error
+          ? error.message
+          : copy.settings.notificationsTestError
+      );
+      setNotificationMessageKind("error");
+    } finally {
+      setNotificationBusy(false);
+    }
+  }
+
   async function submitFloatplaneSessionToken(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const token = floatplaneSessionToken.trim();
@@ -1013,9 +1227,12 @@ export default function FeedApp() {
 
   useEffect(() => {
     if (!settingsOpen) return undefined;
-    const timer = window.setTimeout(() => void refreshStatus(), 0);
+    const timer = window.setTimeout(() => {
+      void refreshStatus();
+      void refreshNotificationSettings();
+    }, 0);
     return () => window.clearTimeout(timer);
-  }, [refreshStatus, settingsOpen]);
+  }, [refreshNotificationSettings, refreshStatus, settingsOpen]);
 
   useEffect(() => {
     const shouldLockScroll =
@@ -2020,6 +2237,24 @@ export default function FeedApp() {
     setDeleteError("");
   }
 
+  useEffect(() => {
+    if (!feed?.videos.length || typeof window === "undefined") return undefined;
+    const watchId = new URLSearchParams(window.location.search).get("watch");
+    if (!watchId || selectedVideo?.id === watchId) return undefined;
+    const video = feed.videos.find((item) => item.id === watchId);
+    if (!video) return undefined;
+
+    const timer = window.setTimeout(() => {
+      setSelectedVideo(video);
+      setPlayerMode("full");
+      setPlayerPlaying(false);
+      setDeleteState("idle");
+      setDeleteError("");
+      window.history.replaceState(null, "", window.location.pathname);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [feed?.videos, selectedVideo?.id]);
+
   function handlePlayerDragStart(event: ReactPointerEvent<HTMLDivElement>) {
     if (playerMode !== "full" || !selectedVideo?.downloaded) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
@@ -2555,6 +2790,21 @@ export default function FeedApp() {
   const selectedLikeCount = selectedVideo
     ? videoMetadata[selectedVideo.id]?.likeCount
     : null;
+  const notificationSupportIssue =
+    notificationConfig?.enabled === false
+      ? copy.settings.notificationsServerDisabled
+      : pushSupportProblem();
+  const notificationsCanEnable = Boolean(
+    notificationConfig?.enabled &&
+      notificationConfig.publicKey &&
+      !notificationSupportIssue &&
+      notificationPermission !== "denied"
+  );
+  const notificationStatusText = notificationSupportIssue
+    ? copy.settings.notificationsUnavailable
+    : pushSubscribed
+      ? copy.settings.notificationsOn
+      : copy.settings.notificationsOff;
 
   return (
     <div className={`app-shell ${selectedVideo ? "has-player" : ""}`}>
@@ -3901,6 +4151,64 @@ export default function FeedApp() {
                 </strong>
               </div>
             </div>
+            <section className="notification-settings-card">
+              <div className="notification-settings-copy">
+                <span className="notification-icon" aria-hidden="true">
+                  <FontAwesomeIcon icon={faBell} />
+                </span>
+                <div>
+                  <h3>{copy.settings.notificationsTitle}</h3>
+                  <p>
+                    {notificationSupportIssue ||
+                      copy.settings.notificationsBody}
+                  </p>
+                  <small>
+                    {copy.settings.notificationsDeviceStatus(
+                      notificationStatusText,
+                      notificationConfig?.subscriberCount || 0
+                    )}
+                  </small>
+                </div>
+              </div>
+              <div className="notification-settings-actions">
+                {pushSubscribed ? (
+                  <button
+                    className="settings-check-button"
+                    type="button"
+                    onClick={() => void disableNotifications()}
+                    disabled={notificationBusy}
+                  >
+                    {copy.settings.notificationsDisable}
+                  </button>
+                ) : (
+                  <button
+                    className="settings-check-button"
+                    type="button"
+                    onClick={() => void enableNotifications()}
+                    disabled={!notificationsCanEnable || notificationBusy}
+                  >
+                    {copy.settings.notificationsEnable}
+                  </button>
+                )}
+                <button
+                  className="settings-check-button"
+                  type="button"
+                  onClick={() => void sendNotificationTest()}
+                  disabled={!notificationsCanEnable || notificationBusy}
+                >
+                  {copy.settings.notificationsTest}
+                </button>
+              </div>
+              {notificationMessage && (
+                <small
+                  className={`notification-settings-message ${
+                    notificationMessageKind === "error" ? "error" : "success"
+                  }`}
+                >
+                  {notificationMessage}
+                </small>
+              )}
+            </section>
             {status?.diagnostics && (
               <div className="settings-diagnostics">
                 <div className="settings-diagnostics-heading">

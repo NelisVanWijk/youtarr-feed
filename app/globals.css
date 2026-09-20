@@ -2486,6 +2486,80 @@ html[data-theme="light"] .bottom-nav button.active {
   color: #ffc65c;
 }
 
+.notification-settings-card {
+  margin: 0 0 18px;
+  padding: 14px;
+  display: grid;
+  gap: 13px;
+  background: var(--surface-tint);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  text-align: left;
+}
+
+.notification-settings-copy {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.notification-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  border-radius: 50%;
+  color: var(--accent);
+}
+
+.notification-icon .svg-inline--fa {
+  width: 15px;
+  height: 15px;
+}
+
+.notification-settings-copy h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+}
+
+.notification-settings-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.42;
+}
+
+.notification-settings-copy small {
+  display: block;
+  margin-top: 7px;
+  color: var(--quiet);
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.notification-settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.notification-settings-message {
+  font-size: 11px;
+  font-weight: 720;
+}
+
+.notification-settings-message.success {
+  color: #75d798;
+}
+
+.notification-settings-message.error {
+  color: #ffc65c;
+}
+
 .playback-routing {
   margin-bottom: 12px;
   display: grid;
@@ -3071,6 +3145,20 @@ html[data-theme="light"] .bottom-nav button.active {
 
   .add-flow-row .primary-button {
     width: 100%;
+  }
+
+  .notification-settings-copy {
+    grid-template-columns: 1fr;
+  }
+
+  .notification-icon {
+    width: 34px;
+    height: 34px;
+  }
+
+  .notification-settings-actions .settings-check-button {
+    flex: 1 1 135px;
+    justify-content: center;
   }
 
   .player,

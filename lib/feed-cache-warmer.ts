@@ -1,4 +1,5 @@
 import { getFloatplaneFeed, isFloatplaneConfigured } from "./floatplane";
+import { notifyNewFeedVideos } from "./notifications";
 import { getCachedVideoList } from "./server-cache";
 import {
   clearAllYoutarrVideoLocationCache,
@@ -39,10 +40,16 @@ function unrefTimer(timer: ReturnType<typeof setInterval> | ReturnType<typeof se
 async function refreshYoutarrCaches() {
   if (!isYoutarrConfigured()) return;
   clearAllYoutarrVideoLocationCache();
-  await Promise.allSettled([
-    getCachedVideoList("feed", getFeed, { refresh: true }),
+  const [feedResult] = await Promise.allSettled([
+    getCachedVideoList("feed", getFeed, { refresh: true }).then(async (result) => {
+      await notifyNewFeedVideos(result.data.videos);
+      return result;
+    }),
     getCachedVideoList("local-videos", getDownloadedVideos, { refresh: true }),
   ]);
+  if (feedResult.status === "rejected") {
+    throw feedResult.reason;
+  }
 }
 
 async function refreshFloatplaneCache() {

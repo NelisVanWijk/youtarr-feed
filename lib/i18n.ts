@@ -230,6 +230,35 @@ export const translations = {
       themeLabel: "Appearance",
       themeDark: "Dark",
       themeLight: "Light",
+      notificationsTitle: "New video alerts",
+      notificationsBody:
+        "Receive YouTube-style push notifications when the background feed scan finds a new video.",
+      notificationsEnable: "Enable alerts",
+      notificationsDisable: "Disable",
+      notificationsTest: "Send test",
+      notificationsOn: "On",
+      notificationsOff: "Off",
+      notificationsUnavailable: "Unavailable",
+      notificationsUnsupported:
+        "This browser cannot receive web push notifications.",
+      notificationsNeedsHttps:
+        "Notifications need HTTPS. Use a reverse proxy or trusted certificate for your Youtarr Feed URL.",
+      notificationsNeedsHomeScreen:
+        "On iPhone and iPad, open Youtarr Feed from the Home Screen app before enabling notifications.",
+      notificationsServerDisabled: "Notifications are disabled on the server.",
+      notificationsPermissionDenied:
+        "Notification permission is blocked. Re-enable it in iOS Settings for this web app.",
+      notificationsConfigError: "Could not load notification settings.",
+      notificationsEnableError: "Could not enable notifications.",
+      notificationsDisableError: "Could not disable notifications.",
+      notificationsTestError: "Could not send a test notification.",
+      notificationsEnabledMessage: "Notifications are enabled for this device.",
+      notificationsDisabledMessage: "Notifications are disabled for this device.",
+      notificationsTestSent: "Test notification sent.",
+      notificationsDeviceStatus: (status: string, count: number) =>
+        `${status} on this device · ${count} subscribed device${
+          count === 1 ? "" : "s"
+        }`,
       diagnosticsEyebrow: "Diagnostics",
       diagnosticsTitle: "Backend connections",
       checkConnections: "Check connections",
@@ -471,6 +500,35 @@ export const translations = {
       themeLabel: "Weergave",
       themeDark: "Donker",
       themeLight: "Licht",
+      notificationsTitle: "Nieuwe video meldingen",
+      notificationsBody:
+        "Ontvang YouTube-achtige pushmeldingen wanneer de achtergrondscan een nieuwe video in je feed vindt.",
+      notificationsEnable: "Meldingen aan",
+      notificationsDisable: "Uitzetten",
+      notificationsTest: "Test sturen",
+      notificationsOn: "Aan",
+      notificationsOff: "Uit",
+      notificationsUnavailable: "Niet beschikbaar",
+      notificationsUnsupported:
+        "Deze browser kan geen web pushmeldingen ontvangen.",
+      notificationsNeedsHttps:
+        "Meldingen hebben HTTPS nodig. Gebruik een reverse proxy of vertrouwd certificaat voor je Youtarr Feed URL.",
+      notificationsNeedsHomeScreen:
+        "Op iPhone en iPad moet je Youtarr Feed openen via de app op je beginscherm voordat je meldingen aanzet.",
+      notificationsServerDisabled: "Meldingen zijn server-side uitgezet.",
+      notificationsPermissionDenied:
+        "Meldingstoestemming is geblokkeerd. Zet dit opnieuw aan in iOS-instellingen voor deze webapp.",
+      notificationsConfigError: "Melding-instellingen laden mislukt.",
+      notificationsEnableError: "Meldingen aanzetten mislukt.",
+      notificationsDisableError: "Meldingen uitzetten mislukt.",
+      notificationsTestError: "Testmelding sturen mislukt.",
+      notificationsEnabledMessage: "Meldingen staan aan voor dit apparaat.",
+      notificationsDisabledMessage: "Meldingen staan uit voor dit apparaat.",
+      notificationsTestSent: "Testmelding verstuurd.",
+      notificationsDeviceStatus: (status: string, count: number) =>
+        `${status} op dit apparaat · ${count} gekoppelde apparaat${
+          count === 1 ? "" : "en"
+        }`,
       diagnosticsEyebrow: "Diagnose",
       diagnosticsTitle: "Achterliggende verbindingen",
       checkConnections: "Verbindingen checken",

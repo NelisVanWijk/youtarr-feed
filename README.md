@@ -31,6 +31,8 @@ tokens, API keys, and Plex tokens are never sent to the browser.
 - Local downloads tab.
 - Optional direct local file streaming with HTTP Range support.
 - Server-side feed cache for fast app opens.
+- Optional Web Push notifications for new feed videos, with channel name, video
+  title, app icon, and thumbnail where the browser/OS supports rich images.
 - Optional YouTube Data API fallback for exact publish timestamps.
 - Optional Floatplane tab for subscribed Floatplane videos, kept separate from
   YouTube/Youtarr content.
@@ -136,6 +138,9 @@ are stored there and survive container updates:
 /mnt/user/appdata/youtarr-feed/local-videos-cache.json
 /mnt/user/appdata/youtarr-feed/floatplane-feed-cache.json
 /mnt/user/appdata/youtarr-feed/floatplane-session.json
+/mnt/user/appdata/youtarr-feed/push-subscriptions.json
+/mnt/user/appdata/youtarr-feed/push-vapid.json
+/mnt/user/appdata/youtarr-feed/notification-state.json
 /mnt/user/appdata/youtarr-feed/single-videos.json
 ```
 
@@ -220,6 +225,23 @@ http://SERVER-IP:3090
 
 On iPhone, open the site in Safari and use Share -> Add to Home Screen.
 
+### New Video Notifications
+
+Youtarr Feed can send Web Push notifications when the background feed refresh
+finds new videos. The first scan only builds the baseline, so it will not spam
+you for everything already in the feed. Later scans notify for newly discovered
+videos and then mark the current feed as seen.
+
+For iPhone and iPad, open Youtarr Feed from the Home Screen web app and serve it
+over HTTPS or another trusted secure context. Then open Settings inside Youtarr
+Feed, enable `New video alerts`, and use `Send test` once. The notification
+payload includes the channel name, video title, app icon, and video thumbnail,
+but iOS may choose how much rich artwork it shows.
+
+No Apple Developer account is required. If you do not provide VAPID keys, the
+app generates them once and stores them in `/data/push-vapid.json`; keep `/data`
+persistent so subscriptions survive container updates.
+
 ## Environment Variables
 
 | Variable | Required | Description |
@@ -234,6 +256,11 @@ On iPhone, open the site in Safari and use Share -> Add to Home Screen.
 | `YOUTARR_FEED_CACHE_TTL_SECONDS` | Optional | Feed/local-video cache duration in seconds. Defaults to `300`. |
 | `YOUTARR_FEED_BACKGROUND_REFRESH_ENABLED` | Optional | Enables server-side background cache refreshes. Defaults to `true`. |
 | `YOUTARR_FEED_BACKGROUND_REFRESH_SECONDS` | Optional | Background refresh interval for feed/local/Floatplane caches. Defaults to `3600`. |
+| `YOUTARR_FEED_NOTIFICATIONS_ENABLED` | Optional | Enables Web Push notifications for newly discovered feed videos. Defaults to `true`. |
+| `YOUTARR_FEED_PUSH_SUBJECT` | Optional | VAPID contact subject, for example `mailto:you@example.com`. Defaults to `mailto:youtarr-feed@localhost`. |
+| `YOUTARR_FEED_VAPID_PUBLIC_KEY` | Optional | Existing VAPID public key. Leave empty to generate and persist one automatically. |
+| `YOUTARR_FEED_VAPID_PRIVATE_KEY` | Optional | Existing VAPID private key. Leave empty to generate and persist one automatically. |
+| `YOUTARR_FEED_NOTIFICATION_MAX_PER_SCAN` | Optional | Maximum new-video notifications sent per background scan. Defaults to `5`. |
 | `YOUTARR_MEDIA_DIR` | Recommended | Youtarr Feed container path for the mounted Youtarr output folder. |
 | `YOUTARR_SOURCE_MEDIA_DIR` | Optional | Path prefix stored by Youtarr. Defaults to `/usr/src/app/data`. |
 | `YOUTARR_PLAYBACK_PROFILE` | Optional | Playback routing mode: `auto`, `primary`, `av1`, or `vp9`. Defaults to `auto`. |
@@ -348,7 +375,8 @@ as a fallback on the first server request, and refreshes the feed, Local tab,
 and Floatplane cache every hour by default, controlled by
 `YOUTARR_FEED_BACKGROUND_REFRESH_ENABLED` and
 `YOUTARR_FEED_BACKGROUND_REFRESH_SECONDS`. The warmer never imports Plex watch
-state; Plex progress is imported only when the app opens.
+state; Plex progress is imported only when the app opens. New-video
+notifications are triggered from this background feed refresh.
 
 ## iPhone, AirPlay, And Codecs
 
