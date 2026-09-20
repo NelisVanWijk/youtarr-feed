@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { sendTestPushNotification } from "../../../../lib/notifications";
+import {
+  PushDeliveryError,
+  sendTestPushNotification,
+} from "../../../../lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +16,15 @@ export async function POST(request: Request) {
       ...(await sendTestPushNotification(body.subscription)),
     });
   } catch (error) {
+    if (error instanceof PushDeliveryError) {
+      return NextResponse.json(
+        {
+          error: error.message,
+          ...error.result,
+        },
+        { status: 502 }
+      );
+    }
     return NextResponse.json(
       {
         error:

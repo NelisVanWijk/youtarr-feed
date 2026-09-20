@@ -41,6 +41,25 @@ type NotificationPayload = {
   badgeCount?: number;
 };
 
+type PushSendResult = {
+  attempted: number;
+  sent: number;
+  removed: number;
+  failed: number;
+  subscriberCount: number;
+  errors: string[];
+};
+
+export class PushDeliveryError extends Error {
+  result: PushSendResult;
+
+  constructor(message: string, result: PushSendResult) {
+    super(message);
+    this.name = "PushDeliveryError";
+    this.result = result;
+  }
+}
+
 const pushStorePath = appDataPath("push-subscriptions.json");
 const vapidStorePath = appDataPath("push-vapid.json");
 const notificationStatePath = appDataPath("notification-state.json");
@@ -198,14 +217,44 @@ function isExpiredSubscription(error: unknown) {
   return statusCode === 404 || statusCode === 410;
 }
 
+function describePushError(error: unknown) {
+  const pushError = error as WebPushError | undefined;
+  const statusCode = pushError?.statusCode;
+  const message =
+    error instanceof Error && error.message
+      ? error.message
+      : "Push delivery failed";
+  return statusCode ? `${statusCode}: ${message}` : message;
+}
+
 async function sendPayloadToSubscriptions(payload: NotificationPayload) {
-  if (!notificationsEnabled) return { sent: 0, removed: 0 };
+  if (!notificationsEnabled) {
+    return {
+      attempted: 0,
+      sent: 0,
+      removed: 0,
+      failed: 0,
+      subscriberCount: 0,
+      errors: [],
+    };
+  }
   await configureVapid();
   const store = await readPushStore();
-  if (store.subscriptions.length === 0) return { sent: 0, removed: 0 };
+  if (store.subscriptions.length === 0) {
+    return {
+      attempted: 0,
+      sent: 0,
+      removed: 0,
+      failed: 0,
+      subscriberCount: 0,
+      errors: [],
+    };
+  }
 
   let sent = 0;
   let removed = 0;
+  let failed = 0;
+  const errors = new Set<string>();
   const survivors: StoredPushSubscription[] = [];
   await Promise.all(
     store.subscriptions.map(async (subscription) => {
@@ -222,6 +271,8 @@ async function sendPayloadToSubscriptions(payload: NotificationPayload) {
           removed += 1;
           return;
         }
+        failed += 1;
+        errors.add(describePushError(error));
         const failureCount = (subscription.failureCount || 0) + 1;
         if (failureCount >= 3) {
           removed += 1;
@@ -233,7 +284,14 @@ async function sendPayloadToSubscriptions(payload: NotificationPayload) {
   );
 
   await writePushStore({ version: 1, subscriptions: survivors });
-  return { sent, removed };
+  return {
+    attempted: store.subscriptions.length,
+    sent,
+    removed,
+    failed,
+    subscriberCount: survivors.length,
+    errors: [...errors].slice(0, 3),
+  };
 }
 
 export async function getPushPublicConfig() {
@@ -311,16 +369,29 @@ export async function sendTestPushNotification(subscription?: unknown) {
   if (subscription && isValidSubscription(subscription)) {
     await savePushSubscription(subscription);
   }
-  return sendPayloadToSubscriptions({
+  const result = await sendPayloadToSubscriptions({
     title: "Youtarr Feed",
     body: "Notifications are ready for new videos.",
     icon: "/icon-512.png",
     badge: "/apple-touch-icon.png",
-    tag: "youtarr-feed-test",
+    tag: `youtarr-feed-test-${Date.now()}`,
     url: "/",
     videoId: "test",
     badgeCount: 1,
   });
+  if (result.sent > 0) return result;
+
+  const message =
+    result.attempted === 0
+      ? "No push subscriptions are saved for this browser."
+      : result.removed > 0
+        ? "The saved push subscription expired. Disable notifications, enable them again, and retry."
+        : result.failed > 0
+          ? `The push service rejected the test notification${
+              result.errors[0] ? ` (${result.errors[0]})` : ""
+            }. Disable notifications, enable them again, and retry.`
+          : "The test notification was not accepted by the push service.";
+  throw new PushDeliveryError(message, result);
 }
 
 export async function notifyNewFeedVideos(videos: FeedVideo[]) {

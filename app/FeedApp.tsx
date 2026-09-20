@@ -1153,12 +1153,17 @@ export default function FeedApp() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ subscription: subscription.toJSON() }),
       });
-      const data = (await response.json()) as { error?: string };
+      const data = (await response.json()) as {
+        error?: string;
+        sent?: number;
+      };
       if (!response.ok) {
         throw new Error(data.error || copy.settings.notificationsTestError);
       }
       setPushSubscribed(true);
-      setNotificationMessage(copy.settings.notificationsTestSent);
+      setNotificationMessage(
+        copy.settings.notificationsTestAccepted(data.sent || 0)
+      );
       setNotificationMessageKind("success");
       void refreshNotificationSettings();
     } catch (error) {

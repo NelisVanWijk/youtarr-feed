@@ -255,8 +255,12 @@ export const translations = {
       notificationsEnabledMessage: "Notifications are enabled for this device.",
       notificationsDisabledMessage: "Notifications are disabled for this device.",
       notificationsTestSent: "Test notification sent.",
+      notificationsTestAccepted: (count: number) =>
+        `Push service accepted the test for ${count} device${
+          count === 1 ? "" : "s"
+        }.`,
       notificationsDeviceStatus: (status: string, count: number) =>
-        `${status} on this device · ${count} subscribed device${
+        `This device: ${status} - ${count} subscribed device${
           count === 1 ? "" : "s"
         }`,
       diagnosticsEyebrow: "Diagnostics",
@@ -525,8 +529,12 @@ export const translations = {
       notificationsEnabledMessage: "Meldingen staan aan voor dit apparaat.",
       notificationsDisabledMessage: "Meldingen staan uit voor dit apparaat.",
       notificationsTestSent: "Testmelding verstuurd.",
+      notificationsTestAccepted: (count: number) =>
+        `Push-service heeft de test geaccepteerd voor ${count} apparaat${
+          count === 1 ? "" : "en"
+        }.`,
       notificationsDeviceStatus: (status: string, count: number) =>
-        `${status} op dit apparaat · ${count} gekoppelde apparaat${
+        `Dit apparaat: ${status} - ${count} gekoppelde apparaat${
           count === 1 ? "" : "en"
         }`,
       diagnosticsEyebrow: "Diagnose",

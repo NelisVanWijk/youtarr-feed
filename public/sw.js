@@ -1,3 +1,11 @@
+self.addEventListener("install", () => {
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 self.addEventListener("push", (event) => {
   let payload = {};
   try {
@@ -11,13 +19,17 @@ self.addEventListener("push", (event) => {
     body: payload.body || "New video available.",
     icon: payload.icon || "/icon-512.png",
     badge: payload.badge || "/apple-touch-icon.png",
-    image: payload.image,
     tag: payload.tag || "youtarr-feed",
+    renotify: true,
+    silent: false,
     data: {
       url: payload.url || "/",
       videoId: payload.videoId,
     },
   };
+  if (payload.image) {
+    options.image = payload.image;
+  }
 
   event.waitUntil(
     Promise.all([
