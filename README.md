@@ -257,7 +257,7 @@ persistent so subscriptions survive container updates.
 | `YOUTARR_FEED_BACKGROUND_REFRESH_ENABLED` | Optional | Enables server-side background cache refreshes. Defaults to `true`. |
 | `YOUTARR_FEED_BACKGROUND_REFRESH_SECONDS` | Optional | Background refresh interval for feed/local/Floatplane caches. Defaults to `3600`. |
 | `YOUTARR_FEED_NOTIFICATIONS_ENABLED` | Optional | Enables Web Push notifications for newly discovered feed videos. Defaults to `true`. |
-| `YOUTARR_FEED_PUSH_SUBJECT` | Optional | VAPID contact subject, for example `mailto:you@example.com`. Defaults to `mailto:youtarr-feed@localhost`. |
+| `YOUTARR_FEED_PUSH_SUBJECT` | Optional | VAPID contact subject, for example `mailto:you@example.com`. Defaults to `mailto:youtarr-feed@example.com`, but using your own address is recommended. |
 | `YOUTARR_FEED_VAPID_PUBLIC_KEY` | Optional | Existing VAPID public key. Leave empty to generate and persist one automatically. |
 | `YOUTARR_FEED_VAPID_PRIVATE_KEY` | Optional | Existing VAPID private key. Leave empty to generate and persist one automatically. |
 | `YOUTARR_FEED_NOTIFICATION_MAX_PER_SCAN` | Optional | Maximum new-video notifications sent per background scan. Defaults to `5`. |

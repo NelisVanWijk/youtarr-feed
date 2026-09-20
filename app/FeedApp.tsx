@@ -170,6 +170,8 @@ function urlBase64ToUint8Array(value: string) {
   return output;
 }
 
+const pushVapidPublicKeyStorageKey = "youtarrFeedPushVapidPublicKey";
+
 function mergeVideosById(existing: FeedVideo[], incoming: FeedVideo[]) {
   const next = [...existing];
   const indices = new Map(next.map((video, index) => [video.id, index]));
@@ -1066,7 +1068,19 @@ export default function FeedApp() {
     }
     const readyRegistration = await navigator.serviceWorker.ready;
     const existing = await readyRegistration.pushManager.getSubscription();
-    if (existing) return existing;
+    const storedPublicKey = window.localStorage.getItem(
+      pushVapidPublicKeyStorageKey
+    );
+    if (existing && storedPublicKey === config.publicKey) return existing;
+    if (existing) {
+      await fetch("/api/notifications/subscriptions", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: existing.endpoint }),
+      }).catch(() => undefined);
+      await existing.unsubscribe();
+      window.localStorage.removeItem(pushVapidPublicKeyStorageKey);
+    }
 
     const permission = await Notification.requestPermission();
     setNotificationPermission(permission);
@@ -1074,10 +1088,12 @@ export default function FeedApp() {
       throw new Error(copy.settings.notificationsPermissionDenied);
     }
 
-    return readyRegistration.pushManager.subscribe({
+    const subscription = await readyRegistration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(config.publicKey),
     });
+    window.localStorage.setItem(pushVapidPublicKeyStorageKey, config.publicKey);
+    return subscription;
   }
 
   async function enableNotifications() {
@@ -1116,16 +1132,25 @@ export default function FeedApp() {
     setNotificationMessage("");
     setNotificationMessageKind("idle");
     try {
-      const registration = await navigator.serviceWorker.getRegistration("/");
-      const subscription = await registration?.pushManager.getSubscription();
-      if (subscription) {
+      const registrations =
+        "getRegistrations" in navigator.serviceWorker
+          ? await navigator.serviceWorker.getRegistrations()
+          : [
+              await navigator.serviceWorker.getRegistration("/"),
+            ].filter((registration): registration is ServiceWorkerRegistration =>
+              Boolean(registration)
+            );
+      for (const registration of registrations) {
+        const subscription = await registration.pushManager.getSubscription();
+        if (!subscription) continue;
         await fetch("/api/notifications/subscriptions", {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ endpoint: subscription.endpoint }),
-        });
+        }).catch(() => undefined);
         await subscription.unsubscribe();
       }
+      window.localStorage.removeItem(pushVapidPublicKeyStorageKey);
       setPushSubscribed(false);
       setNotificationMessage(copy.settings.notificationsDisabledMessage);
       setNotificationMessageKind("success");

@@ -70,9 +70,18 @@ const notificationMaxPerScan = Math.max(
   1,
   Number(process.env.YOUTARR_FEED_NOTIFICATION_MAX_PER_SCAN) || 5
 );
-const vapidSubject =
-  process.env.YOUTARR_FEED_PUSH_SUBJECT?.trim() ||
-  "mailto:youtarr-feed@localhost";
+
+function normalizeVapidSubject(value: string | undefined) {
+  const subject = value?.trim();
+  if (!subject || /\blocalhost\b/i.test(subject)) {
+    return "mailto:youtarr-feed@example.com";
+  }
+  return subject;
+}
+
+const vapidSubject = normalizeVapidSubject(
+  process.env.YOUTARR_FEED_PUSH_SUBJECT
+);
 
 let vapidKeysPromise: Promise<VapidStore> | null = null;
 let vapidConfigured = false;
@@ -220,11 +229,13 @@ function isExpiredSubscription(error: unknown) {
 function describePushError(error: unknown) {
   const pushError = error as WebPushError | undefined;
   const statusCode = pushError?.statusCode;
+  const body = pushError?.body?.trim();
   const message =
     error instanceof Error && error.message
       ? error.message
       : "Push delivery failed";
-  return statusCode ? `${statusCode}: ${message}` : message;
+  const detail = body ? `${message}: ${body}` : message;
+  return statusCode ? `${statusCode}: ${detail}` : detail;
 }
 
 async function sendPayloadToSubscriptions(payload: NotificationPayload) {
