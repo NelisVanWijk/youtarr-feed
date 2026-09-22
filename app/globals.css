@@ -2547,6 +2547,60 @@ html[data-theme="light"] .bottom-nav button.active {
   flex-wrap: wrap;
 }
 
+.notification-muted-channels {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.notification-muted-channels > strong {
+  color: var(--quiet);
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.notification-muted-channels > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.notification-muted-channels span {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 680;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-muted-channels button {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 12px;
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  border-radius: 17px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.notification-muted-channels button:active {
+  transform: scale(0.97);
+}
+
+.notification-muted-channels button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .notification-settings-message {
   font-size: 11px;
   font-weight: 720;

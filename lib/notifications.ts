@@ -29,6 +29,17 @@ type NotificationState = {
   lastNotifiedAt?: number;
 };
 
+export type MutedNotificationChannel = {
+  id: string;
+  name: string;
+  mutedAt: number;
+};
+
+type NotificationPreferences = {
+  version: 1;
+  mutedChannels: MutedNotificationChannel[];
+};
+
 type NotificationPayload = {
   title: string;
   body: string;
@@ -38,6 +49,10 @@ type NotificationPayload = {
   tag: string;
   url: string;
   videoId: string;
+  videoTitle?: string;
+  channelId?: string;
+  channelName?: string;
+  downloadable?: boolean;
   badgeCount?: number;
 };
 
@@ -63,6 +78,7 @@ export class PushDeliveryError extends Error {
 const pushStorePath = appDataPath("push-subscriptions.json");
 const vapidStorePath = appDataPath("push-vapid.json");
 const notificationStatePath = appDataPath("notification-state.json");
+const notificationPreferencesPath = appDataPath("notification-preferences.json");
 const notificationsEnabled =
   (process.env.YOUTARR_FEED_NOTIFICATIONS_ENABLED?.trim().toLowerCase() ||
     "true") !== "false";
@@ -87,6 +103,7 @@ let vapidKeysPromise: Promise<VapidStore> | null = null;
 let vapidConfigured = false;
 let pushWriteQueue: Promise<unknown> = Promise.resolve();
 let stateWriteQueue: Promise<unknown> = Promise.resolve();
+let preferencesWriteQueue: Promise<unknown> = Promise.resolve();
 
 function isValidSubscription(value: unknown): value is PushSubscription {
   const subscription = value as Partial<PushSubscription> | null;
@@ -133,6 +150,27 @@ function normalizeNotificationState(value: unknown): NotificationState {
   };
 }
 
+function normalizeNotificationPreferences(value: unknown): NotificationPreferences {
+  const preferences = value as Partial<NotificationPreferences> | null;
+  if (preferences?.version !== 1 || !Array.isArray(preferences.mutedChannels)) {
+    return { version: 1, mutedChannels: [] };
+  }
+  const channels = new Map<string, MutedNotificationChannel>();
+  preferences.mutedChannels.forEach((item) => {
+    if (!item || typeof item.id !== "string" || !item.id.trim()) return;
+    const id = item.id.trim();
+    channels.set(id, {
+      id,
+      name:
+        typeof item.name === "string" && item.name.trim()
+          ? item.name.trim()
+          : "Unknown channel",
+      mutedAt: Number(item.mutedAt) || Date.now(),
+    });
+  });
+  return { version: 1, mutedChannels: [...channels.values()] };
+}
+
 async function readJsonFile<T>(filePath: string, fallback: T): Promise<T> {
   try {
     return JSON.parse(await readFile(filePath, "utf8")) as T;
@@ -158,6 +196,16 @@ async function readNotificationState() {
 
 async function writeNotificationState(state: NotificationState) {
   await writeJsonAtomic(notificationStatePath, state);
+}
+
+async function readNotificationPreferences() {
+  return normalizeNotificationPreferences(
+    await readJsonFile(notificationPreferencesPath, null)
+  );
+}
+
+async function writeNotificationPreferences(preferences: NotificationPreferences) {
+  await writeJsonAtomic(notificationPreferencesPath, preferences);
 }
 
 async function getVapidKeys() {
@@ -207,16 +255,27 @@ function notificationUrl(video: FeedVideo) {
   return `/?watch=${encodeURIComponent(video.id)}`;
 }
 
+function notificationImage(video: FeedVideo) {
+  if (video.provider !== "floatplane" && /^[A-Za-z0-9_-]{11}$/.test(video.id)) {
+    return `https://i.ytimg.com/vi/${video.id}/mqdefault.jpg`;
+  }
+  return video.thumbnail || undefined;
+}
+
 function notificationPayload(video: FeedVideo, badgeCount: number): NotificationPayload {
   return {
-    title: video.channelName || "Youtarr Feed",
-    body: video.title,
+    title: video.title,
+    body: video.channelName || "New video",
     icon: "/icon-512.png",
     badge: "/apple-touch-icon.png",
-    image: video.thumbnail || undefined,
+    image: notificationImage(video),
     tag: `new-video-${video.id}`,
     url: notificationUrl(video),
     videoId: video.id,
+    videoTitle: video.title,
+    channelId: video.channelId,
+    channelName: video.channelName,
+    downloadable: video.provider !== "floatplane" && !video.downloaded,
     badgeCount,
   };
 }
@@ -311,14 +370,56 @@ export async function getPushPublicConfig() {
       enabled: false,
       publicKey: null,
       subscriberCount: 0,
+      mutedChannels: [],
     };
   }
-  const [keys, store] = await Promise.all([getVapidKeys(), readPushStore()]);
+  const [keys, store, preferences] = await Promise.all([
+    getVapidKeys(),
+    readPushStore(),
+    readNotificationPreferences(),
+  ]);
   return {
     enabled: true,
     publicKey: keys.publicKey,
     subscriberCount: store.subscriptions.length,
+    mutedChannels: preferences.mutedChannels.sort((left, right) =>
+      left.name.localeCompare(right.name)
+    ),
   };
+}
+
+export async function setChannelNotificationMuted(
+  channelId: unknown,
+  channelName: unknown,
+  muted: unknown
+) {
+  if (typeof channelId !== "string" || !channelId.trim() || channelId.length > 200) {
+    throw new Error("Invalid channel");
+  }
+  if (typeof muted !== "boolean") {
+    throw new Error("Invalid notification preference");
+  }
+  const id = channelId.trim();
+  const name =
+    typeof channelName === "string" && channelName.trim()
+      ? channelName.trim().slice(0, 200)
+      : "Unknown channel";
+  const result = preferencesWriteQueue
+    .catch(() => undefined)
+    .then(async () => {
+      const preferences = await readNotificationPreferences();
+      const mutedChannels = preferences.mutedChannels.filter(
+        (channel) => channel.id !== id
+      );
+      if (muted) {
+        mutedChannels.push({ id, name, mutedAt: Date.now() });
+      }
+      const next = { version: 1 as const, mutedChannels };
+      await writeNotificationPreferences(next);
+      return next.mutedChannels;
+    });
+  preferencesWriteQueue = result;
+  return result;
 }
 
 export async function savePushSubscription(
@@ -431,20 +532,28 @@ export async function notifyNewFeedVideos(videos: FeedVideo[]) {
           const rightTime = right.publishedAt ? Date.parse(right.publishedAt) : 0;
           return rightTime - leftTime;
         });
+      const preferences = await readNotificationPreferences();
+      const mutedChannelIds = new Set(
+        preferences.mutedChannels.map((channel) => channel.id)
+      );
+      const notifiableVideos = newVideos.filter(
+        (video) => !mutedChannelIds.has(video.channelId)
+      );
       const now = Date.now();
       await writeNotificationState({
         version: 1,
         seenVideoIds: currentVideoIds,
         lastScanAt: now,
-        lastNotifiedAt: newVideos.length > 0 ? now : state.lastNotifiedAt,
+        lastNotifiedAt:
+          notifiableVideos.length > 0 ? now : state.lastNotifiedAt,
       });
 
       await Promise.all(
-        newVideos
+        notifiableVideos
           .slice(0, notificationMaxPerScan)
           .map((video) =>
             sendPayloadToSubscriptions(
-              notificationPayload(video, Math.min(newVideos.length, 99))
+              notificationPayload(video, Math.min(notifiableVideos.length, 99))
             )
           )
       );

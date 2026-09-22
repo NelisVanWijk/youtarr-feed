@@ -259,6 +259,11 @@ export const translations = {
         `Push service accepted the test for ${count} device${
           count === 1 ? "" : "s"
         }.`,
+      notificationsMutedChannels: "Muted channels",
+      notificationsUnmute: "Turn alerts back on",
+      notificationsUnmuteError: "Could not turn channel alerts back on.",
+      notificationsUnmuted: (channel: string) =>
+        `New video alerts are back on for ${channel}.`,
       notificationsDeviceStatus: (status: string, count: number) =>
         `This device: ${status} - ${count} subscribed device${
           count === 1 ? "" : "s"
@@ -533,6 +538,11 @@ export const translations = {
         `Push-service heeft de test geaccepteerd voor ${count} apparaat${
           count === 1 ? "" : "en"
         }.`,
+      notificationsMutedChannels: "Gedempte kanalen",
+      notificationsUnmute: "Meldingen weer aan",
+      notificationsUnmuteError: "Kanaalmeldingen aanzetten mislukt.",
+      notificationsUnmuted: (channel: string) =>
+        `Nieuwe videomeldingen staan weer aan voor ${channel}.`,
       notificationsDeviceStatus: (status: string, count: number) =>
         `Dit apparaat: ${status} - ${count} gekoppelde apparaat${
           count === 1 ? "" : "en"

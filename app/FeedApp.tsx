@@ -110,6 +110,11 @@ type PushPublicConfig = {
   enabled: boolean;
   publicKey: string | null;
   subscriberCount: number;
+  mutedChannels?: Array<{
+    id: string;
+    name: string;
+    mutedAt: number;
+  }>;
   error?: string;
 };
 type PlayerDragState = {
@@ -1203,6 +1208,46 @@ export default function FeedApp() {
     }
   }
 
+  async function unmuteNotificationChannel(channel: { id: string; name: string }) {
+    setNotificationBusy(true);
+    setNotificationMessage("");
+    setNotificationMessageKind("idle");
+    try {
+      const response = await fetch("/api/notifications/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          channelId: channel.id,
+          channelName: channel.name,
+          muted: false,
+        }),
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        mutedChannels?: PushPublicConfig["mutedChannels"];
+      };
+      if (!response.ok) {
+        throw new Error(data.error || copy.settings.notificationsUnmuteError);
+      }
+      setNotificationConfig((current) =>
+        current
+          ? { ...current, mutedChannels: data.mutedChannels || [] }
+          : current
+      );
+      setNotificationMessage(copy.settings.notificationsUnmuted(channel.name));
+      setNotificationMessageKind("success");
+    } catch (error) {
+      setNotificationMessage(
+        error instanceof Error
+          ? error.message
+          : copy.settings.notificationsUnmuteError
+      );
+      setNotificationMessageKind("error");
+    } finally {
+      setNotificationBusy(false);
+    }
+  }
+
   async function submitFloatplaneSessionToken(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const token = floatplaneSessionToken.trim();
@@ -1263,6 +1308,13 @@ export default function FeedApp() {
     }, 0);
     return () => window.clearTimeout(timer);
   }, [refreshNotificationSettings, refreshStatus, settingsOpen]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!new URLSearchParams(window.location.search).has("settings")) return;
+    const timer = window.setTimeout(() => setSettingsOpen(true), 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const shouldLockScroll =
@@ -4229,6 +4281,23 @@ export default function FeedApp() {
                   {copy.settings.notificationsTest}
                 </button>
               </div>
+              {(notificationConfig?.mutedChannels?.length || 0) > 0 && (
+                <div className="notification-muted-channels">
+                  <strong>{copy.settings.notificationsMutedChannels}</strong>
+                  {notificationConfig?.mutedChannels?.map((channel) => (
+                    <div key={channel.id}>
+                      <span>{channel.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => void unmuteNotificationChannel(channel)}
+                        disabled={notificationBusy}
+                      >
+                        {copy.settings.notificationsUnmute}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
               {notificationMessage && (
                 <small
                   className={`notification-settings-message ${

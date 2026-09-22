@@ -235,8 +235,16 @@ videos and then mark the current feed as seen.
 For iPhone and iPad, open Youtarr Feed from the Home Screen web app and serve it
 over HTTPS or another trusted secure context. Then open Settings inside Youtarr
 Feed, enable `New video alerts`, and use `Send test` once. The notification
-payload includes the channel name, video title, app icon, and video thumbnail,
-but iOS may choose how much rich artwork it shows.
+payload uses the video title as its heading and includes the channel name, app
+icon, and 16:9 video thumbnail. Browsers with Notification Actions support also
+offer `Download` and `Mute channel`; muted channels can be restored from the
+notification settings in the app.
+
+iOS and iPadOS currently ignore the Web Notifications `image` and custom
+`actions` fields. Their Home Screen web-app notifications therefore keep the
+app icon, system-added `from Youtarr` attribution, and the standard `View`
+action. Those parts require a native iOS app to customize; Chromium-based
+browsers can show the supplied thumbnail and actions.
 
 No Apple Developer account is required. If you do not provide VAPID keys, the
 app generates them once and stores them in `/data/push-vapid.json`; keep `/data`
