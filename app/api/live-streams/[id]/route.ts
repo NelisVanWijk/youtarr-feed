@@ -10,6 +10,9 @@ export const dynamic = "force-dynamic";
 
 async function fetchManifest(request: Request, id: string, refresh = false) {
   const playback = await getLivePlayback(id, { refresh });
+  if (playback.playbackMode !== "hls") {
+    throw new Error("This live stream is using the YouTube player fallback");
+  }
   const upstream = await fetchYouTubeMedia(
     playback.url,
     youtubeMediaRequestHeaders(request)

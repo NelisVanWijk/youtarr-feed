@@ -3069,6 +3069,9 @@ export default function FeedApp() {
     (mode === "live" ||
       selectedVideo?.provider === "floatplane" ||
       selectedVideo?.provider === "youtube-live");
+  const livePlaybackEmbed =
+    selectedVideo?.provider === "youtube-live" &&
+    streamSource?.stream?.playbackMode === "embed";
   const showYoutarrPlaybackOverride =
     selectedVideoPlayable &&
     selectedVideo?.provider !== "floatplane" &&
@@ -3972,7 +3975,7 @@ export default function FeedApp() {
                 >
                   <FontAwesomeIcon icon={faMinus} aria-hidden="true" />
                 </button>
-                {selectedVideoPlayable && (
+                {selectedVideoPlayable && !livePlaybackEmbed && (
                   <button
                     className="player-action-button"
                     onClick={requestPlayerFullscreen}
@@ -3981,7 +3984,7 @@ export default function FeedApp() {
                     <FontAwesomeIcon icon={faExpand} aria-hidden="true" />
                   </button>
                 )}
-                {standaloneMode && selectedVideoPlayable && (
+                {standaloneMode && selectedVideoPlayable && !livePlaybackEmbed && (
                   <button
                     className="player-action-button"
                     onClick={() => {
@@ -4007,6 +4010,15 @@ export default function FeedApp() {
                     playerDragRef.current = null;
                   }}
                 >
+                  {livePlaybackEmbed ? (
+                    <iframe
+                      className="player player-embed"
+                      src={streamSource?.stream?.url}
+                      title={selectedVideo.title}
+                      allow="autoplay; encrypted-media; picture-in-picture"
+                      allowFullScreen
+                    />
+                  ) : (
                   <video
                     ref={playerRef}
                     className="player"
@@ -4124,8 +4136,9 @@ export default function FeedApp() {
                       }));
                     }}
                   />
+                  )}
                 </div>
-                {playerMode === "mini" && (
+                {playerMode === "mini" && !livePlaybackEmbed && (
                   <div
                     className="mini-player-controls"
                     onPointerDown={(event) => event.stopPropagation()}
@@ -4250,7 +4263,7 @@ export default function FeedApp() {
                         </span>
                       </button>
                     )}
-                    <button
+                    {!livePlaybackEmbed && <button
                       className="icon-secondary-button watch-action-chip"
                       onClick={() => openSelectedVideoInVlc(selectedVideo)}
                       title={copy.player.openInVlc}
@@ -4258,7 +4271,7 @@ export default function FeedApp() {
                     >
                       <FontAwesomeIcon icon={faUpRightFromSquare} aria-hidden="true" />
                       <span>{copy.player.openInVlc}</span>
-                    </button>
+                    </button>}
                     {selectedVideo.provider === "youtube-live" ? (
                       <button
                         className="icon-danger-button watch-action-chip"

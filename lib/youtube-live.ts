@@ -43,13 +43,33 @@ type YtDlpInfo = {
   formats?: YtDlpFormat[];
 };
 
+type YouTubePlayerResponse = {
+  videoDetails?: {
+    videoId?: string;
+    title?: string;
+    channelId?: string;
+    author?: string;
+    shortDescription?: string;
+    isLive?: boolean;
+    thumbnail?: { thumbnails?: Array<{ url?: string }> };
+  };
+  streamingData?: { hlsManifestUrl?: string };
+};
+
+const livePlayerClients = [
+  "web_safari",
+  "web_embedded",
+  "tv_simply",
+  "default",
+] as const;
+
 export type YouTubeLivePlayback = {
   url: string;
   label: string;
   codec: string;
   height: number | null;
   mimeType: string;
-  playbackMode: "hls";
+  playbackMode: "hls" | "embed";
 };
 
 const storePath = appDataPath("live-streams.json");
@@ -126,17 +146,20 @@ function toFeedVideo(stream: StoredLiveStream): FeedVideo {
   };
 }
 
-function runYtDlp(videoId: string) {
+function runYtDlpOnce(videoId: string, playerClient: string) {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const args = [
+    "--ignore-config",
     "--dump-single-json",
     "--skip-download",
     "--no-playlist",
     "--no-warnings",
     "--js-runtimes",
     "node",
+    "--remote-components",
+    "ejs:github",
     "--extractor-args",
-    "youtube:player_client=web_safari",
+    `youtube:player_client=${playerClient}`,
     "--",
     url,
   ];
@@ -202,6 +225,159 @@ function runYtDlp(videoId: string) {
   });
 }
 
+function extractPlayerResponse(html: string): YouTubePlayerResponse | null {
+  const marker = "ytInitialPlayerResponse =";
+  const markerIndex = html.indexOf(marker);
+  if (markerIndex < 0) return null;
+  const start = html.indexOf("{", markerIndex + marker.length);
+  if (start < 0) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < html.length; index += 1) {
+    const character = html[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === '"') inString = false;
+      continue;
+    }
+    if (character === '"') {
+      inString = true;
+      continue;
+    }
+    if (character === "{") depth += 1;
+    if (character === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        try {
+          return JSON.parse(html.slice(start, index + 1)) as YouTubePlayerResponse;
+        } catch {
+          return null;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+async function runYouTubePageFallback(videoId: string) {
+  const pageUrls = Array.from({ length: 8 }, (_, index) => {
+    const suffixes = [
+      "",
+      "&hl=en&gl=US",
+      "&bpctr=9999999999",
+      "&hl=en&gl=US&app=desktop",
+    ];
+    return `https://www.youtube.com/watch?v=${videoId}${suffixes[index % suffixes.length]}`;
+  });
+  let playerResponse: YouTubePlayerResponse | null = null;
+  let lastError: Error | null = null;
+  for (const pageUrl of pageUrls) {
+    try {
+      const response = await fetch(pageUrl, {
+        headers: {
+          Accept: "text/html,application/xhtml+xml",
+          "Accept-Language": "en-US,en;q=0.8",
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15",
+        },
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        throw new Error(`YouTube page request failed (${response.status})`);
+      }
+      const candidate = extractPlayerResponse(await response.text());
+      if (!candidate) {
+        throw new Error("YouTube did not return a playable player response");
+      }
+      playerResponse = candidate;
+      if (candidate.streamingData?.hlsManifestUrl) break;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+    }
+  }
+  if (!playerResponse) throw lastError || new Error("YouTube page request failed");
+
+  const details = playerResponse.videoDetails || {};
+  const hlsManifestUrl = playerResponse.streamingData?.hlsManifestUrl;
+  return {
+    id: details.videoId || videoId,
+    title: details.title,
+    channel: details.author,
+    channel_id: details.channelId,
+    thumbnail: details.thumbnail?.thumbnails?.at(-1)?.url,
+    description: details.shortDescription,
+    webpage_url: `https://www.youtube.com/watch?v=${videoId}`,
+    is_live: details.isLive,
+    live_status: details.isLive ? "is_live" : undefined,
+    formats: hlsManifestUrl
+      ? [
+          {
+            url: hlsManifestUrl,
+            protocol: "m3u8",
+            vcodec: "avc1",
+            acodec: "mp4a",
+            format_id: "youtube-page-hls",
+            ext: "mp4",
+          },
+        ]
+      : [],
+  } satisfies YtDlpInfo;
+}
+
+async function runYtDlp(videoId: string) {
+  let lastError: Error | null = null;
+  let lastInfo: YtDlpInfo | null = null;
+
+  try {
+    const info = await runYouTubePageFallback(videoId);
+    if (
+      (info.formats || []).some(
+        (format) =>
+          Boolean(format.url) &&
+          isHlsFormat(format) &&
+          isAppleVideoCodec(format.vcodec) &&
+          isAppleAudioCodec(format.acodec)
+      )
+    ) {
+      return info;
+    }
+    lastInfo = info;
+  } catch (error) {
+    lastError = error instanceof Error ? error : new Error(String(error));
+  }
+
+  for (const playerClient of livePlayerClients) {
+    try {
+      const info = await runYtDlpOnce(videoId, playerClient);
+      lastInfo = info;
+      const hasCompatibleHls = (info.formats || []).some(
+        (format) =>
+          Boolean(format.url) &&
+          isHlsFormat(format) &&
+          isAppleVideoCodec(format.vcodec) &&
+          isAppleAudioCodec(format.acodec)
+      );
+      if (hasCompatibleHls) return info;
+      lastError = new Error("YouTube returned no playable HLS formats");
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      if (!/no video formats|formats found|no playable formats/i.test(lastError.message)) {
+        if (lastInfo?.is_live === true) break;
+        throw lastError;
+      }
+    }
+  }
+  if (lastInfo && (lastInfo.is_live === true || !lastError)) return lastInfo;
+  throw new Error(
+    lastError && /no video formats|formats found|no playable formats/i.test(lastError.message)
+      ? "YouTube did not expose a playable HLS format for this live stream. Check that it is public and currently live, then retry."
+      : lastError?.message || "YouTube live stream resolution failed"
+  );
+}
+
 function isHlsFormat(format: YtDlpFormat) {
   return (
     format.protocol?.toLowerCase().includes("m3u8") === true ||
@@ -236,8 +412,20 @@ function selectPlayback(info: YtDlpInfo): YouTubeLivePlayback {
       (Number(right.tbr) || 0) - (Number(left.tbr) || 0)
   )[0];
   if (!selected?.url) {
+    if (info.is_live === true && info.id) {
+      return {
+        url: `https://www.youtube.com/embed/${encodeURIComponent(
+          info.id
+        )}?autoplay=1&playsinline=1&rel=0`,
+        label: "YouTube Live player",
+        codec: "YouTube player",
+        height: null,
+        mimeType: "text/html",
+        playbackMode: "embed",
+      };
+    }
     throw new Error(
-      "This live stream has no combined H.264/AAC HLS version for Apple devices"
+      "YouTube did not expose a combined H.264/AAC HLS version for Apple devices"
     );
   }
   const height = Number(selected.height) || null;

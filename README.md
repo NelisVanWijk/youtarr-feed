@@ -87,9 +87,13 @@ container updates when `/data` is persistent.
 
 This depends on YouTube and `yt-dlp` continuing to expose a combined
 H.264/AAC HLS rendition. Upcoming, ended, members-only, or incompatible
-streams are rejected with a clear message. YouTube can change its delivery at
-any time, so this feature is intentionally best-effort and is not a promise
-that advertisements or every stream restriction will be removed. See the
+streams are rejected with a clear message. When YouTube exposes the stream
+only as separate adaptive tracks, the app keeps the live link and falls back
+to the official YouTube embedded player so the stream remains watchable. That
+fallback can show YouTube's normal player UI and advertisements. YouTube can
+change its delivery at any time, so this feature is intentionally best-effort
+and is not a promise that advertisements or every stream restriction will be
+removed. See the
 [yt-dlp EJS documentation](https://github.com/yt-dlp/yt-dlp/wiki/EJS) when a
 future YouTube change requires additional runtime support.
 
