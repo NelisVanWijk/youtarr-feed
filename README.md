@@ -36,6 +36,8 @@ tokens, API keys, and Plex tokens are never sent to the browser.
 - Optional YouTube Data API fallback for exact publish timestamps.
 - Optional Floatplane tab for subscribed Floatplane videos, kept separate from
   YouTube/Youtarr content.
+- Optional YouTube Live tab for saving currently live streams and playing a
+  direct H.264/AAC HLS feed without downloading the stream.
 - English UI by default, with Dutch available.
 - iPhone/PWA manifest with portrait orientation.
 
@@ -67,6 +69,29 @@ Downloaded thumbnails show a compact badge:
 
 Deletes still go through Youtarr, even when playback is direct. Youtarr remains
 the owner of downloads and library state.
+
+## YouTube Live
+
+The Live tab is an experimental separate path for currently live YouTube
+streams. Paste a live YouTube URL in the Live tab or use the plus menu. The
+server checks the URL with the official `yt-dlp` executable bundled in the
+Docker image, selects the highest combined H.264/AAC HLS format, and proxies
+the playlist through Youtarr Feed so Safari, iPhone, iPad, and compatible
+desktop browsers can use the same player.
+
+Live entries are links, not downloads. They do not create Youtarr download
+jobs and they do not write watch progress. The app re-resolves the HLS URL
+after the short server-side cache expires, so it can follow YouTube's changing
+stream URLs. Saved links live in `/data/live-streams.json` and survive
+container updates when `/data` is persistent.
+
+This depends on YouTube and `yt-dlp` continuing to expose a combined
+H.264/AAC HLS rendition. Upcoming, ended, members-only, or incompatible
+streams are rejected with a clear message. YouTube can change its delivery at
+any time, so this feature is intentionally best-effort and is not a promise
+that advertisements or every stream restriction will be removed. See the
+[yt-dlp EJS documentation](https://github.com/yt-dlp/yt-dlp/wiki/EJS) when a
+future YouTube change requires additional runtime support.
 
 ## Recommended Mount Layout
 
@@ -142,6 +167,7 @@ are stored there and survive container updates:
 /mnt/user/appdata/youtarr-feed/push-vapid.json
 /mnt/user/appdata/youtarr-feed/notification-state.json
 /mnt/user/appdata/youtarr-feed/single-videos.json
+/mnt/user/appdata/youtarr-feed/live-streams.json
 ```
 
 The template includes:
@@ -264,6 +290,9 @@ persistent so subscriptions survive container updates.
 | `YOUTARR_FEED_CACHE_TTL_SECONDS` | Optional | Feed/local-video cache duration in seconds. Defaults to `300`. |
 | `YOUTARR_FEED_BACKGROUND_REFRESH_ENABLED` | Optional | Enables server-side background cache refreshes. Defaults to `true`. |
 | `YOUTARR_FEED_BACKGROUND_REFRESH_SECONDS` | Optional | Background refresh interval for feed/local/Floatplane caches. Defaults to `3600`. |
+| `YOUTARR_FEED_YT_DLP_PATH` | Optional | Path to the `yt-dlp` executable for YouTube Live. The Docker image includes `yt-dlp`; defaults to `yt-dlp`. |
+| `YOUTARR_FEED_LIVE_SOURCE_CACHE_SECONDS` | Optional | Seconds to reuse a resolved Live HLS URL. Defaults to `300`, minimum `30`. |
+| `YOUTARR_FEED_LIVE_RESOLVE_TIMEOUT_SECONDS` | Optional | Maximum seconds for a Live HLS resolution. Defaults to `35`, minimum `10`. |
 | `YOUTARR_FEED_NOTIFICATIONS_ENABLED` | Optional | Enables Web Push notifications for newly discovered feed videos. Defaults to `true`. |
 | `YOUTARR_FEED_PUSH_SUBJECT` | Optional | VAPID contact subject, for example `mailto:you@example.com`. Defaults to `mailto:youtarr-feed@example.com`, but using your own address is recommended. |
 | `YOUTARR_FEED_VAPID_PUBLIC_KEY` | Optional | Existing VAPID public key. Leave empty to generate and persist one automatically. |

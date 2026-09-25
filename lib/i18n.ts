@@ -38,6 +38,7 @@ export const translations = {
       channels: "Channels",
       floatplane: "Floatplane",
       floatplaneShort: "Float",
+      live: "Live",
     },
     common: {
       refresh: "Refresh",
@@ -56,6 +57,7 @@ export const translations = {
       markWatched: "Mark as watched",
       markUnwatched: "Mark as unwatched",
       removeFromSingles: "Remove from single videos",
+      removeFromLive: "Remove live stream",
       connected: "Connected",
       demo: "Demo",
       notConfigured: "Not connected yet",
@@ -73,6 +75,8 @@ export const translations = {
       channelBody: "Follow a YouTube channel from your feed.",
       singleTitle: "Add single video",
       singleBody: "Pin one YouTube video without following its channel.",
+      liveTitle: "Add live stream",
+      liveBody: "Save a currently live YouTube stream for direct playback.",
     },
     search: {
       placeholder: "Search your feed",
@@ -106,6 +110,9 @@ export const translations = {
       addSingle: "Could not add single video",
       removeSingle: "Could not remove single video",
       loadFloatplane: "Could not load Floatplane",
+      loadLive: "Could not load live streams",
+      addLive: "Could not add live stream",
+      removeLive: "Could not remove live stream",
     },
     activityFallback: "Youtarr is working in the background",
     feed: {
@@ -142,6 +149,21 @@ export const translations = {
       added: (title: string) => `${title} was added`,
       emptyTitle: "No single videos yet",
       emptyBody: "Paste a YouTube link above to pin it here.",
+    },
+    live: {
+      eyebrow: "Direct HLS playback",
+      title: "Live streams",
+      subtitle: "Save currently live YouTube streams and play them without downloading.",
+      placeholder: "YouTube live URL",
+      aria: "YouTube live stream URL",
+      added: (title: string) => `${title} was added to Live`,
+      emptyTitle: "No live streams yet",
+      emptyBody: "Paste a currently live YouTube URL above to add it here.",
+      badge: "Live",
+      sourceLabel: "Live HLS",
+      sourceBody: (detail: string) =>
+        detail ? `Direct live playback: ${detail}.` : "Direct live playback.",
+      confirmRemove: (title: string) => `Remove "${title}" from Live?`,
     },
     channels: {
       eyebrow: "Your library",
@@ -317,6 +339,7 @@ export const translations = {
       channels: "Kanalen",
       floatplane: "Floatplane",
       floatplaneShort: "Float",
+      live: "Live",
     },
     common: {
       refresh: "Verversen",
@@ -335,6 +358,7 @@ export const translations = {
       markWatched: "Markeren als bekeken",
       markUnwatched: "Markeren als niet bekeken",
       removeFromSingles: "Uit losse video's verwijderen",
+      removeFromLive: "Live stream verwijderen",
       connected: "Verbonden",
       demo: "Voorbeeld",
       notConfigured: "Nog niet gekoppeld",
@@ -352,6 +376,8 @@ export const translations = {
       channelBody: "Volg een YouTube-kanaal vanuit je feed.",
       singleTitle: "Losse video toevoegen",
       singleBody: "Voeg een YouTube-video toe zonder het kanaal te volgen.",
+      liveTitle: "Live stream toevoegen",
+      liveBody: "Bewaar een live YouTube-stream om hem direct af te spelen.",
     },
     search: {
       placeholder: "Zoeken in je feed",
@@ -385,6 +411,9 @@ export const translations = {
       addSingle: "Losse video toevoegen mislukte",
       removeSingle: "Losse video verwijderen mislukte",
       loadFloatplane: "Floatplane laden mislukte",
+      loadLive: "Live streams laden mislukte",
+      addLive: "Live stream toevoegen mislukte",
+      removeLive: "Live stream verwijderen mislukte",
     },
     activityFallback: "Youtarr werkt op de achtergrond",
     feed: {
@@ -421,6 +450,21 @@ export const translations = {
       added: (title: string) => `${title} is toegevoegd`,
       emptyTitle: "Nog geen losse video's",
       emptyBody: "Plak hierboven een YouTube-link om hem hier vast te zetten.",
+    },
+    live: {
+      eyebrow: "Directe HLS-weergave",
+      title: "Live streams",
+      subtitle: "Bewaar actieve YouTube-livestreams en speel ze direct af zonder download.",
+      placeholder: "YouTube live URL",
+      aria: "YouTube live stream URL",
+      added: (title: string) => `${title} is toegevoegd aan Live`,
+      emptyTitle: "Nog geen live streams",
+      emptyBody: "Plak hierboven een actieve YouTube-live-URL om hem toe te voegen.",
+      badge: "Live",
+      sourceLabel: "Live HLS",
+      sourceBody: (detail: string) =>
+        detail ? `Directe live-weergave: ${detail}.` : "Directe live-weergave.",
+      confirmRemove: (title: string) => `\"${title}\" uit Live verwijderen?`,
     },
     channels: {
       eyebrow: "Jouw bibliotheek",

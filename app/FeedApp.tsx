@@ -26,6 +26,7 @@ import {
   faPlane,
   faRotateRight,
   faThumbsUp,
+  faTowerBroadcast,
   faTrash,
   faUpRightFromSquare,
   faXmark,
@@ -53,7 +54,14 @@ import type {
   WatchProgressMap,
 } from "../lib/types";
 
-type View = "feed" | "continue" | "local" | "singles" | "channels" | "floatplane";
+type View =
+  | "feed"
+  | "continue"
+  | "local"
+  | "singles"
+  | "channels"
+  | "floatplane"
+  | "live";
 type Filter = "all" | "new" | "downloaded";
 type PlayerMode = "full" | "mini";
 type ThemeMode = "dark" | "light";
@@ -66,7 +74,7 @@ type WebKitVideoElement = HTMLVideoElement & {
   webkitSupportsPresentationMode?: (mode: "picture-in-picture") => boolean;
 };
 type StreamSourceInfo = {
-  source: "local" | "youtarr" | "floatplane";
+  source: "local" | "youtarr" | "floatplane" | "live";
   playbackProfile?: "primary" | "av1" | "vp9";
   playbackLabel?: string;
   local?: {
@@ -129,7 +137,7 @@ type DownloadJob = {
   channelId: string;
   error?: string;
 };
-type BottomView = Extract<View, "feed" | "continue" | "floatplane">;
+type BottomView = Extract<View, "feed" | "continue" | "floatplane" | "live">;
 
 const palette = ["coral", "blue", "lime", "violet", "gold"];
 const languageStorageKey = "youtarr-feed-language";
@@ -208,6 +216,8 @@ function NavIcon({ view }: { view: View }) {
             ? faLink
             : view === "floatplane"
               ? faPlane
+              : view === "live"
+                ? faTowerBroadcast
               : faList;
   return (
     <span className="nav-icon-frame">
@@ -435,14 +445,18 @@ function Thumbnail({
 }) {
   const [failed, setFailed] = useState(false);
   const localLabel =
-    video.sourceLabel ||
-    (streamSource?.source === "local"
-      ? copy.common.direct
-      : streamSource?.source === "youtarr"
-        ? copy.common.youtarr
-        : copy.feed.downloaded);
+    video.provider === "youtube-live"
+      ? copy.live.badge
+      : video.sourceLabel ||
+        (streamSource?.source === "local"
+          ? copy.common.direct
+          : streamSource?.source === "youtarr"
+            ? copy.common.youtarr
+            : copy.feed.downloaded);
   const badgeSource =
-    video.provider === "floatplane"
+    video.provider === "youtube-live"
+      ? "live"
+      : video.provider === "floatplane"
       ? "floatplane"
       : streamSource?.source === "local"
         ? "direct"
@@ -468,7 +482,11 @@ function Thumbnail({
           <span className="art-line art-line-short" />
         </div>
       )}
-      <span className="duration">{formatDuration(video.duration)}</span>
+      <span className={`duration ${video.provider === "youtube-live" ? "duration-live" : ""}`}>
+        {video.provider === "youtube-live"
+          ? copy.live.badge
+          : formatDuration(video.duration)}
+      </span>
       {video.downloaded ? (
         <span
           className={`local-badge local-badge-${badgeSource}`}
@@ -545,7 +563,9 @@ function VideoCard({
   };
   const displayVideo =
     video.watched === isWatched ? video : { ...video, watched: isWatched };
-  const managesYoutarrDownload = video.provider !== "floatplane";
+  const managesYoutarrDownload =
+    video.provider !== "floatplane" && video.provider !== "youtube-live";
+  const tracksWatchState = video.provider !== "youtube-live";
   return (
     <article className="video-card">
       <button
@@ -625,15 +645,17 @@ function VideoCard({
                         : copy.menu.redownload}
                     </button>
                   )}
-                  <button
-                    onClick={() => {
-                      setMenuOpen(false);
-                      if (isWatched) onMarkUnwatched(video);
-                      else onMarkWatched(video);
-                    }}
-                  >
-                    {isWatched ? copy.common.markUnwatched : copy.common.markWatched}
-                  </button>
+                  {tracksWatchState && (
+                    <button
+                      onClick={() => {
+                        setMenuOpen(false);
+                        if (isWatched) onMarkUnwatched(video);
+                        else onMarkWatched(video);
+                      }}
+                    >
+                      {isWatched ? copy.common.markUnwatched : copy.common.markWatched}
+                    </button>
+                  )}
                   {managesYoutarrDownload && onDelete && (
                     <button
                       className="danger-menu-item"
@@ -655,7 +677,9 @@ function VideoCard({
                     onRemoveFromList(video);
                   }}
                 >
-                  {copy.common.removeFromSingles}
+                  {video.provider === "youtube-live"
+                    ? copy.common.removeFromLive
+                    : copy.common.removeFromSingles}
                 </button>
               )}
             </div>
@@ -717,6 +741,8 @@ export default function FeedApp() {
   const [localLoading, setLocalLoading] = useState(false);
   const [singleVideos, setSingleVideos] = useState<FeedVideo[]>([]);
   const [singleLoading, setSingleLoading] = useState(false);
+  const [liveStreams, setLiveStreams] = useState<FeedVideo[]>([]);
+  const [liveLoading, setLiveLoading] = useState(false);
   const [floatplaneVideos, setFloatplaneVideos] = useState<FeedVideo[]>([]);
   const [floatplaneCreatorList, setFloatplaneCreatorList] = useState<Channel[]>([]);
   const [floatplaneChannels, setFloatplaneChannels] = useState<Channel[]>([]);
@@ -747,6 +773,11 @@ export default function FeedApp() {
     "idle" | "adding" | "added" | "error"
   >("idle");
   const [singleVideoMessage, setSingleVideoMessage] = useState("");
+  const [liveStreamUrl, setLiveStreamUrl] = useState("");
+  const [liveStreamState, setLiveStreamState] = useState<
+    "idle" | "adding" | "added" | "error"
+  >("idle");
+  const [liveStreamMessage, setLiveStreamMessage] = useState("");
   const [addSheetOpen, setAddSheetOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsChecking, setSettingsChecking] = useState(false);
@@ -1333,6 +1364,13 @@ export default function FeedApp() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => void loadLiveStreams(true), 0);
+    return () => window.clearTimeout(timer);
+    // Live stream links are stored independently and loaded once at startup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
     const standaloneQuery = window.matchMedia("(display-mode: standalone)");
     const updateStandaloneMode = () => {
       setStandaloneMode(
@@ -1494,6 +1532,9 @@ export default function FeedApp() {
     if (view === "floatplane") {
       void loadFloatplaneVideos(floatplaneVideos.length > 0);
     }
+    if (view === "live") {
+      void loadLiveStreams(liveStreams.length > 0);
+    }
     // Local loaders are intentionally local to this component; view changes drive refreshes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
@@ -1511,7 +1552,9 @@ export default function FeedApp() {
       playerMode === "full" &&
       selectedVideo &&
       selectedVideo.downloaded &&
-      (mode === "live" || selectedVideo.provider === "floatplane") &&
+      (mode === "live" ||
+        selectedVideo.provider === "floatplane" ||
+        selectedVideo.provider === "youtube-live") &&
       playerRef.current &&
       !shouldUseInlineWatchPage()
     ) {
@@ -1521,7 +1564,13 @@ export default function FeedApp() {
   }, [mode, playerMode, selectedVideo, shouldUseInlineWatchPage]);
 
   useEffect(() => {
-    if (!selectedVideo || videoMetadata[selectedVideo.id]) return;
+    if (
+      !selectedVideo ||
+      selectedVideo.provider === "youtube-live" ||
+      videoMetadata[selectedVideo.id]
+    ) {
+      return;
+    }
     const video = selectedVideo;
 
     let stopped = false;
@@ -1554,7 +1603,9 @@ export default function FeedApp() {
     if (
       !selectedVideo ||
       !selectedVideo.downloaded ||
-      (mode !== "live" && selectedVideo.provider !== "floatplane") ||
+      (mode !== "live" &&
+        selectedVideo.provider !== "floatplane" &&
+        selectedVideo.provider !== "youtube-live") ||
       playerMode !== "full" ||
       !shouldUseInlineWatchPage()
     ) {
@@ -1605,7 +1656,9 @@ export default function FeedApp() {
     if (
       !player ||
       !selectedVideo?.downloaded ||
-      (mode !== "live" && selectedVideo.provider !== "floatplane")
+      (mode !== "live" &&
+        selectedVideo.provider !== "floatplane" &&
+        selectedVideo.provider !== "youtube-live")
     ) {
       return;
     }
@@ -1655,18 +1708,18 @@ export default function FeedApp() {
 
   useEffect(() => {
     const player = playerRef.current;
-    if (
-      !player ||
-      selectedVideo?.provider !== "floatplane" ||
-      streamSource?.stream?.playbackMode !== "hls"
-    ) {
+    const isYouTubeLive = selectedVideo?.provider === "youtube-live";
+    const isFloatplaneHls =
+      selectedVideo?.provider === "floatplane" &&
+      streamSource?.stream?.playbackMode === "hls";
+    if (!player || (!isYouTubeLive && !isFloatplaneHls)) {
       hlsRef.current?.destroy();
       hlsRef.current = null;
       return undefined;
     }
-    const hlsSource = `/api/floatplane/stream/${encodeURIComponent(
-      selectedVideo.id
-    )}`;
+    const hlsSource = isYouTubeLive
+      ? `/api/live-streams/${encodeURIComponent(selectedVideo.id)}`
+      : `/api/floatplane/stream/${encodeURIComponent(selectedVideo.id)}`;
 
     hlsRef.current?.destroy();
     hlsRef.current = null;
@@ -1708,8 +1761,39 @@ export default function FeedApp() {
     async function loadStreamSource() {
       if (
         !selectedVideo?.downloaded ||
-        (mode !== "live" && selectedVideo.provider !== "floatplane")
+        (mode !== "live" &&
+          selectedVideo.provider !== "floatplane" &&
+          selectedVideo.provider !== "youtube-live")
       ) {
+        return;
+      }
+      if (selectedVideo.provider === "youtube-live") {
+        try {
+          const response = await fetch(
+            `/api/live-streams/${encodeURIComponent(selectedVideo.id)}/source`,
+            { cache: "no-store" }
+          );
+          const data = response.ok
+            ? ((await response.json()) as StreamSourceInfo)
+            : null;
+          if (!stopped) {
+            setStreamSource(
+              data || {
+                source: "live",
+                youtarrConfigured: true,
+                playbackLabel: selectedVideo.sourceLabel || copy.live.badge,
+              }
+            );
+          }
+        } catch {
+          if (!stopped) {
+            setStreamSource({
+              source: "live",
+              youtarrConfigured: true,
+              playbackLabel: selectedVideo.sourceLabel || copy.live.badge,
+            });
+          }
+        }
         return;
       }
       if (selectedVideo.provider === "floatplane") {
@@ -1761,6 +1845,7 @@ export default function FeedApp() {
     selectedVideo?.id,
     selectedVideo?.provider,
     selectedVideo?.sourceLabel,
+    copy.live.badge,
     youtarrStreamSourcePath,
   ]);
 
@@ -1836,6 +1921,19 @@ export default function FeedApp() {
     });
   }, [query, singleVideos]);
 
+  const filteredLiveStreams = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return liveStreams.filter((video) => {
+      if (
+        normalized &&
+        !`${video.title} ${video.channelName}`.toLowerCase().includes(normalized)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [liveStreams, query]);
+
   const floatplaneCreators = useMemo(() => {
     const creators = new Map<string, Pick<Channel, "id" | "name" | "avatar">>();
     floatplaneCreatorList.forEach((creator) => {
@@ -1909,11 +2007,14 @@ export default function FeedApp() {
             ? filteredSingleVideos
             : view === "floatplane"
               ? filteredFloatplaneVideos
-            : visibleVideos;
+              : view === "live"
+                ? filteredLiveStreams
+                : visibleVideos;
     const candidates = source
       .filter(
         (video) =>
           video.provider !== "floatplane" &&
+          video.provider !== "youtube-live" &&
           video.downloaded &&
           !streamSources[video.id]
       )
@@ -1955,6 +2056,7 @@ export default function FeedApp() {
     filteredFloatplaneVideos,
     filteredLocalVideos,
     filteredSingleVideos,
+    filteredLiveStreams,
     mode,
     streamSources,
     view,
@@ -2010,6 +2112,28 @@ export default function FeedApp() {
       );
     } finally {
       setSingleLoading(false);
+    }
+  }
+
+  async function loadLiveStreams(quiet = false) {
+    if (!quiet) setLiveLoading(true);
+    setError("");
+    try {
+      const response = await fetch("/api/live-streams", { cache: "no-store" });
+      const data = (await response.json()) as {
+        videos?: FeedVideo[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || copy.errors.loadLive);
+      }
+      setLiveStreams(data.videos || []);
+    } catch (liveError) {
+      setError(
+        liveError instanceof Error ? liveError.message : copy.errors.loadLive
+      );
+    } finally {
+      setLiveLoading(false);
     }
   }
 
@@ -2228,6 +2352,7 @@ export default function FeedApp() {
   }
 
   async function setVideoWatched(video: FeedVideo, watched: boolean) {
+    if (video.provider === "youtube-live") return;
     markVideoWatchedLocal(video.id, watched);
     try {
       const response = await fetch("/api/watch-progress", {
@@ -2379,7 +2504,9 @@ export default function FeedApp() {
   function closePlayer() {
     if (
       selectedVideo?.downloaded &&
-      (mode === "live" || selectedVideo.provider === "floatplane") &&
+      (mode === "live" ||
+        selectedVideo.provider === "floatplane" ||
+        selectedVideo.provider === "youtube-live") &&
       playerMode === "full"
     ) {
       setPlayerMode("mini");
@@ -2428,12 +2555,16 @@ export default function FeedApp() {
 
   function openSelectedVideoInVlc(video: FeedVideo) {
     if (playerRef.current) {
-      storePlayerWatchProgress(video, playerRef.current, true);
+      if (video.provider !== "youtube-live") {
+        storePlayerWatchProgress(video, playerRef.current, true);
+      }
       playerRef.current.pause();
     }
 
     const streamPath =
-      video.provider === "floatplane"
+      video.provider === "youtube-live"
+        ? `/api/live-streams/${encodeURIComponent(video.id)}`
+        : video.provider === "floatplane"
         ? `/api/floatplane/stream/${encodeURIComponent(video.id)}`
         : youtarrStreamPath(video.id);
     const streamUrl = new URL(
@@ -2556,6 +2687,7 @@ export default function FeedApp() {
     player: HTMLVideoElement,
     force = false
   ) {
+    if (video.provider === "youtube-live") return;
     const duration = playerProgressDuration(video, player);
     const currentTime = Math.max(
       0,
@@ -2625,6 +2757,7 @@ export default function FeedApp() {
   }
 
   function resumePlayback(video: FeedVideo, player: HTMLVideoElement) {
+    if (video.provider === "youtube-live") return;
     const videoId = video.id;
     const progress = watchProgress[videoId];
     if (!progress || progress.currentTime < 5) return;
@@ -2798,7 +2931,86 @@ export default function FeedApp() {
     }
   }
 
+  async function submitLiveStream(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const url = liveStreamUrl.trim();
+    if (!url) return;
+    setLiveStreamState("adding");
+    setLiveStreamMessage("");
+    try {
+      const response = await fetch("/api/live-streams", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = (await response.json()) as {
+        video?: FeedVideo;
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || copy.errors.addLive);
+      }
+      setLiveStreamUrl("");
+      setLiveStreamState("added");
+      setLiveStreamMessage(copy.live.added(data.video?.title || copy.live.title));
+      if (data.video) {
+        setLiveStreams((current) => [
+          data.video as FeedVideo,
+          ...current.filter((video) => video.id !== data.video?.id),
+        ]);
+      }
+      setSelectedChannel(null);
+      setChannelVideos([]);
+      setView("live");
+      setAddSheetOpen(false);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (addFailure) {
+      setLiveStreamState("error");
+      setLiveStreamMessage(
+        addFailure instanceof Error ? addFailure.message : copy.errors.addLive
+      );
+    }
+  }
+
+  async function removeLiveStream(video: FeedVideo) {
+    try {
+      const response = await fetch("/api/live-streams", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: video.id }),
+      });
+      const data = (await response.json()) as {
+        videos?: FeedVideo[];
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || copy.errors.removeLive);
+      }
+      setLiveStreams(data.videos || []);
+      setStreamSources((current) => {
+        if (!current[video.id]) return current;
+        const next = { ...current };
+        delete next[video.id];
+        return next;
+      });
+      if (selectedVideo?.id === video.id) {
+        playerRef.current?.pause();
+        setSelectedVideo(null);
+      }
+    } catch (removeFailure) {
+      setError(
+        removeFailure instanceof Error
+          ? removeFailure.message
+          : copy.errors.removeLive
+      );
+    }
+  }
+
   function refreshCurrentView() {
+    if (view === "live") {
+      void loadLiveStreams(true);
+      return;
+    }
     if (view === "floatplane") {
       void loadFloatplaneVideos(true, true);
       return;
@@ -2846,16 +3058,21 @@ export default function FeedApp() {
     ? encodeURIComponent(selectedVideo.id)
     : "";
   const playerSource = selectedVideo
-    ? selectedVideo.provider === "floatplane"
-      ? `/api/floatplane/stream/${selectedVideoId}`
-      : youtarrStreamPath(selectedVideo.id)
+    ? selectedVideo.provider === "youtube-live"
+      ? `/api/live-streams/${selectedVideoId}`
+      : selectedVideo.provider === "floatplane"
+        ? `/api/floatplane/stream/${selectedVideoId}`
+        : youtarrStreamPath(selectedVideo.id)
     : "";
   const selectedVideoPlayable =
     Boolean(selectedVideo?.downloaded) &&
-    (mode === "live" || selectedVideo?.provider === "floatplane");
+    (mode === "live" ||
+      selectedVideo?.provider === "floatplane" ||
+      selectedVideo?.provider === "youtube-live");
   const showYoutarrPlaybackOverride =
     selectedVideoPlayable &&
     selectedVideo?.provider !== "floatplane" &&
+    selectedVideo?.provider !== "youtube-live" &&
     youtarrPlaybackOptions.length > 2;
   const inlineWatchPage = selectedVideo ? shouldUseInlineWatchPage() : false;
   const selectedDescription = selectedVideo
@@ -2975,6 +3192,13 @@ export default function FeedApp() {
             <span>{copy.nav.floatplane}</span>
           </button>
           <button
+            className={view === "live" ? "active" : ""}
+            onClick={() => switchView("live")}
+          >
+            <NavIcon view="live" />
+            <span>{copy.nav.live}</span>
+          </button>
+          <button
             className={view === "local" ? "active" : ""}
             onClick={() => switchView("local")}
           >
@@ -3011,7 +3235,7 @@ export default function FeedApp() {
         {error && (
           <div className="error-banner">
             <span>{error}</span>
-            <button onClick={() => void loadFeed()}>{copy.common.retry}</button>
+            <button onClick={refreshCurrentView}>{copy.common.retry}</button>
           </div>
         )}
 
@@ -3429,6 +3653,79 @@ export default function FeedApp() {
           </>
         )}
 
+        {view === "live" && (
+          <>
+            <section className="page-heading">
+              <div>
+                <span className="eyebrow">{copy.live.eyebrow}</span>
+                <h1>{copy.live.title}</h1>
+                <p>{copy.live.subtitle}</p>
+              </div>
+              <button
+                className="settings-link"
+                onClick={() => void loadLiveStreams(true)}
+              >
+                {copy.common.refresh}
+              </button>
+            </section>
+            <form className="add-video-form" onSubmit={submitLiveStream}>
+              <input
+                value={liveStreamUrl}
+                onChange={(event) => {
+                  setLiveStreamUrl(event.target.value);
+                  if (liveStreamState !== "idle") {
+                    setLiveStreamState("idle");
+                    setLiveStreamMessage("");
+                  }
+                }}
+                placeholder={copy.live.placeholder}
+                aria-label={copy.live.aria}
+              />
+              <button
+                className="primary-button"
+                disabled={liveStreamState === "adding"}
+              >
+                {liveStreamState === "adding"
+                  ? copy.common.adding
+                  : copy.common.add}
+              </button>
+              {liveStreamMessage && (
+                <span className={`form-message form-${liveStreamState}`}>
+                  {liveStreamMessage}
+                </span>
+              )}
+            </form>
+            {liveLoading ? (
+              <LoadingGrid copy={copy} />
+            ) : filteredLiveStreams.length ? (
+              <div className="video-grid">
+                {filteredLiveStreams.map((video, index) => (
+                  <VideoCard
+                    key={`live-${video.id}`}
+                    video={video}
+                    index={index}
+                    streamSource={streamSources[video.id]}
+                    onOpen={openVideo}
+                    onRemoveFromList={(item) => void removeLiveStream(item)}
+                    onMarkWatched={() => undefined}
+                    onMarkUnwatched={() => undefined}
+                    isWatched={false}
+                    copy={copy}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="empty-state">
+                <span className="empty-mark">
+                  <FontAwesomeIcon icon={faTowerBroadcast} aria-hidden="true" />
+                </span>
+                <h2>{copy.live.emptyTitle}</h2>
+                <p>{copy.live.emptyBody}</p>
+              </div>
+            )}
+          </>
+        )}
+
         {view === "channels" && !selectedChannel && (
           <>
             <section className="page-heading">
@@ -3590,6 +3887,14 @@ export default function FeedApp() {
           title={copy.nav.floatplaneShort}
         >
           <BottomNavIcon view="floatplane" />
+        </button>
+        <button
+          className={view === "live" ? "active" : ""}
+          onClick={() => switchView("live")}
+          aria-label={copy.nav.live}
+          title={copy.nav.live}
+        >
+          <BottomNavIcon view="live" />
         </button>
         <button
           className={settingsOpen ? "active" : ""}
@@ -3787,20 +4092,24 @@ export default function FeedApp() {
                     onEnded={(event) => {
                       intendedPlaybackRef.current = false;
                       setPlayerPlaying(false);
-                      storeWatchProgress(
-                        selectedVideo.id,
-                        playerProgressDuration(selectedVideo, event.currentTarget),
-                        playerProgressDuration(selectedVideo, event.currentTarget),
-                        true,
-                        selectedVideo.thumbnail
-                      );
+                      if (selectedVideo.provider !== "youtube-live") {
+                        storeWatchProgress(
+                          selectedVideo.id,
+                          playerProgressDuration(selectedVideo, event.currentTarget),
+                          playerProgressDuration(selectedVideo, event.currentTarget),
+                          true,
+                          selectedVideo.thumbnail
+                        );
+                      }
                     }}
                     onError={(event) => {
                       intendedPlaybackRef.current =
                         intendedPlaybackRef.current || !event.currentTarget.paused;
                       const fallbackSource: StreamSourceInfo = {
                         source:
-                          selectedVideo.provider === "floatplane"
+                          selectedVideo.provider === "youtube-live"
+                            ? "live"
+                            : selectedVideo.provider === "floatplane"
                             ? "floatplane"
                             : "youtarr",
                         playbackProfile: streamSource?.playbackProfile,
@@ -3864,9 +4173,17 @@ export default function FeedApp() {
               <div className="watch-channel-row">
                 <button
                   className="watch-channel-button"
-                  disabled={selectedVideo.provider === "floatplane"}
+                  disabled={
+                    selectedVideo.provider === "floatplane" ||
+                    selectedVideo.provider === "youtube-live"
+                  }
                   onClick={() => {
-                    if (selectedVideo.provider === "floatplane") return;
+                    if (
+                      selectedVideo.provider === "floatplane" ||
+                      selectedVideo.provider === "youtube-live"
+                    ) {
+                      return;
+                    }
                     const id = selectedVideo.channelId;
                     setSelectedVideo(null);
                     void openChannel(id);
@@ -3885,7 +4202,9 @@ export default function FeedApp() {
                     <small>
                       {selectedVideo.provider === "floatplane"
                         ? "Floatplane"
-                        : "YouTube"}
+                        : selectedVideo.provider === "youtube-live"
+                          ? "YouTube Live"
+                          : "YouTube"}
                     </small>
                   </span>
                 </button>
@@ -3897,35 +4216,40 @@ export default function FeedApp() {
                         {formatCompactNumber(selectedLikeCount, copy)}
                       </span>
                     )}
-                    <button
-                      className="icon-secondary-button watch-action-chip"
-                      onClick={() =>
-                        void setVideoWatched(
-                          selectedVideo,
-                          !isVideoWatched(selectedVideo)
-                        )
-                      }
-                      title={
-                        isVideoWatched(selectedVideo)
-                          ? copy.common.markUnwatched
-                          : copy.common.markWatched
-                      }
-                      aria-label={
-                        isVideoWatched(selectedVideo)
-                          ? copy.common.markUnwatched
-                          : copy.common.markWatched
-                      }
-                    >
-                      <FontAwesomeIcon
-                        icon={isVideoWatched(selectedVideo) ? faClockRotateLeft : faCheck}
-                        aria-hidden="true"
-                      />
-                      <span>
-                        {isVideoWatched(selectedVideo)
+                    {selectedVideo.provider !== "youtube-live" && (
+                      <button
+                        className="icon-secondary-button watch-action-chip"
+                        onClick={() =>
+                          void setVideoWatched(
+                            selectedVideo,
+                            !isVideoWatched(selectedVideo)
+                          )
+                        }
+                        title={
+                          isVideoWatched(selectedVideo)
                           ? copy.common.markUnwatched
                           : copy.common.markWatched}
-                      </span>
-                    </button>
+                        aria-label={
+                          isVideoWatched(selectedVideo)
+                            ? copy.common.markUnwatched
+                            : copy.common.markWatched
+                        }
+                      >
+                        <FontAwesomeIcon
+                          icon={
+                            isVideoWatched(selectedVideo)
+                              ? faClockRotateLeft
+                              : faCheck
+                          }
+                          aria-hidden="true"
+                        />
+                        <span>
+                          {isVideoWatched(selectedVideo)
+                            ? copy.common.markUnwatched
+                            : copy.common.markWatched}
+                        </span>
+                      </button>
+                    )}
                     <button
                       className="icon-secondary-button watch-action-chip"
                       onClick={() => openSelectedVideoInVlc(selectedVideo)}
@@ -3935,7 +4259,25 @@ export default function FeedApp() {
                       <FontAwesomeIcon icon={faUpRightFromSquare} aria-hidden="true" />
                       <span>{copy.player.openInVlc}</span>
                     </button>
-                    {selectedVideo.provider !== "floatplane" && (
+                    {selectedVideo.provider === "youtube-live" ? (
+                      <button
+                        className="icon-danger-button watch-action-chip"
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              copy.live.confirmRemove(selectedVideo.title)
+                            )
+                          ) {
+                            void removeLiveStream(selectedVideo);
+                          }
+                        }}
+                        title={copy.common.removeFromLive}
+                        aria-label={copy.common.removeFromLive}
+                      >
+                        <FontAwesomeIcon icon={faTrash} aria-hidden="true" />
+                        <span>{copy.common.removeFromLive}</span>
+                      </button>
+                    ) : selectedVideo.provider !== "floatplane" ? (
                       <button
                         className="icon-danger-button watch-action-chip"
                         onClick={() => {
@@ -3950,7 +4292,7 @@ export default function FeedApp() {
                         <FontAwesomeIcon icon={faTrash} aria-hidden="true" />
                         <span>{copy.common.deleteDownload}</span>
                       </button>
-                    )}
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -4007,7 +4349,9 @@ export default function FeedApp() {
                   className={`stream-source stream-source-${streamSource?.source || "unknown"}`}
                 >
                   <strong>
-                    {streamSource?.source === "floatplane"
+                    {streamSource?.source === "live"
+                      ? copy.live.sourceLabel
+                      : streamSource?.source === "floatplane"
                       ? "Floatplane"
                       : streamSource?.source === "local"
                       ? copy.player.sourceDirect
@@ -4015,7 +4359,19 @@ export default function FeedApp() {
                         ? copy.player.sourceYoutarr
                         : copy.player.sourceChecking}
                   </strong>
-                  {streamSource?.source === "floatplane"
+                  {streamSource?.source === "live"
+                    ? copy.live.sourceBody(
+                        [
+                          streamSource.stream?.label,
+                          streamSource.stream?.codec,
+                          streamSource.stream?.height
+                            ? `${streamSource.stream.height}p`
+                            : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      )
+                    : streamSource?.source === "floatplane"
                     ? copy.floatplane.sourceBody(
                         [
                           streamSource.stream?.label,
@@ -4136,6 +4492,43 @@ export default function FeedApp() {
                 {singleVideoMessage && (
                   <small className={`form-message form-${singleVideoState}`}>
                     {singleVideoMessage}
+                  </small>
+                )}
+              </form>
+              <form
+                className="add-flow-card add-flow-card-live"
+                onSubmit={submitLiveStream}
+              >
+                <span className="add-flow-icon">
+                  <FontAwesomeIcon icon={faTowerBroadcast} aria-hidden="true" />
+                </span>
+                <strong>{copy.add.liveTitle}</strong>
+                <p>{copy.add.liveBody}</p>
+                <div className="add-flow-row">
+                  <input
+                    value={liveStreamUrl}
+                    onChange={(event) => {
+                      setLiveStreamUrl(event.target.value);
+                      if (liveStreamState !== "idle") {
+                        setLiveStreamState("idle");
+                        setLiveStreamMessage("");
+                      }
+                    }}
+                    placeholder={copy.live.placeholder}
+                    aria-label={copy.live.aria}
+                  />
+                  <button
+                    className="primary-button"
+                    disabled={liveStreamState === "adding"}
+                  >
+                    {liveStreamState === "adding"
+                      ? copy.common.adding
+                      : copy.common.add}
+                  </button>
+                </div>
+                {liveStreamMessage && (
+                  <small className={`form-message form-${liveStreamState}`}>
+                    {liveStreamMessage}
                   </small>
                 )}
               </form>

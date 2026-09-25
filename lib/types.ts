@@ -54,7 +54,7 @@ export interface Channel {
   avatar: string;
   autoDownload: boolean;
   videoQuality?: string | null;
-  provider?: "youtube" | "floatplane";
+  provider?: "youtube" | "floatplane" | "youtube-live";
   kind?: "creator" | "channel";
   parentId?: string | null;
   parentName?: string | null;
@@ -63,7 +63,7 @@ export interface Channel {
 
 export interface FeedVideo {
   id: string;
-  provider?: "youtube" | "floatplane";
+  provider?: "youtube" | "floatplane" | "youtube-live";
   creatorId?: string | null;
   creatorName?: string | null;
   creatorAvatar?: string | null;

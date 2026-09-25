@@ -176,6 +176,30 @@ test("stores single YouTube videos server-side", async () => {
   );
 });
 
+test("lists live streams and rejects invalid live input safely", async () => {
+  const worker = await createWorker();
+  const loaded = await fetchFrom(worker, "/api/live-streams");
+  assert.equal(loaded.status, 200);
+  assert.ok(Array.isArray((await loaded.json()).videos));
+
+  const invalid = await fetchFrom(worker, "/api/live-streams", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ url: "https://example.com/not-a-youtube-video" }),
+  });
+  assert.equal(invalid.status, 400);
+  assert.match((await invalid.json()).error, /valid YouTube live URL/i);
+});
+
+test("blocks non-YouTube live proxy targets", async () => {
+  const worker = await createWorker();
+  const response = await fetchFrom(
+    worker,
+    "/api/live-streams/proxy?url=http%3A%2F%2F127.0.0.1%2Fprivate"
+  );
+  assert.equal(response.status, 400);
+});
+
 test("stores watch progress server-side", async () => {
   const worker = await createWorker();
   const videoId = "dmo00000003";
