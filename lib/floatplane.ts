@@ -374,20 +374,37 @@ async function requestFloatplane(path: string, init: RequestInit = {}, retry = t
   return response;
 }
 
-function floatplaneRequestError(status: number) {
+async function floatplaneRequestError(response: Response) {
+  const status = response.status;
+  let detail = "";
+  try {
+    const body = (await response.json()) as {
+      message?: unknown;
+      error?: unknown;
+      errors?: Array<{ message?: unknown }>;
+    };
+    const candidate =
+      body.message || body.error || body.errors?.find((item) => item.message)?.message;
+    if (typeof candidate === "string") {
+      detail = candidate.replace(/\s+/g, " ").trim().slice(0, 240);
+    }
+  } catch {
+    // Some Floatplane errors are HTML; the HTTP status remains the useful detail.
+  }
+  const suffix = detail ? `: ${detail}` : "";
   if (status === 401 || status === 403) {
-    return `Floatplane session token expired or invalid (${status}); paste a fresh sails.sid in Settings`;
+    return `Floatplane session token expired or invalid (${status})${suffix}; paste a fresh sails.sid in Settings`;
   }
   if (status === 429) {
-    return "Floatplane is rate limiting login or API requests (429); wait before retrying";
+    return `Floatplane is rate limiting login or API requests (429)${suffix}; wait before retrying`;
   }
-  return `Floatplane request failed (${status})`;
+  return `Floatplane request failed (${status})${suffix}`;
 }
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await requestFloatplane(path);
   if (!response.ok) {
-    throw new Error(floatplaneRequestError(response.status));
+    throw new Error(await floatplaneRequestError(response));
   }
   return (await response.json()) as T;
 }
@@ -669,7 +686,9 @@ async function getSubscribedFloatplaneContext(warnings: string[]) {
 async function getFloatplanePostsForCreators(creatorIds: string[]) {
   if (!creatorIds.length) return [];
   const url = buildFloatplaneUrl("/api/v3/content/creator/list");
-  creatorIds.forEach((creatorId) => url.searchParams.append("ids", creatorId));
+  creatorIds.forEach((creatorId, index) =>
+    url.searchParams.set(`ids[${index}]`, creatorId)
+  );
   url.searchParams.set("limit", String(floatplaneFetchLimit));
   const response = await getJson<FloatplaneCreatorListResponse>(
     `${url.pathname}${url.search}`
