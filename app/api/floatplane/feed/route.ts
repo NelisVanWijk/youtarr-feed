@@ -77,7 +77,16 @@ export async function GET(request: Request) {
     const result = await getCachedVideoList("floatplane-feed", getFloatplaneFeed, {
       refresh,
     });
+    if (result.refreshError && result.data.videos.length === 0) {
+      throw new Error(result.refreshError);
+    }
     const videos = result.data.videos;
+    const warnings = result.refreshError
+      ? [
+          ...result.data.warnings,
+          `Floatplane refresh failed; showing cached videos: ${result.refreshError}`,
+        ]
+      : result.data.warnings;
     const pageVideos =
       limit === undefined ? videos : videos.slice(offset, offset + limit);
     const nextOffset = offset + pageVideos.length;
@@ -87,6 +96,7 @@ export async function GET(request: Request) {
       {
         mode: "live",
         ...result.data,
+        warnings,
         videos: pageVideos,
         hasMore,
         nextOffset: hasMore ? nextOffset : null,

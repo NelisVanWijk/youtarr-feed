@@ -2184,6 +2184,9 @@ export default function FeedApp() {
           ? data.nextOffset
           : offset + incomingVideos.length
       );
+      if (!append && incomingVideos.length === 0 && data.warnings?.length) {
+        setError(data.warnings.join(" "));
+      }
       if (
         !append &&
         !refresh &&

@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { appDataPath, removeAppDataFile, writeJsonAtomic } from "./app-data";
+import { invalidateVideoListCache } from "./server-cache";
 import type {
   Channel as AppChannel,
   ConnectionStatus,
@@ -267,6 +268,7 @@ export async function saveFloatplaneSessionToken(token: string) {
   const cookie = normalizeSessionCookie(token);
   await writeSession(cookie, "manual");
   streamCache.clear();
+  await invalidateVideoListCache("floatplane-feed");
 }
 
 async function login() {
@@ -713,15 +715,33 @@ async function getFloatplanePostsByChannel(
     .map((creatorId) => ({ creatorId, channelId: "" }));
   const targets = [...channelTargets, ...creatorTargets];
   const batches = await mapWithConcurrency(targets, 6, async (target) => {
-    const url = buildFloatplaneUrl("/api/v3/content/creator");
-    url.searchParams.set("id", target.creatorId);
-    if (target.channelId) url.searchParams.set("channel", target.channelId);
-    url.searchParams.set("limit", String(floatplanePerChannelLimit));
-    url.searchParams.set("hasVideo", "true");
-    url.searchParams.set("sort", "DESC");
-    return getJson<FloatplanePost[]>(`${url.pathname}${url.search}`);
+    try {
+      const url = buildFloatplaneUrl("/api/v3/content/creator");
+      url.searchParams.set("id", target.creatorId);
+      if (target.channelId) url.searchParams.set("channel", target.channelId);
+      url.searchParams.set("limit", String(floatplanePerChannelLimit));
+      url.searchParams.set("hasVideo", "true");
+      url.searchParams.set("sort", "DESC");
+      const posts = await getJson<FloatplanePost[]>(
+        `${url.pathname}${url.search}`
+      );
+      if (!Array.isArray(posts)) {
+        throw new Error("Floatplane returned an unexpected content response");
+      }
+      return { posts, error: "" };
+    } catch (error) {
+      return {
+        posts: [] as FloatplanePost[],
+        error:
+          error instanceof Error ? error.message : "Floatplane request failed",
+      };
+    }
   });
-  return batches.flat();
+  return {
+    posts: batches.flatMap((batch) => batch.posts),
+    errors: batches.map((batch) => batch.error).filter(Boolean),
+    successfulTargets: batches.filter((batch) => !batch.error).length,
+  };
 }
 
 function buildFloatplaneNavigation(
@@ -783,13 +803,28 @@ export async function getFloatplaneFeed(): Promise<{
   const warnings: string[] = [];
   const { creatorIds, channels, channelMap, creatorMap } =
     await getSubscribedFloatplaneContext(warnings);
-
-  let posts = await getFloatplanePostsForCreators(creatorIds).catch((error) => {
-    warnings.push(
-      error instanceof Error
-        ? `Floatplane multi-creator feed failed: ${error.message}`
-        : "Floatplane multi-creator feed failed"
+  if (creatorIds.length === 0) {
+    const { creators, channelList } = buildFloatplaneNavigation(
+      channels,
+      [],
+      creatorMap
     );
+    return {
+      creators,
+      channels: channelList,
+      videos: [],
+      warnings: [
+        ...warnings,
+        "Floatplane returned no subscribed creators for this account.",
+      ],
+    };
+  }
+
+  let multiCreatorError = "";
+  let posts = await getFloatplanePostsForCreators(creatorIds).catch((error) => {
+    multiCreatorError =
+      error instanceof Error ? error.message : "Floatplane request failed";
+    warnings.push(`Floatplane multi-creator feed failed: ${multiCreatorError}`);
     return [];
   });
 
@@ -801,18 +836,29 @@ export async function getFloatplaneFeed(): Promise<{
   );
 
   if (posts.length < Math.min(floatplaneFeedLimit, 120) || missingChannels.length) {
-    const channelPosts = await getFloatplanePostsByChannel(
+    const fallback = await getFloatplanePostsByChannel(
       creatorIds,
       posts.length < Math.min(floatplaneFeedLimit, 120) ? channels : missingChannels
-    ).catch((error) => {
+    );
+    if (fallback.errors.length > 0) {
+      const uniqueErrors = [...new Set(fallback.errors)];
       warnings.push(
-        error instanceof Error
-          ? `Floatplane channel feed fallback failed: ${error.message}`
-          : "Floatplane channel feed fallback failed"
+        `Floatplane channel feed fallback failed for ${fallback.errors.length} request(s): ${uniqueErrors.join("; ")}`
       );
-      return [];
-    });
-    posts = uniquePosts([...posts, ...channelPosts]);
+    }
+    if (
+      posts.length === 0 &&
+      fallback.successfulTargets === 0 &&
+      fallback.errors.length > 0
+    ) {
+      throw new Error(
+        `Floatplane feed could not be loaded: ${[
+          ...(multiCreatorError ? [multiCreatorError] : []),
+          ...new Set(fallback.errors),
+        ].join("; ")}`
+      );
+    }
+    posts = uniquePosts([...posts, ...fallback.posts]);
   }
 
   const videos = uniqueVideos(
@@ -1088,10 +1134,29 @@ async function checkFloatplaneConnection(): Promise<ConnectionStatus> {
     const subscriptions = await getJson<FloatplaneSubscription[]>(
       "/api/v3/user/subscriptions"
     );
+    if (!Array.isArray(subscriptions)) {
+      throw new Error("Floatplane returned an unexpected subscriptions response");
+    }
+    const creatorId = subscriptions
+      .map((subscription) => creatorIdFromValue(subscription.creator))
+      .find(Boolean);
+    if (creatorId) {
+      const url = buildFloatplaneUrl("/api/v3/content/creator");
+      url.searchParams.set("id", creatorId);
+      url.searchParams.set("limit", "1");
+      url.searchParams.set("hasVideo", "true");
+      url.searchParams.set("sort", "DESC");
+      const posts = await getJson<FloatplanePost[]>(`${url.pathname}${url.search}`);
+      if (!Array.isArray(posts)) {
+        throw new Error("Floatplane returned an unexpected content response");
+      }
+    }
     return {
       ok: true,
       status: 200,
-      message: `${subscriptions.length} subscriptions`,
+      message: creatorId
+        ? `${subscriptions.length} subscriptions; content feed reachable`
+        : "Authenticated, but no subscriptions were found",
     };
   } catch (error) {
     return {

@@ -98,7 +98,12 @@ export async function getCachedVideoList(
   key: CacheKey,
   loader: () => Promise<VideoListPayload>,
   options: { refresh?: boolean } = {}
-): Promise<{ data: VideoListPayload; cache: CacheStatus; cachedAt?: number }> {
+): Promise<{
+  data: VideoListPayload;
+  cache: CacheStatus;
+  cachedAt?: number;
+  refreshError?: string;
+}> {
   const cached = await readCache(key);
   if (!options.refresh && cached) {
     const fresh = Date.now() - cached.savedAt < cacheTtlMs;
@@ -118,7 +123,13 @@ export async function getCachedVideoList(
     };
   } catch (error) {
     if (cached) {
-      return { data: cached.data, cache: "stale", cachedAt: cached.savedAt };
+      return {
+        data: cached.data,
+        cache: "stale",
+        cachedAt: cached.savedAt,
+        refreshError:
+          error instanceof Error ? error.message : "Cache refresh failed",
+      };
     }
     throw error;
   }
