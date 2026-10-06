@@ -503,7 +503,13 @@
   video.onresize = quality;
   video.onplaying = function () { audio.playing(); setBuffering(false); $('player-status').textContent = ''; playbackButton(false); showControls(); };
   video.onpause = function () { playbackButton(true); save(); showControls(); };
-  video.onwaiting = function () { if (active) { setBuffering(true); $('player-status').textContent = 'Buffering…'; showControls(); } };
+  video.onwaiting = function () { if (active) {
+    // Native Floatplane MP4 playback can emit short waiting events while its
+    // Range buffer is being replenished. Keep those invisible during normal
+    // playback; PCM startup, seeks and actual PCM stalls still get the spinner.
+    if (audio.loading || audio.pcm || video.currentTime < 1) setBuffering(true); else setBuffering(false);
+    $('player-status').textContent = 'Buffering…'; showControls();
+  } };
   video.onerror = function () { if (active) {
     setBuffering(true);
     if (audio.fallback()) return;
