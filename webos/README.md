@@ -64,13 +64,6 @@ device name). This app has its own ID and does not replace SUB/WAVE.
 - Play/Pause is the default focused control on opening and revealing the player.
   The TV interface uses Apple-inspired glass navigation and dialogs, compact
   SVG controls, and reduced-motion/transparency/high-contrast fallbacks.
-- On webOS, stereo video audio is converted server-side to PCM while the video
-  stream remains copied at its original resolution. This makes stereo content
-  behave like the Apple TV path over ARC, so a Denon receiver can remain in its
-  normal stereo mode instead of seeing Dolby Digital Plus 2.0. Videos with more
-  than two audio channels, unsupported media, or a failed conversion use the
-  original stream automatically. The player has an Audio button to switch
-  between PCM and the original stream; the choice is remembered on the TV.
 - Floatplane has a separate creator/channel rail and paginated feeds per scope.
   It streams through the existing Floatplane endpoint, using the TV's native
   MP4/HLS playback, with shared watch progress. Youtarr codec profiles and download
@@ -79,10 +72,9 @@ device name). This app has its own ID and does not replace SUB/WAVE.
 - Demo YouTube videos cannot play or download; a configured Floatplane account
   works independently of YouTube demo mode.
 
-Playback uses the existing same-origin Range streaming endpoint. Stereo PCM
-conversion is available through a bounded server-side FFmpeg route; other media
-continues through the original stream. Container, video codec, audio codec, and
-resolution must be supported by the actual TV. H.264/AAC MP4 is a useful compatibility target;
+Playback uses the existing same-origin Range streaming endpoint. No new
+transcoding is added. Container, video codec, audio codec, and resolution must
+be supported by the actual TV. H.264/AAC MP4 is a useful compatibility target;
 The TV player prefers a configured AV1 instance, otherwise the primary original
 file, bypassing global phone/tablet profile defaults. On this installation the
 inspected primary file is AV1/AAC MP4. If additional AV1/VP9 instances are
