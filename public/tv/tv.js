@@ -9,6 +9,7 @@
   var selectedChannel = '', subscriptionChannels = null, libraryFilter = 'downloads', fpVideos = [], fpChannels = [], fpCreators = [];
   var fpScope = '', fpKind = '', fpOffset = null, fpRequest = 0, fpLoading = false, fpLoaded = false, fpError = '';
   var menuVideo = null, menuBusy = false, confirmDelete = false, heldCard = null, holdTimer, heldLong = false, suppressCardClick = false;
+  var audio = new window.MyTubeAudio(video, play, quality, function (text) { $('player-status').textContent = text; showControls(); });
   function cancelHold() { clearTimeout(holdTimer); heldCard = null; heldLong = false; }
   function beginHold(card) {
     if (heldCard || menuBusy) return;
@@ -284,8 +285,8 @@
   $('download-close').onclick = closeDownload;
   $('download-check').onclick = function () { pollDownloads(true); };
   function save() {
-    if (!active || (demo && active.provider !== 'floatplane') || !isFinite(video.duration) || video.duration <= 0 || video.readyState < 1) return saveQueue;
-    var body = { videoId: active.id, currentTime: video.currentTime, duration: video.duration };
+    if (!active || audio.loading || (demo && active.provider !== 'floatplane') || !isFinite(audio.length()) || audio.length() <= 0 || video.readyState < 1) return saveQueue;
+    var body = { videoId: active.id, currentTime: audio.position(), duration: audio.length() };
     if (body.currentTime > body.duration - 8) { delete progress[body.videoId]; if (watched.indexOf(body.videoId) < 0) watched.push(body.videoId); }
     else if (body.currentTime >= 5) progress[body.videoId] = Object.assign({ updatedAt: Date.now() }, body);
     else delete progress[body.videoId];
@@ -299,6 +300,8 @@
     if (!video.paused && !$('source-dialog').open) hideTimer = setTimeout(function () { $('controls').classList.add('concealed'); }, 5000);
   }
   function play() {
+    if (document.hidden) { audio.keepPaused = true; return; }
+    audio.keepPaused = false;
     var source = video.src;
     video.play().catch(function () {
       if (!active || video.src !== source) return;
@@ -311,7 +314,7 @@
     $('toggle').title = paused ? 'Play' : 'Pause';
     $('toggle-glyph').setAttribute('href', '/tv/icons.svg?v=20260913#' + (paused ? 'play' : 'pause'));
   }
-  function seek(delta) { if (isFinite(video.duration)) video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + delta)); showControls(); }
+  function seek(delta) { audio.seek(audio.position() + delta); showControls(); }
   function open(item, button) {
     if (demo && item.provider !== 'floatplane') { message('This is a demo. Configure Youtarr on the MyTube server to play your own downloads.'); return; }
     active = item; origin = button; lastSave = Date.now();
@@ -326,24 +329,23 @@
   function startSource() {
     updateSourceButton();
     $('quality').textContent = 'Original quality · detecting resolution…';
-    if (active.provider === 'floatplane') { video.src = '/api/floatplane/stream/' + encodeURIComponent(active.id); video.load(); play(); return; }
+    if (active.provider === 'floatplane') { audio.start('/api/floatplane/stream/' + encodeURIComponent(active.id), active.id, 'primary', resumeAt); return; }
     var profile = $('source').value || 'primary';
     if (attemptedProfiles.indexOf(profile) < 0) attemptedProfiles.push(profile);
-    video.src = '/api/stream/' + encodeURIComponent(active.id) + '?profile=' + encodeURIComponent(profile);
-    video.load(); play();
+    audio.start('/api/stream/' + encodeURIComponent(active.id) + '?profile=' + encodeURIComponent(profile), active.id, profile, resumeAt);
   }
   function backupSource() {
     if (active && active.provider === 'floatplane') return false;
     var next = playbackProfiles.find(function (profile) { return attemptedProfiles.indexOf(profile.id) < 0; });
     if (!next) return false;
-    if (video.currentTime > 0) resumeAt = video.currentTime;
+    if (audio.position() > 0) resumeAt = audio.position();
     $('source').value = next.id;
     $('player-status').textContent = 'Trying backup version: ' + next.label;
     startSource(); $('toggle').focus(); showControls(); return true;
   }
   function close() {
     if ($('source-dialog').open) $('source-dialog').close();
-    save(); video.pause(); active = null; video.removeAttribute('src'); video.load(); clearTimeout(hideTimer);
+    save(); audio.stop(); video.pause(); active = null; video.removeAttribute('src'); video.load(); clearTimeout(hideTimer);
     $('player').hidden = true; $('library').hidden = false;
     var id = origin && origin.dataset.id; render();
     var target = Array.prototype.find.call(document.querySelectorAll('.card'), function (card) { return card.dataset.id === id; });
@@ -444,7 +446,8 @@
   $('stay').onclick = function () { $('exit-dialog').close(); $('exit').focus(); };
   $('confirm-exit').onclick = function () { window.close(); $('exit-dialog').close(); message('Use Home on your remote to leave MyTube.'); $('exit').focus(); };
   $('back').onclick = close; $('toggle').onclick = toggle; $('rewind').onclick = function () { seek(-10); }; $('forward').onclick = function () { seek(10); };
-  $('restart').onclick = function () { video.currentTime = 0; play(); };
+  $('restart').onclick = function () { audio.seek(0); audio.keepPaused = false; if (!audio.loading) play(); };
+  $('audio-mode').onclick = function () { save(); audio.toggle(); $('toggle').focus(); showControls(); };
   function updateSourceButton() {
     var profile = playbackProfiles.find(function (entry) { return entry.id === $('source').value; });
     $('source').textContent = 'Versie: ' + (profile ? profile.label : 'Primary');
@@ -456,7 +459,7 @@
     if (!active || active.provider === 'floatplane') return;
     if (!playbackProfiles.some(function (profile) { return profile.id === id; })) return;
     if ($('source').value === id) { closeSources(); return; }
-    resumeAt = video.currentTime || resumeAt; save(); video.pause();
+    resumeAt = audio.position() || resumeAt; save(); video.pause();
     $('source').value = id; attemptedProfiles = [];
     closeSources(); $('player-status').textContent = 'Videoversie laden…'; startSource();
   }
@@ -474,27 +477,30 @@
   $('source-cancel').onclick = closeSources;
   $('source-dialog').oncancel = function (event) { event.preventDefault(); closeSources(); };
   function quality() {
+    $('audio-mode').textContent = audio.preferred ? 'Audio: PCM' : 'Audio: origineel';
+    $('audio-mode').setAttribute('aria-pressed', String(audio.preferred));
     var profile = playbackProfiles.find(function (entry) { return entry.id === $('source').value; });
-    if (video.videoHeight) $('quality').textContent = (video.videoHeight >= 2160 ? '4K · ' : '') + video.videoWidth + ' × ' + video.videoHeight + ' · Original quality · ' + (active && active.provider === 'floatplane' ? 'Floatplane' : profile ? profile.label : 'Primary') + (active && active.provider !== 'floatplane' && $('source').value !== defaultProfile ? ' (backup)' : '');
+    if (video.videoHeight) $('quality').textContent = (video.videoHeight >= 2160 ? '4K · ' : '') + video.videoWidth + ' × ' + video.videoHeight + ' · Original quality · ' + (active && active.provider === 'floatplane' ? 'Floatplane' : profile ? profile.label : 'Primary') + (active && active.provider !== 'floatplane' && $('source').value !== defaultProfile ? ' (backup)' : '') + ' · ' + audio.label();
   }
-  video.onloadedmetadata = function () { if (active && resumeAt) video.currentTime = Math.min(resumeAt, Math.max(0, video.duration - 1)); quality(); };
+  video.onloadedmetadata = function () { if (active) audio.metadata(); quality(); };
   video.onresize = quality;
-  video.onplaying = function () { $('player-status').textContent = ''; playbackButton(false); showControls(); };
+  video.onplaying = function () { audio.playing(); $('player-status').textContent = ''; playbackButton(false); showControls(); };
   video.onpause = function () { playbackButton(true); save(); showControls(); };
   video.onwaiting = function () { if (active) { $('player-status').textContent = 'Buffering…'; showControls(); } };
   video.onerror = function () { if (active) {
+    if (audio.fallback()) return;
     if (video.error && video.error.code !== 1 && backupSource()) return;
     if (active.provider === 'floatplane') { $('player-status').textContent = 'Floatplane kan deze video niet afspelen. Controleer je verbinding en Floatplane-sessie in de instellingen.'; showControls(); return; }
     $('player-status').textContent = 'Unable to play the available versions. Check the server or choose another version. 4K requires a TV-supported codec and a 2160p download; MyTube keeps the original resolution.'; showControls();
   } };
   video.onended = function () { save(); $('player-status').textContent = 'Finished watching'; showControls(); };
   video.ontimeupdate = function () {
-    $('time').textContent = time(video.currentTime) + ' / ' + time(video.duration);
-    $('position').style.width = (isFinite(video.duration) && video.duration > 0 ? video.currentTime / video.duration * 100 : 0) + '%';
+    $('time').textContent = time(audio.position()) + ' / ' + time(audio.length());
+    $('position').style.width = (isFinite(audio.length()) && audio.length() > 0 ? audio.position() / audio.length() * 100 : 0) + '%';
     if (Date.now() - lastSave > 10000) { lastSave = Date.now(); save(); }
   };
   $('player').onmousemove = showControls; video.onclick = function () { showControls(); $('toggle').focus(); };
-  document.addEventListener('visibilitychange', function () { if (document.hidden && active) { save(); video.pause(); } });
+  document.addEventListener('visibilitychange', function () { if (document.hidden && active) { save(); audio.keepPaused = true; video.pause(); } });
   window.addEventListener('pagehide', save);
   document.addEventListener('keydown', function (event) {
     var code = event.keyCode;

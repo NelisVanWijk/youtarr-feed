@@ -19,7 +19,7 @@ test('manual source selection preserves position, validates choice and does not 
   const nodes = { source: { value: 'primary' }, 'player-status': {} };
   const context = vm.createContext({ $: id => nodes[id], active: { provider: 'youtube' },
     playbackProfiles: [{ id: 'primary' }, { id: 'vp9' }], resumeAt: 0, attemptedProfiles: ['primary', 'vp9'],
-    video: { currentTime: 123, pause() { pauses++; } }, save() { saves++; },
+    video: { currentTime: 123, pause() { pauses++; } }, audio: { position() { return 123; } }, save() { saves++; },
     closeSources() { closes++; }, startSource() { loads++; } });
   vm.runInContext(source.slice(source.indexOf('  function chooseSource('), source.indexOf("  $('source').onclick")), context);
   context.chooseSource('primary'); assert.equal(loads, 0); assert.equal(closes, 1);

@@ -85,7 +85,7 @@ only opens the server address, so normal MyTube releases carry TV updates.
   YouTube downloads use the existing delete API after a second selection;
   Floatplane deletion is hidden and blocked in the action handler.
 - Watched thumbnails have a full red bar; explicit unwatched state clears it.
-- Build, targeted lint, and 24 automated tests passed, including hold/release,
+- Build, targeted lint, and the automated TV tests passed, including hold/release,
   cancellation, stale cards, delete guarding, shared watched state, and bar values.
   No real user videos were deleted during these tests. Physical remote behavior
   and the new modal still need the user's TV check after Docker update.
@@ -96,6 +96,16 @@ only opens the server address, so normal MyTube releases carry TV updates.
   cannot auto-hide while it is open; Back/Cancel returns focus to Play/Pause.
 - Manual switching validates profiles, saves position, pauses the old source,
   and preserves resume time. Selecting the current source does not reload it.
-- Build, targeted lint, and 26 tests pass. This addresses a possible focus/hiding
+- Build, targeted lint, and the automated TV tests pass. This addresses a possible focus/hiding
   interaction; the reported complete TV freeze was not reproduced, so its cause
   is not confirmed. Hardware behavior still needs verification after deployment.
+
+## Stereo PCM output
+
+- The TV player probes audio on webOS only. One- and two-channel video audio is
+  converted to PCM with the video stream copied at its original resolution.
+- Multichannel audio, unsupported codecs, failed inspection, and unavailable
+  FFmpeg conversion fall back to the original stream.
+- A real LG OLED65G36LA test app played a 3840×2160 stream with PCM stereo at
+  48 kHz through the Denon AVR-X1300W. Real YouTube and Floatplane playback
+  still need a user check after the Docker image is updated.
