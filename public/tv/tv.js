@@ -2,7 +2,7 @@
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
   var videos = [], progress = {}, watched = [], tab = 'all', active = null, origin = null;
-  var video = $('video'), demo = false, hideTimer, lastSave = 0, saveQueue = Promise.resolve(), resumeAt = 0;
+  var video = $('video'), demo = false, hideTimer, bufferTimer, lastSave = 0, saveQueue = Promise.resolve(), resumeAt = 0;
   var pendingVideo = null, downloadOrigin = null, jobs = {}, pollTimer, polling = false, pollCount = 0;
   var sources = {}, sourceRequests = {}, feedIds = null, unwatched = [];
   var defaultProfile = 'primary', playbackProfiles = [{ id: 'primary', label: 'Primary' }], attemptedProfiles = [];
@@ -11,8 +11,18 @@
   var menuVideo = null, menuBusy = false, confirmDelete = false, heldCard = null, holdTimer, heldLong = false, suppressCardClick = false;
   function setBuffering(value) {
     var player = $('player'), indicator = $('buffering');
-    if (indicator) indicator.hidden = !value;
-    if (player) player.classList.toggle('is-buffering', Boolean(value));
+    clearTimeout(bufferTimer);
+    if (!value) {
+      if (indicator) indicator.hidden = true;
+      if (player) player.classList.remove('is-buffering');
+      return;
+    }
+    // waiting fires for short demux/network gaps too. Only cover the video
+    // after a sustained pause so normal playback never flashes black.
+    bufferTimer = setTimeout(function () {
+      if (indicator) indicator.hidden = false;
+      if (player) player.classList.add('is-buffering');
+    }, 350);
   }
   var audio = new window.MyTubeAudio(video, play, quality, function (text) { $('player-status').textContent = text; setBuffering(true); showControls(); });
   function cancelHold() { clearTimeout(holdTimer); heldCard = null; heldLong = false; }
@@ -484,8 +494,8 @@
   $('source-cancel').onclick = closeSources;
   $('source-dialog').oncancel = function (event) { event.preventDefault(); closeSources(); };
   function quality() {
-    $('audio-mode').textContent = audio.preferred ? 'Audio: PCM' : 'Audio: origineel';
-    $('audio-mode').setAttribute('aria-pressed', String(audio.preferred));
+    $('audio-mode').textContent = audio.pcm ? 'Audio: PCM' : 'Audio: origineel';
+    $('audio-mode').setAttribute('aria-pressed', String(audio.pcm));
     var profile = playbackProfiles.find(function (entry) { return entry.id === $('source').value; });
     if (video.videoHeight) $('quality').textContent = (video.videoHeight >= 2160 ? '4K · ' : '') + video.videoWidth + ' × ' + video.videoHeight + ' · Original quality · ' + (active && active.provider === 'floatplane' ? 'Floatplane' : profile ? profile.label : 'Primary') + (active && active.provider !== 'floatplane' && $('source').value !== defaultProfile ? ' (backup)' : '') + ' · ' + audio.label();
   }
