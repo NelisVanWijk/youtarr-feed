@@ -89,3 +89,12 @@ test('inspection failure and startup timeout restore native playback without lea
   [...timers][0](); assert.equal(video.src, '/original');
   resolve(await pcm()); await tick(); assert.equal(video.src, '/original');
 });
+
+test('loading and a transient PCM end keep the last position and recover without completing playback', async () => {
+  const { instance: a, video } = adapter(pcm);
+  a.start('/original', '123456789ab', 'primary', 40); await tick(); a.metadata(); a.playing();
+  video.currentTime = 12; assert.equal(a.snapshot().currentTime, 52);
+  assert.equal(a.recover(), true); assert.equal(a.position(), 52); await tick();
+  assert.match(video.src, /start=52$/); a.metadata(); a.playing();
+  assert.equal(a.isComplete(), false);
+});

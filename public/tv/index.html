@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MyTube TV</title>
   <link rel="icon" href="/icon-512.png">
-  <link rel="stylesheet" href="/tv/tv.css?v=20261006">
+  <link rel="stylesheet" href="/tv/tv.css?v=20261006b">
 </head>
 <body>
 <main id="library">
@@ -30,6 +30,7 @@
 </main>
 <section id="player" hidden aria-label="Video player">
   <video id="video" playsinline preload="metadata"></video>
+  <div id="buffering" class="buffering" role="status" aria-label="Buffering" hidden><span class="spinner" aria-hidden="true"></span></div>
   <div id="controls">
     <p class="eyebrow" id="playing-channel"></p><h1 id="playing-title"></h1>
     <p id="quality">Original quality</p><p id="player-status" role="status"></p>
@@ -65,7 +66,7 @@
   <p class="hint">Downloads use your Youtarr quality settings. Choose 2160p there for 4K when available.</p>
   <button id="download-start">Download</button><button id="download-check">Check status</button><button id="download-close">Back to browsing</button>
 </dialog>
-<script src="/tv/audio.js?v=20261006"></script>
-<script src="/tv/tv.js?v=20261006"></script>
+<script src="/tv/audio.js?v=20261006b"></script>
+<script src="/tv/tv.js?v=20261006b"></script>
 </body>
 </html>

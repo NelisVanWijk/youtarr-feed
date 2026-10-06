@@ -7,12 +7,20 @@
     this.preferred = /web[0o]s|netcast/i.test(navigator.userAgent);
     try { var saved = localStorage.getItem('mytube-tv-audio'); if (saved) this.preferred = saved === 'pcm'; } catch { /* Storage can be disabled. */ }
     this.serial = 0; this.offset = 0; this.duration = 0; this.pcm = false; this.loading = false;
+    this.pending = 0; this.lastPosition = 0; this.lastDuration = 0; this.recoveries = 0;
   }
   TVAudio.prototype.position = function () {
-    if (this.loading) return this.pending || 0;
-    return this.pcm ? Math.min(this.duration, this.offset + this.video.currentTime) : this.video.currentTime;
+    var value;
+    if (this.loading) value = this.lastPosition || this.pending || 0;
+    else value = this.pcm ? Math.min(this.duration, this.offset + (Number(this.video.currentTime) || 0)) : (Number(this.video.currentTime) || 0);
+    if (isFinite(value)) this.lastPosition = Math.max(0, value);
+    return this.lastPosition;
   };
-  TVAudio.prototype.length = function () { return this.pcm || (this.loading && this.duration > 0) ? this.duration : this.video.duration; };
+  TVAudio.prototype.length = function () {
+    var value = this.pcm || (this.loading && this.duration > 0) ? this.duration : this.video.duration;
+    return isFinite(value) && value > 0 ? value : this.lastDuration;
+  };
+  TVAudio.prototype.snapshot = function () { return { currentTime: this.position(), duration: this.length() }; };
   TVAudio.prototype.label = function () {
     if (this.pcm) return 'PCM stereo';
     return this.failed ? 'Origineel geluid (PCM niet beschikbaar)' : 'Origineel geluid';
@@ -21,10 +29,12 @@
     // Keep the adapter compatible with older webOS engines without transpiling.
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     var self = this, serial = ++this.serial;
+    if (this.url && !this.loading) { this.lastPosition = this.position(); this.lastDuration = this.length(); }
     clearTimeout(this.timer); if (this.abort) this.abort.abort();
     this.abort = new AbortController();
     if (this.url !== url) { this.failed = false; this.duration = 0; }
-    this.url = url; this.id = id; this.profile = profile; this.pending = start || 0;
+    this.url = url; this.id = id; this.profile = profile; this.pending = Math.max(0, Number(start) || 0);
+    this.lastPosition = this.pending; this.lastDuration = this.duration || this.lastDuration;
     this.keepPaused = Boolean(paused); this.loading = true; this.pcm = false; this.offset = 0;
     this.video.pause(); this.video.removeAttribute('src'); this.video.load();
     function native() {
@@ -46,8 +56,9 @@
         if (plan.mode !== 'pcm' || !(plan.duration > 0) || plan.channels < 1 || plan.channels > 2) {
           clearTimeout(self.timer); native(); return;
         }
-        self.pcm = true; self.duration = plan.duration;
+        self.pcm = true; self.duration = plan.duration; self.lastDuration = plan.duration;
         self.offset = Math.min(self.pending, Math.max(0, self.duration - 1)); self.pending = self.offset;
+        self.lastPosition = self.offset;
         self.video.src = '/api/tv/audio/' + encodeURIComponent(id) + '/stream?profile=' + encodeURIComponent(profile) + '&start=' + self.offset;
         self.video.load(); self.changed(); if (!self.keepPaused) self.play();
       }).catch(function () {
@@ -57,11 +68,20 @@
   };
   TVAudio.prototype.metadata = function () {
     if (!this.pcm && this.pending && isFinite(this.video.duration)) this.video.currentTime = Math.min(this.pending, Math.max(0, this.video.duration - 1));
+    if (isFinite(this.video.duration) && this.video.duration > 0 && !this.duration) this.lastDuration = this.video.duration;
     this.loading = false;
     if (this.keepPaused) clearTimeout(this.timer);
     this.changed();
   };
-  TVAudio.prototype.playing = function () { this.loading = false; clearTimeout(this.timer); };
+  TVAudio.prototype.playing = function () { this.loading = false; clearTimeout(this.timer); this.position(); };
+  TVAudio.prototype.recover = function () {
+    if (!this.pcm || !this.url || this.isComplete() || this.recoveries >= 3) return false;
+    var position = this.position(); this.recoveries++;
+    this.start(this.url, this.id, this.profile, position, false); return true;
+  };
+  TVAudio.prototype.isComplete = function () {
+    var duration = this.length(); return isFinite(duration) && duration > 0 && this.position() >= duration - 1.5;
+  };
   TVAudio.prototype.seek = function (target) {
     var duration = this.length();
     if (!isFinite(duration) || duration <= 0) return;
@@ -82,7 +102,7 @@
   };
   TVAudio.prototype.stop = function () {
     ++this.serial; clearTimeout(this.timer); if (this.abort) this.abort.abort();
-    this.loading = true; this.url = null; this.pcm = false;
+    this.loading = true; this.url = null; this.pcm = false; this.pending = 0;
   };
   window.MyTubeAudio = TVAudio;
 }());

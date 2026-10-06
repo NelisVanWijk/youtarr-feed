@@ -9,7 +9,12 @@
   var selectedChannel = '', subscriptionChannels = null, libraryFilter = 'downloads', fpVideos = [], fpChannels = [], fpCreators = [];
   var fpScope = '', fpKind = '', fpOffset = null, fpRequest = 0, fpLoading = false, fpLoaded = false, fpError = '';
   var menuVideo = null, menuBusy = false, confirmDelete = false, heldCard = null, holdTimer, heldLong = false, suppressCardClick = false;
-  var audio = new window.MyTubeAudio(video, play, quality, function (text) { $('player-status').textContent = text; showControls(); });
+  function setBuffering(value) {
+    var player = $('player'), indicator = $('buffering');
+    if (indicator) indicator.hidden = !value;
+    if (player) player.classList.toggle('is-buffering', Boolean(value));
+  }
+  var audio = new window.MyTubeAudio(video, play, quality, function (text) { $('player-status').textContent = text; setBuffering(true); showControls(); });
   function cancelHold() { clearTimeout(holdTimer); heldCard = null; heldLong = false; }
   function beginHold(card) {
     if (heldCard || menuBusy) return;
@@ -284,9 +289,11 @@
   };
   $('download-close').onclick = closeDownload;
   $('download-check').onclick = function () { pollDownloads(true); };
-  function save() {
-    if (!active || audio.loading || (demo && active.provider !== 'floatplane') || !isFinite(audio.length()) || audio.length() <= 0 || video.readyState < 1) return saveQueue;
-    var body = { videoId: active.id, currentTime: audio.position(), duration: audio.length() };
+  function save(snapshot) {
+    var explicit = Boolean(snapshot);
+    snapshot = snapshot || audio.snapshot();
+    if (!active || (!explicit && audio.loading) || (demo && active.provider !== 'floatplane') || !isFinite(snapshot.duration) || snapshot.duration <= 0 || video.readyState < 1) return saveQueue;
+    var body = { videoId: active.id, currentTime: Math.max(0, Math.min(snapshot.duration, snapshot.currentTime)), duration: snapshot.duration };
     if (body.currentTime > body.duration - 8) { delete progress[body.videoId]; if (watched.indexOf(body.videoId) < 0) watched.push(body.videoId); }
     else if (body.currentTime >= 5) progress[body.videoId] = Object.assign({ updatedAt: Date.now() }, body);
     else delete progress[body.videoId];
@@ -322,13 +329,13 @@
     attemptedProfiles = []; $('source').value = defaultProfile;
     $('library').hidden = true; $('player').hidden = false;
     $('playing-title').textContent = item.title; $('playing-channel').textContent = item.channelName;
-    $('player-status').textContent = 'Loading video…'; $('position').style.width = '0%'; $('time').textContent = '0:00 / ' + time(item.duration);
+    $('player-status').textContent = 'Loading video…'; setBuffering(true); $('position').style.width = '0%'; $('time').textContent = '0:00 / ' + time(item.duration);
     resumeAt = progress[item.id] ? progress[item.id].currentTime : 0;
     startSource(); $('toggle').focus(); showControls();
   }
   function startSource() {
     updateSourceButton();
-    $('quality').textContent = 'Original quality · detecting resolution…';
+    $('quality').textContent = 'Original quality · detecting resolution…'; setBuffering(true);
     if (active.provider === 'floatplane') { audio.start('/api/floatplane/stream/' + encodeURIComponent(active.id), active.id, 'primary', resumeAt); return; }
     var profile = $('source').value || 'primary';
     if (attemptedProfiles.indexOf(profile) < 0) attemptedProfiles.push(profile);
@@ -345,7 +352,7 @@
   }
   function close() {
     if ($('source-dialog').open) $('source-dialog').close();
-    save(); audio.stop(); video.pause(); active = null; video.removeAttribute('src'); video.load(); clearTimeout(hideTimer);
+    save(); audio.stop(); video.pause(); setBuffering(false); active = null; video.removeAttribute('src'); video.load(); clearTimeout(hideTimer);
     $('player').hidden = true; $('library').hidden = false;
     var id = origin && origin.dataset.id; render();
     var target = Array.prototype.find.call(document.querySelectorAll('.card'), function (card) { return card.dataset.id === id; });
@@ -447,7 +454,7 @@
   $('confirm-exit').onclick = function () { window.close(); $('exit-dialog').close(); message('Use Home on your remote to leave MyTube.'); $('exit').focus(); };
   $('back').onclick = close; $('toggle').onclick = toggle; $('rewind').onclick = function () { seek(-10); }; $('forward').onclick = function () { seek(10); };
   $('restart').onclick = function () { audio.seek(0); audio.keepPaused = false; if (!audio.loading) play(); };
-  $('audio-mode').onclick = function () { save(); audio.toggle(); $('toggle').focus(); showControls(); };
+  $('audio-mode').onclick = function () { save(audio.snapshot()); audio.toggle(); setBuffering(true); $('toggle').focus(); showControls(); };
   function updateSourceButton() {
     var profile = playbackProfiles.find(function (entry) { return entry.id === $('source').value; });
     $('source').textContent = 'Versie: ' + (profile ? profile.label : 'Primary');
@@ -459,7 +466,7 @@
     if (!active || active.provider === 'floatplane') return;
     if (!playbackProfiles.some(function (profile) { return profile.id === id; })) return;
     if ($('source').value === id) { closeSources(); return; }
-    resumeAt = audio.position() || resumeAt; save(); video.pause();
+    var snapshot = audio.snapshot ? audio.snapshot() : { currentTime: audio.position() }; resumeAt = snapshot.currentTime || resumeAt; save(snapshot); video.pause(); if (typeof setBuffering === 'function') setBuffering(true);
     $('source').value = id; attemptedProfiles = [];
     closeSources(); $('player-status').textContent = 'Videoversie laden…'; startSource();
   }
@@ -482,18 +489,25 @@
     var profile = playbackProfiles.find(function (entry) { return entry.id === $('source').value; });
     if (video.videoHeight) $('quality').textContent = (video.videoHeight >= 2160 ? '4K · ' : '') + video.videoWidth + ' × ' + video.videoHeight + ' · Original quality · ' + (active && active.provider === 'floatplane' ? 'Floatplane' : profile ? profile.label : 'Primary') + (active && active.provider !== 'floatplane' && $('source').value !== defaultProfile ? ' (backup)' : '') + ' · ' + audio.label();
   }
-  video.onloadedmetadata = function () { if (active) audio.metadata(); quality(); };
+  video.onloadedmetadata = function () { if (active) audio.metadata(); setBuffering(Boolean(active && !video.paused)); quality(); };
   video.onresize = quality;
-  video.onplaying = function () { audio.playing(); $('player-status').textContent = ''; playbackButton(false); showControls(); };
+  video.onplaying = function () { audio.playing(); setBuffering(false); $('player-status').textContent = ''; playbackButton(false); showControls(); };
   video.onpause = function () { playbackButton(true); save(); showControls(); };
-  video.onwaiting = function () { if (active) { $('player-status').textContent = 'Buffering…'; showControls(); } };
+  video.onwaiting = function () { if (active) { setBuffering(true); $('player-status').textContent = 'Buffering…'; showControls(); } };
   video.onerror = function () { if (active) {
+    setBuffering(true);
     if (audio.fallback()) return;
     if (video.error && video.error.code !== 1 && backupSource()) return;
     if (active.provider === 'floatplane') { $('player-status').textContent = 'Floatplane kan deze video niet afspelen. Controleer je verbinding en Floatplane-sessie in de instellingen.'; showControls(); return; }
     $('player-status').textContent = 'Unable to play the available versions. Check the server or choose another version. 4K requires a TV-supported codec and a 2160p download; MyTube keeps the original resolution.'; showControls();
   } };
-  video.onended = function () { save(); $('player-status').textContent = 'Finished watching'; showControls(); };
+  video.onended = function () {
+    if (!active) return;
+    if (audio.recover()) { setBuffering(true); $('player-status').textContent = 'Buffering…'; showControls(); return; }
+    if (audio.isComplete()) { setBuffering(false); save(); $('player-status').textContent = 'Finished watching'; }
+    else { setBuffering(false); $('player-status').textContent = 'Playback stopped before the video finished.'; }
+    showControls();
+  };
   video.ontimeupdate = function () {
     $('time').textContent = time(audio.position()) + ' / ' + time(audio.length());
     $('position').style.width = (isFinite(audio.length()) && audio.length() > 0 ? audio.position() / audio.length() * 100 : 0) + '%';
