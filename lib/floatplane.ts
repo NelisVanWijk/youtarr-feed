@@ -153,11 +153,10 @@ const floatplaneFeedLimit = Math.max(
   Math.min(1000, Number(process.env.FLOATPLANE_FEED_LIMIT) || 500)
 );
 const floatplaneFetchLimit = Math.max(
-  20,
+  1,
   Math.min(
-    1000,
-    Number(process.env.FLOATPLANE_FETCH_LIMIT) ||
-      Math.max(floatplaneFeedLimit * 2, 500)
+    50,
+    Number(process.env.FLOATPLANE_FETCH_LIMIT) || 50
   )
 );
 const floatplanePerChannelLimit = Math.max(

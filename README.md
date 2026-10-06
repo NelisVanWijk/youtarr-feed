@@ -321,7 +321,7 @@ not add Youtarr download, re-download, or delete actions to Floatplane videos.
 | `FLOATPLANE_TOTP` | Optional one-time 2FA code for initial login. For recurring 2FA, prefer `FLOATPLANE_SESSION_TOKEN`. |
 | `FLOATPLANE_SESSION_TOKEN` | Optional existing Floatplane session cookie. Use either a full cookie string or the raw `sails.sid` value. |
 | `FLOATPLANE_FEED_LIMIT` | Optional maximum number of Floatplane videos kept in the server cache and made available through infinite scroll. Defaults to `500`, maximum `1000`. |
-| `FLOATPLANE_FETCH_LIMIT` | Optional number of Floatplane posts to fetch before filtering to video posts. Defaults to at least `500`, maximum `1000`. |
+| `FLOATPLANE_FETCH_LIMIT` | Optional number of Floatplane posts to fetch before filtering to video posts. Defaults to `50`, which is also Floatplane's maximum. Higher configured values are safely capped at `50`. |
 | `FLOATPLANE_PER_CHANNEL_LIMIT` | Optional fallback posts fetched per creator channel when the multi-creator feed is sparse. Defaults to `20`, which is the per-channel endpoint maximum. |
 | `FLOATPLANE_PREFERRED_CODEC` | Preferred Floatplane playback codec. Defaults to `h264`; `avc1` is treated as the same codec family. |
 | `FLOATPLANE_PLAYBACK_MODE` | Floatplane playback mode. Defaults to `mp4`, which proxies direct MP4 delivery with Range support. Set to `hls` only for troubleshooting. |
