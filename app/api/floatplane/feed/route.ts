@@ -74,9 +74,14 @@ export async function GET(request: Request) {
       });
     }
 
-    const result = await getCachedVideoList("floatplane-feed", getFloatplaneFeed, {
+    let result = await getCachedVideoList("floatplane-feed", getFloatplaneFeed, {
       refresh,
     });
+    if (!refresh && result.data.videos.length === 0) {
+      result = await getCachedVideoList("floatplane-feed", getFloatplaneFeed, {
+        refresh: true,
+      });
+    }
     if (result.refreshError && result.data.videos.length === 0) {
       throw new Error(result.refreshError);
     }

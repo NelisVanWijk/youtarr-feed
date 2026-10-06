@@ -189,6 +189,10 @@ const streamCache = new Map<
   string,
   { expiresAt: number; stream: FloatplaneStreamInfo }
 >();
+const postCache = new Map<
+  string,
+  { expiresAt: number; post: FloatplanePost }
+>();
 
 export async function isFloatplaneConfigured() {
   const stored = await readStoredSession();
@@ -267,6 +271,7 @@ export async function saveFloatplaneSessionToken(token: string) {
   const cookie = normalizeSessionCookie(token);
   await writeSession(cookie, "manual");
   streamCache.clear();
+  postCache.clear();
   await invalidateVideoListCache("floatplane-feed");
 }
 
@@ -491,12 +496,21 @@ function namespacedVideoId(videoId: string) {
   return `floatplane:${videoId}`;
 }
 
+function namespacedPostVideoId(postId: string) {
+  return `floatplane:post_${postId}`;
+}
+
 function namespacedCreatorId(creatorId: string) {
   return `floatplane-creator:${creatorId}`;
 }
 
-function rawVideoId(videoId: string) {
-  return videoId.startsWith("floatplane:") ? videoId.slice("floatplane:".length) : videoId;
+function floatplaneVideoReference(videoId: string) {
+  const rawId = videoId.startsWith("floatplane:")
+    ? videoId.slice("floatplane:".length)
+    : videoId;
+  return rawId.startsWith("post_")
+    ? { kind: "post" as const, id: rawId.slice("post_".length) }
+    : { kind: "video" as const, id: rawId };
 }
 
 function rawChannelId(channelId: string) {
@@ -523,7 +537,7 @@ function toFeedVideo(
   const attachment = post.videoAttachments?.[0];
   const videoId = videoIdFromAttachment(attachment);
   const postId = post.id || post.guid || "";
-  if (!videoId || !postId) return null;
+  if (!postId || (!videoId && post.metadata?.hasVideo !== true)) return null;
   const creator = creatorFromPost(post);
   const channel = channelFromPost(post, channelMap);
   const channelCreator = creatorFromValue(channel?.creator);
@@ -536,7 +550,7 @@ function toFeedVideo(
     imagePath(channel?.icon) || imagePath(channel?.card) || creatorAvatar;
   const attachmentObject = typeof attachment === "object" ? attachment : null;
   return {
-    id: namespacedVideoId(videoId),
+    id: videoId ? namespacedVideoId(videoId) : namespacedPostVideoId(postId),
     provider: "floatplane",
     creatorId: creatorId ? namespacedCreatorId(creatorId) : null,
     creatorName: creatorInfo.title || null,
@@ -993,9 +1007,22 @@ export async function getFloatplaneScopedFeedPage(
 }
 
 export async function getFloatplaneVideoMetadata(videoId: string) {
-  const rawId = rawVideoId(videoId);
+  const reference = floatplaneVideoReference(videoId);
+  if (reference.kind === "post") {
+    const post = await getFloatplanePost(reference.id);
+    const attachment = post.videoAttachments?.[0];
+    const attachmentObject = typeof attachment === "object" ? attachment : null;
+    return {
+      description: stripHtml(post.text || attachmentObject?.description || ""),
+      likeCount:
+        typeof post.likes === "number" && Number.isFinite(post.likes)
+          ? post.likes
+          : null,
+      webpageUrl: `https://www.floatplane.com/post/${reference.id}`,
+    };
+  }
   const video = await getJson<FloatplaneVideo>(
-    `/api/v3/content/video?id=${encodeURIComponent(rawId)}`
+    `/api/v3/content/video?id=${encodeURIComponent(reference.id)}`
   );
   return {
     description: stripHtml(video.description || ""),
@@ -1103,20 +1130,52 @@ function streamCacheKey(rawId: string) {
   ].join(":");
 }
 
+async function getFloatplanePost(
+  postId: string,
+  options: { refresh?: boolean } = {}
+) {
+  const cached = postCache.get(postId);
+  if (!options.refresh && cached && cached.expiresAt > Date.now()) {
+    return cached.post;
+  }
+  const post = await getJson<FloatplanePost>(
+    `/api/v3/content/post?id=${encodeURIComponent(postId)}`
+  );
+  postCache.set(postId, {
+    expiresAt: Date.now() + floatplaneStreamCacheTtlMs,
+    post,
+  });
+  return post;
+}
+
+async function resolveFloatplaneAttachmentId(
+  reference: ReturnType<typeof floatplaneVideoReference>,
+  options: { refresh?: boolean } = {}
+) {
+  if (reference.kind === "video") return reference.id;
+  const post = await getFloatplanePost(reference.id, options);
+  const attachmentId = videoIdFromAttachment(post.videoAttachments?.[0]);
+  if (!attachmentId) {
+    throw new Error("Floatplane post details did not include a video attachment");
+  }
+  return attachmentId;
+}
+
 export async function getFloatplaneStreamUrl(
   videoId: string,
   options: { refresh?: boolean } = {}
 ): Promise<FloatplaneStreamInfo> {
-  const rawId = rawVideoId(videoId);
-  const cacheKey = streamCacheKey(rawId);
+  const reference = floatplaneVideoReference(videoId);
+  const cacheKey = streamCacheKey(`${reference.kind}:${reference.id}`);
   const cached = streamCache.get(cacheKey);
   if (!options.refresh && cached && cached.expiresAt > Date.now()) {
     return cached.stream;
   }
+  const attachmentId = await resolveFloatplaneAttachmentId(reference, options);
 
   const params = new URLSearchParams({
     scenario: floatplanePlaybackMode === "hls" ? "onDemand" : "download",
-    entityId: rawId,
+    entityId: attachmentId,
   });
   if (floatplanePlaybackMode === "hls") {
     params.set("outputKind", floatplaneOutputKind);
