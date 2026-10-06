@@ -28,6 +28,9 @@ test('media source validation cannot select arbitrary URLs, paths or FFmpeg opti
     assert.equal(args[args.indexOf('-c:v') + 1], 'copy');
     assert.equal(args[args.indexOf('-c:a') + 1], 'pcm_s16le');
     assert.equal(args[args.indexOf('-ss') + 1], '42');
+    assert.equal(args[args.indexOf('-max_interleave_delta') + 1], '0');
+    assert.equal(args[args.indexOf('-cluster_time_limit') + 1], '1000');
+    assert.equal(args[args.indexOf('-reconnect_streamed') + 1], '1');
     assert.equal(args.includes('-ac'), false);
     assert.equal(args.includes('-vf'), false);
   } finally { if (old === undefined) delete process.env.TV_AUDIO_INTERNAL_ORIGIN; else process.env.TV_AUDIO_INTERNAL_ORIGIN = old; }
