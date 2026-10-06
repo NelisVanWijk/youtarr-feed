@@ -521,6 +521,7 @@
     if (!active) return;
     if (audio.recover()) { setBuffering(true); $('player-status').textContent = 'Buffering…'; showControls(); return; }
     if (audio.isComplete()) { setBuffering(false); save(); $('player-status').textContent = 'Finished watching'; }
+    else if (audio.fallback()) { setBuffering(true); $('player-status').textContent = 'PCM stream interrupted; continuing with original audio…'; showControls(); return; }
     else { setBuffering(false); $('player-status').textContent = 'Playback stopped before the video finished.'; }
     showControls();
   };
