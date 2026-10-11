@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import {
   getFloatplaneStreamUrl,
   isFloatplaneConfigured,
+  parseFloatplaneStreamOptions,
 } from "../../../../../../lib/floatplane";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   const { id } = await context.params;
@@ -22,7 +23,10 @@ export async function GET(
   }
 
   try {
-    const stream = await getFloatplaneStreamUrl(id);
+    const streamOptions = parseFloatplaneStreamOptions(
+      new URL(request.url).searchParams
+    );
+    const stream = await getFloatplaneStreamUrl(id, streamOptions);
     return NextResponse.json({
       source: "floatplane",
       playbackLabel: "Floatplane",

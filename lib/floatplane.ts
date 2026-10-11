@@ -1,5 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { appDataPath, removeAppDataFile, writeJsonAtomic } from "./app-data";
+import {
+  buildFloatplaneStreamCacheKey,
+  type FloatplanePlaybackMode,
+  type FloatplaneStreamOptions,
+  type ResolvedFloatplaneStreamOptions,
+} from "./floatplane-stream-options";
 import { invalidateVideoListCache } from "./server-cache";
 import type {
   Channel as AppChannel,
@@ -129,7 +135,7 @@ type FloatplaneSession = {
   source?: FloatplaneSessionSource;
 };
 
-type FloatplanePlaybackMode = "mp4" | "hls";
+export { parseFloatplaneStreamOptions } from "./floatplane-stream-options";
 
 type FloatplaneStreamInfo = {
   url: string;
@@ -1063,15 +1069,19 @@ function variantSummary(variant: FloatplaneDeliveryVariant): FloatplaneVariantSu
   };
 }
 
-function codecMatchesPreference(codec: string) {
-  if (!floatplanePreferredCodec) return false;
-  if (floatplanePreferredCodec === "h264") {
+function codecMatchesPreference(codec: string, preferredCodec: string) {
+  if (!preferredCodec) return false;
+  if (preferredCodec === "h264") {
     return codec.includes("h264") || codec.includes("avc1");
   }
-  if (floatplanePreferredCodec === "avc1") {
+  if (preferredCodec === "avc1") {
     return codec.includes("avc1") || codec.includes("h264");
   }
-  return codec.includes(floatplanePreferredCodec);
+  return codec.includes(preferredCodec);
+}
+
+function isH264Codec(codec: string) {
+  return codec.includes("h264") || codec.includes("avc1") || codec.includes("avc");
 }
 
 function variantUrl(group: FloatplaneDeliveryGroup, variant: FloatplaneDeliveryVariant) {
@@ -1084,7 +1094,13 @@ function variantUrl(group: FloatplaneDeliveryGroup, variant: FloatplaneDeliveryV
   return new URL(variant.url, origin).toString();
 }
 
-function selectVariant(groups: FloatplaneDeliveryGroup[]): {
+function selectVariant(
+  groups: FloatplaneDeliveryGroup[],
+  options: Pick<
+    ResolvedFloatplaneStreamOptions,
+    "playbackMode" | "preferredCodec" | "maxHeight"
+  >
+): {
   selected: FloatplaneVariantChoice;
   available: FloatplaneVariantSummary[];
 } {
@@ -1092,42 +1108,37 @@ function selectVariant(groups: FloatplaneDeliveryGroup[]): {
     (group.variants || []).map((variant) => ({ group, variant }))
   );
   const available = variants.map(({ variant }) => variantSummary(variant));
-  const candidates = variants
+  const eligible = variants
     .filter(({ variant }) => variant.url && variant.enabled !== false && !variant.hidden)
-    .filter(({ variant }) => !floatplaneMaxHeight || variantHeight(variant) <= floatplaneMaxHeight)
-    .filter(({ variant }) => {
+    .filter(({ variant }) => !options.maxHeight || variantHeight(variant) <= options.maxHeight);
+  const candidates = eligible.filter(({ variant }) => {
       const mimeType = (variant.mimeType || "").toLowerCase();
       const name = (variant.name || "").toLowerCase();
-      if (floatplanePlaybackMode === "hls") {
+      if (options.playbackMode === "hls") {
         return mimeType.includes("mpegurl") || name.includes("hls");
       }
       return mimeType.includes("video/mp4") || /\.mp4(?:\?|$)/i.test(variant.url || "");
     });
 
-  const playable = candidates.length ? candidates : variants;
+  const playable = candidates.length ? candidates : eligible;
   const preferred = playable.filter(({ variant }) =>
-    codecMatchesPreference(variantCodec(variant))
+    codecMatchesPreference(variantCodec(variant), options.preferredCodec)
   );
 
   const sorted = [...(preferred.length ? preferred : playable)].sort((left, right) => {
-    const leftPreferred = codecMatchesPreference(variantCodec(left.variant)) ? 1 : 0;
-    const rightPreferred = codecMatchesPreference(variantCodec(right.variant)) ? 1 : 0;
+    const leftCodec = variantCodec(left.variant);
+    const rightCodec = variantCodec(right.variant);
+    const leftPreferred = codecMatchesPreference(leftCodec, options.preferredCodec) ? 1 : 0;
+    const rightPreferred = codecMatchesPreference(rightCodec, options.preferredCodec) ? 1 : 0;
     if (leftPreferred !== rightPreferred) return rightPreferred - leftPreferred;
+    const leftH264 = isH264Codec(leftCodec) ? 1 : 0;
+    const rightH264 = isH264Codec(rightCodec) ? 1 : 0;
+    if (leftH264 !== rightH264) return rightH264 - leftH264;
     return variantHeight(right.variant) - variantHeight(left.variant);
   });
   const selected = sorted[0];
   if (!selected) throw new Error("No playable Floatplane stream was returned");
   return { selected, available };
-}
-
-function streamCacheKey(rawId: string) {
-  return [
-    rawId,
-    floatplanePlaybackMode,
-    floatplaneOutputKind,
-    floatplanePreferredCodec,
-    String(floatplaneMaxHeight),
-  ].join(":");
 }
 
 async function getFloatplanePost(
@@ -1163,10 +1174,23 @@ async function resolveFloatplaneAttachmentId(
 
 export async function getFloatplaneStreamUrl(
   videoId: string,
-  options: { refresh?: boolean } = {}
+  options: FloatplaneStreamOptions = {}
 ): Promise<FloatplaneStreamInfo> {
+  const resolvedOptions: ResolvedFloatplaneStreamOptions = {
+    playbackMode: options.playbackMode || floatplanePlaybackMode,
+    outputKind: options.outputKind || floatplaneOutputKind,
+    preferredCodec:
+      options.preferredCodec?.trim().toLowerCase() || floatplanePreferredCodec,
+    maxHeight:
+      typeof options.maxHeight === "number" && options.maxHeight > 0
+        ? Math.floor(options.maxHeight)
+        : floatplaneMaxHeight,
+  };
   const reference = floatplaneVideoReference(videoId);
-  const cacheKey = streamCacheKey(`${reference.kind}:${reference.id}`);
+  const cacheKey = buildFloatplaneStreamCacheKey(
+    `${reference.kind}:${reference.id}`,
+    resolvedOptions
+  );
   const cached = streamCache.get(cacheKey);
   if (!options.refresh && cached && cached.expiresAt > Date.now()) {
     return cached.stream;
@@ -1174,16 +1198,19 @@ export async function getFloatplaneStreamUrl(
   const attachmentId = await resolveFloatplaneAttachmentId(reference, options);
 
   const params = new URLSearchParams({
-    scenario: floatplanePlaybackMode === "hls" ? "onDemand" : "download",
+    scenario: resolvedOptions.playbackMode === "hls" ? "onDemand" : "download",
     entityId: attachmentId,
   });
-  if (floatplanePlaybackMode === "hls") {
-    params.set("outputKind", floatplaneOutputKind);
+  if (resolvedOptions.playbackMode === "hls") {
+    params.set("outputKind", resolvedOptions.outputKind);
   }
   const delivery = await getJson<{ groups?: FloatplaneDeliveryGroup[] }>(
     `/api/v3/delivery/info?${params.toString()}`
   );
-  const { selected, available } = selectVariant(delivery.groups || []);
+  const { selected, available } = selectVariant(
+    delivery.groups || [],
+    resolvedOptions
+  );
   const url = variantUrl(selected.group, selected.variant);
   if (!url) throw new Error("No playable Floatplane stream URL was returned");
   const stream = {
@@ -1192,7 +1219,7 @@ export async function getFloatplaneStreamUrl(
     codec: variantCodec(selected.variant) || null,
     height: variantHeight(selected.variant) || null,
     mimeType: selected.variant.mimeType || null,
-    playbackMode: floatplanePlaybackMode,
+    playbackMode: resolvedOptions.playbackMode,
     available,
   };
   streamCache.set(cacheKey, {

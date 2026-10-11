@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   getFloatplaneStreamUrl,
   isFloatplaneConfigured,
+  parseFloatplaneStreamOptions,
 } from "../../../../../lib/floatplane";
 
 export const dynamic = "force-dynamic";
@@ -49,8 +50,9 @@ export async function GET(
   }
 
   try {
-    let stream = await getFloatplaneStreamUrl(id);
     const searchParams = new URL(request.url).searchParams;
+    const streamOptions = parseFloatplaneStreamOptions(searchParams);
+    let stream = await getFloatplaneStreamUrl(id, streamOptions);
     if (
       searchParams.get("redirect") === "1" ||
       searchParams.get("direct") === "1"
@@ -71,7 +73,10 @@ export async function GET(
         cache: "no-store",
       });
       if (upstream.status === 401 || upstream.status === 403) {
-        stream = await getFloatplaneStreamUrl(id, { refresh: true });
+        stream = await getFloatplaneStreamUrl(id, {
+          ...streamOptions,
+          refresh: true,
+        });
         upstream = await fetch(stream.url, {
           headers: requestHeaders,
           cache: "no-store",
@@ -116,7 +121,10 @@ export async function GET(
       cache: "no-store",
     });
     if (upstream.status === 401 || upstream.status === 403) {
-      stream = await getFloatplaneStreamUrl(id, { refresh: true });
+      stream = await getFloatplaneStreamUrl(id, {
+        ...streamOptions,
+        refresh: true,
+      });
       upstream = await fetch(stream.url, {
         headers: {
           Accept: "application/vnd.apple.mpegurl, application/x-mpegURL, */*",
