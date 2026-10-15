@@ -224,3 +224,28 @@ test("stores watch progress server-side", async () => {
   assert.equal(cleared.status, 200);
   assert.equal((await cleared.json()).progress[videoId], undefined);
 });
+
+test("exposes Pushover status without returning saved secrets", async () => {
+  const worker = await createWorker();
+  const response = await fetchFrom(worker, "/api/notifications/pushover");
+  assert.equal(response.status, 200);
+
+  const config = await response.json();
+  assert.equal(typeof config.configured, "boolean");
+  assert.equal(typeof config.applicationTokenSet, "boolean");
+  assert.equal(typeof config.userKeySet, "boolean");
+  assert.equal("applicationToken" in config, false);
+  assert.equal("userKey" in config, false);
+
+  const invalid = await fetchFrom(worker, "/api/notifications/pushover", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      enabled: true,
+      applicationToken: "too-short",
+      userKey: "also-too-short",
+    }),
+  });
+  assert.equal(invalid.status, 400);
+  assert.match((await invalid.json()).error, /30 letters or numbers/i);
+});

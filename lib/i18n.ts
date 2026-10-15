@@ -290,6 +290,40 @@ export const translations = {
         `This device: ${status} - ${count} subscribed device${
           count === 1 ? "" : "s"
         }`,
+      pushoverTitle: "Pushover",
+      pushoverBody:
+        "Send new-video alerts through Pushover with the channel, video title, watch link, and thumbnail.",
+      pushoverEnable: "Enable Pushover",
+      pushoverEnableHint: "The hourly background feed scan sends new videos.",
+      pushoverOn: "Configured and enabled",
+      pushoverOff: "Configured but disabled",
+      pushoverNotConfigured: "Not configured",
+      pushoverApplicationToken: "Application API token",
+      pushoverApplicationTokenPlaceholder: "30-character application token",
+      pushoverUserKey: "User or group key",
+      pushoverUserKeyPlaceholder: "30-character user or group key",
+      pushoverSecretSaved: "Saved - leave blank to keep it",
+      pushoverDevice: "Device (optional)",
+      pushoverDevicePlaceholder: "For example: iphone",
+      pushoverAppUrl: "Youtarr Feed URL",
+      pushoverIncludeImage: "Attach video thumbnail",
+      pushoverIncludeImageHint:
+        "Uploads the thumbnail to Pushover as a private image attachment.",
+      pushoverSave: "Save",
+      pushoverSaving: "Saving",
+      pushoverSaved: "Pushover settings saved.",
+      pushoverTest: "Send test",
+      pushoverTestSent: (remaining?: number | null) =>
+        remaining === null || remaining === undefined
+          ? "Pushover accepted the test notification."
+          : `Pushover accepted the test. ${remaining} messages remain this month.`,
+      pushoverRemove: "Remove",
+      pushoverRemoveConfirm: "Remove the saved Pushover integration and secrets?",
+      pushoverRemoved: "Pushover integration removed.",
+      pushoverLoadError: "Could not load Pushover settings.",
+      pushoverSaveError: "Could not save Pushover settings.",
+      pushoverTestError: "Could not send the Pushover test.",
+      pushoverRemoveError: "Could not remove the Pushover integration.",
       diagnosticsEyebrow: "Diagnostics",
       diagnosticsTitle: "Backend connections",
       checkConnections: "Check connections",
@@ -591,6 +625,41 @@ export const translations = {
         `Dit apparaat: ${status} - ${count} gekoppelde apparaat${
           count === 1 ? "" : "en"
         }`,
+      pushoverTitle: "Pushover",
+      pushoverBody:
+        "Stuur meldingen voor nieuwe video's via Pushover met kanaal, videotitel, kijklink en thumbnail.",
+      pushoverEnable: "Pushover inschakelen",
+      pushoverEnableHint: "De uurlijkse achtergrondscan verstuurt nieuwe video's.",
+      pushoverOn: "Ingesteld en ingeschakeld",
+      pushoverOff: "Ingesteld maar uitgeschakeld",
+      pushoverNotConfigured: "Niet ingesteld",
+      pushoverApplicationToken: "Application API-token",
+      pushoverApplicationTokenPlaceholder: "Applicatietoken van 30 tekens",
+      pushoverUserKey: "Gebruikers- of groepssleutel",
+      pushoverUserKeyPlaceholder: "Gebruikers- of groepssleutel van 30 tekens",
+      pushoverSecretSaved: "Opgeslagen - leeg laten om te behouden",
+      pushoverDevice: "Apparaat (optioneel)",
+      pushoverDevicePlaceholder: "Bijvoorbeeld: iphone",
+      pushoverAppUrl: "Youtarr Feed-URL",
+      pushoverIncludeImage: "Videothumbnail meesturen",
+      pushoverIncludeImageHint:
+        "Uploadt de thumbnail als privé-afbeeldingsbijlage naar Pushover.",
+      pushoverSave: "Opslaan",
+      pushoverSaving: "Opslaan",
+      pushoverSaved: "Pushover-instellingen opgeslagen.",
+      pushoverTest: "Test sturen",
+      pushoverTestSent: (remaining?: number | null) =>
+        remaining === null || remaining === undefined
+          ? "Pushover heeft de testmelding geaccepteerd."
+          : `Pushover heeft de test geaccepteerd. Deze maand zijn nog ${remaining} meldingen beschikbaar.`,
+      pushoverRemove: "Verwijderen",
+      pushoverRemoveConfirm:
+        "De opgeslagen Pushover-integratie en geheimen verwijderen?",
+      pushoverRemoved: "Pushover-integratie verwijderd.",
+      pushoverLoadError: "Pushover-instellingen laden mislukt.",
+      pushoverSaveError: "Pushover-instellingen opslaan mislukt.",
+      pushoverTestError: "Pushover-testmelding versturen mislukt.",
+      pushoverRemoveError: "Pushover-integratie verwijderen mislukt.",
       diagnosticsEyebrow: "Diagnose",
       diagnosticsTitle: "Achterliggende verbindingen",
       checkConnections: "Verbindingen checken",

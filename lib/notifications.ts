@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import webpush from "web-push";
 import type { PushSubscription, WebPushError } from "web-push";
 import { appDataPath, writeJsonAtomic } from "./app-data";
+import { sendPushoverVideoNotification } from "./pushover";
 import type { FeedVideo } from "./types";
 
 type StoredPushSubscription = PushSubscription & {
@@ -507,7 +508,7 @@ export async function sendTestPushNotification(subscription?: unknown) {
 }
 
 export async function notifyNewFeedVideos(videos: FeedVideo[]) {
-  if (!notificationsEnabled || videos.length === 0) return;
+  if (videos.length === 0) return;
   const result = stateWriteQueue
     .catch(() => undefined)
     .then(async () => {
@@ -551,11 +552,26 @@ export async function notifyNewFeedVideos(videos: FeedVideo[]) {
       await Promise.all(
         notifiableVideos
           .slice(0, notificationMaxPerScan)
-          .map((video) =>
-            sendPayloadToSubscriptions(
-              notificationPayload(video, Math.min(notifiableVideos.length, 99))
-            )
-          )
+          .map(async (video) => {
+            const payload = notificationPayload(
+              video,
+              Math.min(notifiableVideos.length, 99)
+            );
+            const deliveries = await Promise.allSettled([
+              sendPayloadToSubscriptions(payload),
+              sendPushoverVideoNotification({
+                videoId: video.id,
+                videoTitle: video.title,
+                channelName: video.channelName,
+                imageUrl: payload.image,
+              }),
+            ]);
+            deliveries.forEach((delivery) => {
+              if (delivery.status === "rejected") {
+                console.error("New video notification delivery failed", delivery.reason);
+              }
+            });
+          })
       );
     });
   stateWriteQueue = result;

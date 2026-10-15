@@ -33,6 +33,8 @@ tokens, API keys, and Plex tokens are never sent to the browser.
 - Server-side feed cache for fast app opens.
 - Optional Web Push notifications for new feed videos, with channel name, video
   title, app icon, and thumbnail where the browser/OS supports rich images.
+- Optional Pushover notifications configured entirely in the app, including a
+  watch link and uploaded video thumbnail.
 - Optional YouTube Data API fallback for exact publish timestamps.
 - Optional Floatplane tab for subscribed Floatplane videos, kept separate from
   YouTube/Youtarr content.
@@ -279,6 +281,26 @@ browsers can show the supplied thumbnail and actions.
 No Apple Developer account is required. If you do not provide VAPID keys, the
 app generates them once and stores them in `/data/push-vapid.json`; keep `/data`
 persistent so subscriptions survive container updates.
+
+### Pushover Notifications
+
+Pushover is available as an alternative or addition to Web Push. It does not
+need Unraid environment variables:
+
+1. Install Pushover and copy your user key from the Pushover dashboard.
+2. [Register a Pushover application](https://pushover.net/apps/build), give it a
+   Youtarr Feed name/icon, and copy its 30-character API token.
+3. Open Youtarr Feed Settings, enter the application token and user/group key
+   in the Pushover section, confirm the Youtarr Feed URL, and select `Save`.
+4. Use `Send test`, then leave `Enable Pushover` switched on.
+
+The credentials are stored server-side in `/data/pushover-settings.json` and
+are never returned to the browser after saving. New-video messages use the
+channel as the notification title and include the video title, a clickable Watch
+link, and the video thumbnail as a private Pushover image attachment. Pushover
+accepts one image of up to 5 MB per message; if a thumbnail cannot be fetched,
+the text notification is still sent. The existing muted-channel list applies to
+both Web Push and Pushover.
 
 ## Environment Variables
 

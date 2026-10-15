@@ -125,6 +125,17 @@ type PushPublicConfig = {
   }>;
   error?: string;
 };
+type PushoverPublicConfig = {
+  configured: boolean;
+  enabled: boolean;
+  applicationTokenSet: boolean;
+  userKeySet: boolean;
+  device: string;
+  appUrl: string;
+  includeImage: boolean;
+  updatedAt: number | null;
+  error?: string;
+};
 type PlayerDragState = {
   startX: number;
   startY: number;
@@ -792,6 +803,19 @@ export default function FeedApp() {
   const [notificationMessageKind, setNotificationMessageKind] = useState<
     "idle" | "success" | "error"
   >("idle");
+  const [pushoverConfig, setPushoverConfig] =
+    useState<PushoverPublicConfig | null>(null);
+  const [pushoverApplicationToken, setPushoverApplicationToken] = useState("");
+  const [pushoverUserKey, setPushoverUserKey] = useState("");
+  const [pushoverDevice, setPushoverDevice] = useState("");
+  const [pushoverAppUrl, setPushoverAppUrl] = useState("");
+  const [pushoverEnabled, setPushoverEnabled] = useState(false);
+  const [pushoverIncludeImage, setPushoverIncludeImage] = useState(true);
+  const [pushoverBusy, setPushoverBusy] = useState(false);
+  const [pushoverMessage, setPushoverMessage] = useState("");
+  const [pushoverMessageKind, setPushoverMessageKind] = useState<
+    "idle" | "success" | "error"
+  >("idle");
   const [feedChannelScrollState, setFeedChannelScrollState] = useState({
     left: false,
     right: false,
@@ -1087,6 +1111,28 @@ export default function FeedApp() {
     }
   }, [copy.settings.notificationsConfigError, pushSupportProblem]);
 
+  const refreshPushoverSettings = useCallback(async () => {
+    try {
+      const response = await fetch("/api/notifications/pushover", {
+        cache: "no-store",
+      });
+      const data = (await response.json()) as PushoverPublicConfig;
+      if (!response.ok) {
+        throw new Error(data.error || copy.settings.pushoverLoadError);
+      }
+      setPushoverConfig(data);
+      setPushoverDevice(data.device || "");
+      setPushoverAppUrl(data.appUrl || window.location.origin);
+      setPushoverEnabled(data.enabled);
+      setPushoverIncludeImage(data.includeImage);
+    } catch (error) {
+      setPushoverMessage(
+        error instanceof Error ? error.message : copy.settings.pushoverLoadError
+      );
+      setPushoverMessageKind("error");
+    }
+  }, [copy.settings.pushoverLoadError]);
+
   async function getNotificationSubscription() {
     const problem = pushSupportProblem();
     if (problem) throw new Error(problem);
@@ -1279,6 +1325,113 @@ export default function FeedApp() {
     }
   }
 
+  async function persistPushoverSettings() {
+    const response = await fetch("/api/notifications/pushover", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        enabled: pushoverEnabled,
+        applicationToken: pushoverApplicationToken.trim() || undefined,
+        userKey: pushoverUserKey.trim() || undefined,
+        device: pushoverDevice.trim(),
+        appUrl: pushoverAppUrl.trim(),
+        includeImage: pushoverIncludeImage,
+      }),
+    });
+    const data = (await response.json()) as {
+      config?: PushoverPublicConfig;
+      error?: string;
+    };
+    if (!response.ok || !data.config) {
+      throw new Error(data.error || copy.settings.pushoverSaveError);
+    }
+    setPushoverConfig(data.config);
+    setPushoverApplicationToken("");
+    setPushoverUserKey("");
+    return data.config;
+  }
+
+  async function submitPushoverSettings(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setPushoverBusy(true);
+    setPushoverMessage("");
+    setPushoverMessageKind("idle");
+    try {
+      await persistPushoverSettings();
+      setPushoverMessage(copy.settings.pushoverSaved);
+      setPushoverMessageKind("success");
+    } catch (error) {
+      setPushoverMessage(
+        error instanceof Error ? error.message : copy.settings.pushoverSaveError
+      );
+      setPushoverMessageKind("error");
+    } finally {
+      setPushoverBusy(false);
+    }
+  }
+
+  async function sendPushoverTest() {
+    setPushoverBusy(true);
+    setPushoverMessage("");
+    setPushoverMessageKind("idle");
+    try {
+      await persistPushoverSettings();
+      const response = await fetch("/api/notifications/pushover", {
+        method: "POST",
+      });
+      const data = (await response.json()) as {
+        error?: string;
+        remaining?: number | null;
+      };
+      if (!response.ok) {
+        throw new Error(data.error || copy.settings.pushoverTestError);
+      }
+      setPushoverMessage(copy.settings.pushoverTestSent(data.remaining));
+      setPushoverMessageKind("success");
+    } catch (error) {
+      setPushoverMessage(
+        error instanceof Error ? error.message : copy.settings.pushoverTestError
+      );
+      setPushoverMessageKind("error");
+    } finally {
+      setPushoverBusy(false);
+    }
+  }
+
+  async function removePushoverSettings() {
+    if (!window.confirm(copy.settings.pushoverRemoveConfirm)) return;
+    setPushoverBusy(true);
+    setPushoverMessage("");
+    try {
+      const response = await fetch("/api/notifications/pushover", {
+        method: "DELETE",
+      });
+      const data = (await response.json()) as {
+        config?: PushoverPublicConfig;
+        error?: string;
+      };
+      if (!response.ok || !data.config) {
+        throw new Error(data.error || copy.settings.pushoverRemoveError);
+      }
+      setPushoverConfig(data.config);
+      setPushoverApplicationToken("");
+      setPushoverUserKey("");
+      setPushoverDevice("");
+      setPushoverAppUrl(window.location.origin);
+      setPushoverEnabled(false);
+      setPushoverIncludeImage(true);
+      setPushoverMessage(copy.settings.pushoverRemoved);
+      setPushoverMessageKind("success");
+    } catch (error) {
+      setPushoverMessage(
+        error instanceof Error ? error.message : copy.settings.pushoverRemoveError
+      );
+      setPushoverMessageKind("error");
+    } finally {
+      setPushoverBusy(false);
+    }
+  }
+
   async function submitFloatplaneSessionToken(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const token = floatplaneSessionToken.trim();
@@ -1336,9 +1489,15 @@ export default function FeedApp() {
     const timer = window.setTimeout(() => {
       void refreshStatus();
       void refreshNotificationSettings();
+      void refreshPushoverSettings();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [refreshNotificationSettings, refreshStatus, settingsOpen]);
+  }, [
+    refreshNotificationSettings,
+    refreshPushoverSettings,
+    refreshStatus,
+    settingsOpen,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -4717,6 +4876,150 @@ export default function FeedApp() {
                 </small>
               )}
             </section>
+            <form
+              className="pushover-settings-card"
+              onSubmit={(event) => void submitPushoverSettings(event)}
+            >
+              <div className="notification-settings-copy">
+                <span className="notification-icon pushover-icon" aria-hidden="true">
+                  <FontAwesomeIcon icon={faBell} />
+                </span>
+                <div>
+                  <h3>{copy.settings.pushoverTitle}</h3>
+                  <p>{copy.settings.pushoverBody}</p>
+                  <small>
+                    {pushoverConfig?.configured
+                      ? pushoverEnabled
+                        ? copy.settings.pushoverOn
+                        : copy.settings.pushoverOff
+                      : copy.settings.pushoverNotConfigured}
+                  </small>
+                </div>
+              </div>
+              <label className="settings-switch-row">
+                <span>
+                  <strong>{copy.settings.pushoverEnable}</strong>
+                  <small>{copy.settings.pushoverEnableHint}</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={pushoverEnabled}
+                  onChange={(event) => setPushoverEnabled(event.target.checked)}
+                />
+                <span className="settings-switch" aria-hidden="true" />
+              </label>
+              <div className="pushover-fields">
+                <label>
+                  <span>{copy.settings.pushoverApplicationToken}</span>
+                  <input
+                    type="password"
+                    value={pushoverApplicationToken}
+                    onChange={(event) =>
+                      setPushoverApplicationToken(event.target.value)
+                    }
+                    placeholder={
+                      pushoverConfig?.applicationTokenSet
+                        ? copy.settings.pushoverSecretSaved
+                        : copy.settings.pushoverApplicationTokenPlaceholder
+                    }
+                    maxLength={30}
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                  />
+                </label>
+                <label>
+                  <span>{copy.settings.pushoverUserKey}</span>
+                  <input
+                    type="password"
+                    value={pushoverUserKey}
+                    onChange={(event) => setPushoverUserKey(event.target.value)}
+                    placeholder={
+                      pushoverConfig?.userKeySet
+                        ? copy.settings.pushoverSecretSaved
+                        : copy.settings.pushoverUserKeyPlaceholder
+                    }
+                    maxLength={30}
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                  />
+                </label>
+                <label>
+                  <span>{copy.settings.pushoverDevice}</span>
+                  <input
+                    value={pushoverDevice}
+                    onChange={(event) => setPushoverDevice(event.target.value)}
+                    placeholder={copy.settings.pushoverDevicePlaceholder}
+                    autoCapitalize="none"
+                    spellCheck={false}
+                  />
+                </label>
+                <label>
+                  <span>{copy.settings.pushoverAppUrl}</span>
+                  <input
+                    type="url"
+                    value={pushoverAppUrl}
+                    onChange={(event) => setPushoverAppUrl(event.target.value)}
+                    placeholder="https://subwave.example.com"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                  />
+                </label>
+              </div>
+              <label className="settings-switch-row thumbnail-switch-row">
+                <span>
+                  <strong>{copy.settings.pushoverIncludeImage}</strong>
+                  <small>{copy.settings.pushoverIncludeImageHint}</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={pushoverIncludeImage}
+                  onChange={(event) =>
+                    setPushoverIncludeImage(event.target.checked)
+                  }
+                />
+                <span className="settings-switch" aria-hidden="true" />
+              </label>
+              <div className="notification-settings-actions">
+                <button
+                  className="settings-check-button"
+                  type="submit"
+                  disabled={pushoverBusy}
+                >
+                  {pushoverBusy
+                    ? copy.settings.pushoverSaving
+                    : copy.settings.pushoverSave}
+                </button>
+                <button
+                  className="settings-check-button"
+                  type="button"
+                  onClick={() => void sendPushoverTest()}
+                  disabled={pushoverBusy}
+                >
+                  {copy.settings.pushoverTest}
+                </button>
+                {pushoverConfig?.configured && (
+                  <button
+                    className="settings-check-button danger"
+                    type="button"
+                    onClick={() => void removePushoverSettings()}
+                    disabled={pushoverBusy}
+                  >
+                    {copy.settings.pushoverRemove}
+                  </button>
+                )}
+              </div>
+              {pushoverMessage && (
+                <small
+                  className={`notification-settings-message ${
+                    pushoverMessageKind === "error" ? "error" : "success"
+                  }`}
+                >
+                  {pushoverMessage}
+                </small>
+              )}
+            </form>
             {status?.diagnostics && (
               <div className="settings-diagnostics">
                 <div className="settings-diagnostics-heading">
